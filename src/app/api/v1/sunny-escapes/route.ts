@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     const fallbackWindow = withTravel.filter(r => r.bestTravelMin <= windowMax)
     const demoPool = (inWindow.length >= Math.max(4, limit)) ? inWindow : fallbackWindow
 
-    pickedRanked = demoPool
+    const sortedByScore = demoPool
       .map(r => ({
         destination: r.destination,
         sun_score: r.sun_score,
@@ -82,7 +82,26 @@ export async function GET(request: NextRequest) {
         const db = Math.abs(b.travel_time_min - maxTravelMin)
         return da - db
       })
-      .slice(0, limit)
+
+    let selected = sortedByScore.slice(0, limit)
+
+    // Keep visible confidence diversity in demo while staying score-ordered.
+    const hasNonHigh = selected.some(r => r.sun_score.confidence !== 'high')
+    if (!hasNonHigh) {
+      const nonHighCandidate = sortedByScore.find(r => r.sun_score.confidence !== 'high' && !selected.some(s => s.destination.id === r.destination.id))
+      if (nonHighCandidate && selected.length > 0) {
+        selected[selected.length - 1] = nonHighCandidate
+      }
+    }
+
+    selected = selected.sort((a, b) => {
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      const da = Math.abs(a.travel_time_min - maxTravelMin)
+      const db = Math.abs(b.travel_time_min - maxTravelMin)
+      return da - db
+    })
+
+    pickedRanked = selected
   }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)

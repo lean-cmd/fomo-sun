@@ -148,6 +148,23 @@ export default function Home() {
   const currentTime = demo ? '10:10' : new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
   const markerOptH = optimalH ?? data?.optimal_travel_h ?? 2.5
   const optPct = ((markerOptH - 1) / 3.5) * 100 // position on slider track (1-4.5h range)
+  const topEscape = data?.escapes?.[0] ?? null
+  const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
+  const windowMinH = Math.max(0.5, maxH - 0.5)
+  const windowMaxH = maxH + 0.5
+  const topTravelMin = topEscape
+    ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
+    : Infinity
+  const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
+  const topShareText = topEscape ? [
+    'FOMO Sun proposal',
+    `${origin.name} FOMO ${originFomoPct}% -> ${topEscape.destination.name} FOMO ${Math.round(topEscape.sun_score.score * 100)}%`,
+    `Travel time: ${topTravelText}`,
+    `Why now: ${topEscape.conditions}`,
+    `Plan: ${topEscape.plan[0]} > ${topEscape.plan[1]}`,
+    topEscape.links.google_maps || 'https://fomosun.com',
+  ].join('\n') : ''
+  const topWhatsAppHref = `https://wa.me/?text=${encodeURIComponent(topShareText)}`
 
   return (
     <div className={night ? 'night' : ''}>
@@ -199,6 +216,34 @@ export default function Home() {
                 </span>
               )}
             </div>
+          )}
+
+          {data && topEscape && (
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+              <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
+                <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Fog now in {origin.name}</p>
+                <p className={`text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
+                <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>Baseline FOMO {originFomoPct}%</p>
+              </div>
+              <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
+                <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Best escape now</p>
+                <p className={`text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
+                  {topEscape.destination.name} · {Math.round(topEscape.sun_score.score * 100)}%
+                </p>
+                <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+              </div>
+            </div>
+          )}
+
+          {topEscape && (
+            <a
+              href={topWhatsAppHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`mt-2 inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold border transition-colors ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+            >
+              Send top proposal via WhatsApp
+            </a>
           )}
 
           {/* FOMO stat */}
@@ -265,6 +310,11 @@ export default function Home() {
               {/* Optimal marker */}
               {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
+            {!night && (
+              <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-1 text-[9px] bg-sky-50 text-sky-700 border border-sky-100">
+                Active window: {fmtTravelHours(windowMinH)} to {fmtTravelHours(windowMaxH)} (±30m)
+              </div>
+            )}
             {!night && (
               <div className="mt-1.5 flex items-center justify-between text-[9px] text-slate-400">
                 <span>Less time</span>
@@ -348,6 +398,16 @@ export default function Home() {
               </h2>
               <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.escapes.length} found</span>
             </div>
+            {topEscape && (
+              <a
+                href={topWhatsAppHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`mb-3 inline-flex items-center rounded-lg px-3 py-2 text-[11px] font-semibold ${night ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}
+              >
+                WhatsApp top pick: {topEscape.destination.name}
+              </a>
+            )}
 
             <div className="space-y-2.5">
               {data.escapes.map((e, i) => (
@@ -383,6 +443,20 @@ export default function Home() {
                       <div className="flex gap-2.5 mt-1.5">
                         {e.travel.car && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
                         {e.travel.train && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
+                      </div>
+                      <div className="mt-2">
+                        <p className={`text-[9px] uppercase tracking-[1px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Why sunny now</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-sky-50 text-sky-700'}`}>
+                            Low cloud {e.sun_score.low_cloud_cover_pct}%
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-amber-50 text-amber-700'}`}>
+                            Altitude boost {Math.round(e.sun_score.altitude_bonus * 100)}%
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {e.sun_score.confidence} confidence
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <ChevD c={`w-3.5 h-3.5 flex-shrink-0 self-center transition-transform ${night ? 'text-slate-600' : 'text-slate-300'} ${openCard === i ? 'rotate-180' : ''}`} />
