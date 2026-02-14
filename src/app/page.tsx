@@ -222,10 +222,12 @@ export default function Home() {
           {data?.origin_timeline && (
             <div className={`mt-4 max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Your forecast</span>
-                <span className={`text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.origin_conditions.sunshine_min} min sun</span>
+                <span className={`text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Forecast: {origin.name}</span>
+                <span className={`text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                  {data.origin_conditions.sunshine_min} min sun · FOMO {Math.round(data.origin_conditions.sun_score * 100)}%
+                </span>
               </div>
-              <SunBar timeline={data.origin_timeline} demo={demo} label={origin.name.slice(0, 6)} />
+              <SunBar timeline={data.origin_timeline} demo={demo} />
             </div>
           )}
         </div>

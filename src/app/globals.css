@@ -46,8 +46,28 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;bord
 .score-popup::before{content:'';position:absolute;bottom:100%;left:16px;border:5px solid transparent;border-bottom-color:white}
 
 /* Optimal marker on slider */
-.opt-mark{position:absolute;top:-6px;width:2px;height:16px;background:#0284c7;border-radius:1px;pointer-events:none}
-.opt-mark::after{content:'optimal';position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:8px;color:#0369a1;font-weight:600;white-space:nowrap;text-transform:uppercase;letter-spacing:.5px}
+.opt-mark{
+  position:absolute;
+  top:-3px;
+  width:0;
+  height:12px;
+  transform:translateX(-50%);
+  border-left:2px dotted rgba(2,132,199,.35);
+  pointer-events:none;
+}
+.opt-mark::after{
+  content:'optimal';
+  position:absolute;
+  top:-13px;
+  left:50%;
+  transform:translateX(-50%);
+  font-size:8px;
+  color:rgba(3,105,161,.55);
+  font-weight:600;
+  white-space:nowrap;
+  text-transform:uppercase;
+  letter-spacing:.4px;
+}
 @keyframes optPulse{0%{transform:translateY(0) scale(1);opacity:.9}50%{transform:translateY(-1px) scale(1.08);opacity:1}100%{transform:translateY(0) scale(1);opacity:.9}}
 .opt-pop{animation:optPulse .6s ease-out 2}
 

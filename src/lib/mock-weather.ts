@@ -157,7 +157,7 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
 export function getMockOriginWeather() {
   return {
     description: 'Fog, 3°C, brief sun 10-11 AM',
-    sun_score: 0.08,
+    sun_score: 0.06,
     sunshine_min: 40,
     temp_c: 3, visibility_m: 200, humidity_pct: 95,
   }
