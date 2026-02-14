@@ -1,0 +1,47 @@
+# FOMO Sun - Find Sun Fast
+
+> FOMO Sun helps people escape fog and find sunny destinations within 1-4 hours of their location. Focused on Switzerland and nearby France/Germany.
+
+## What This Service Does
+
+FOMO Sun is an AI-powered sun escape recommender. Given a user's location and travel preferences, it returns 3-5 ranked destinations that are currently (or forecasted to be) sunny, along with travel times and simple trip plans.
+
+## API
+
+The primary API endpoint is:
+
+```
+GET /api/v1/sunny-escapes?lat={lat}&lon={lon}&max_travel_h={hours}&mode={car|train|both}
+```
+
+### Parameters
+- `lat`, `lon`: Origin coordinates (default: Basel, Switzerland)
+- `max_travel_h`: Maximum travel time in hours (1-4, default: 2)
+- `mode`: Travel mode - car, train, or both (default: both)
+- `ga`: Whether user has a Swiss GA rail pass (true/false)
+- `types`: Comma-separated filter - nature, viewpoint, town, lake, family, food, mountain, thermal
+- `limit`: Max results (1-10, default: 5)
+
+### Response
+Returns JSON with:
+- `_meta`: Request info, attribution, data freshness
+- `origin_conditions`: Current weather at origin
+- `escapes[]`: Ranked destinations with sun_score (0-1), confidence, travel times, and trip plans
+
+### Example Use Cases for Agents
+- "Where is it sunny near Zurich right now?"
+- "Find me a sunny day trip from Basel within 2 hours by train"
+- "What are the sunniest viewpoints I can reach from Bern today?"
+
+## Coverage
+- Switzerland (primary)
+- Black Forest, Germany (border region)
+- Alsace, France (border region)
+
+## Data Sources
+- MeteoSwiss Open Data (CC BY 4.0) for Swiss weather
+- Open-Meteo for cross-border weather
+- Open Journey Planner for Swiss routing
+
+## Contact
+Built by the FOMO Sun team. Feedback welcome.

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 60" fill="none">
+  <!-- Sun circle breaking through -->
+  <circle cx="28" cy="26" r="14" fill="#f59e0b"/>
+  <!-- Sun rays -->
+  <line x1="28" y1="6" x2="28" y2="2" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="28" y1="50" x2="28" y2="46" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="8" y1="26" x2="4" y2="26" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="48" y1="26" x2="52" y2="26" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="14" y1="12" x2="11" y2="9" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="42" y1="40" x2="45" y2="43" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="42" y1="12" x2="45" y2="9" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="14" y1="40" x2="11" y2="43" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Fog line cutting across -->
+  <path d="M0 32 Q14 28 28 32 Q42 36 56 32" stroke="#94a3b8" stroke-width="3" fill="none" opacity="0.6"/>
+  <path d="M0 38 Q14 34 28 38 Q42 42 56 38" stroke="#94a3b8" stroke-width="2" fill="none" opacity="0.35"/>
+  <!-- Text -->
+  <text x="62" y="24" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="22" fill="#0f172a" letter-spacing="-0.5">FOMO</text>
+  <text x="62" y="46" font-family="system-ui, -apple-system, sans-serif" font-weight="300" font-size="22" fill="#f59e0b" letter-spacing="-0.5">Sun</text>
+</svg>

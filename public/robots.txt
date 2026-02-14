@@ -1,0 +1,13 @@
+# FOMO Sun - robots.txt
+# We welcome AI agents and search crawlers
+
+User-agent: *
+Allow: /
+Allow: /api/v1/
+Allow: /escape/
+
+# AI-specific
+# See /llms.txt for service description and API docs
+# See /api/docs for OpenAPI specification
+
+Sitemap: https://fomosun.com/sitemap.xml
