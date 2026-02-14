@@ -176,7 +176,7 @@ export default function Home() {
   return (
     <div className={night ? 'night' : ''}>
       {/* ══════ HERO ══════ */}
-      <section className={`${night ? 'hero-night' : 'hero-day'} pt-8 pb-14 px-4 relative`}>
+      <section className={`${night ? 'hero-night' : 'hero-day'} pt-7 sm:pt-8 pb-12 sm:pb-14 px-4 relative`}>
         {!night && <>
           <div className="fog-w1 absolute top-10 left-0 w-full h-8 bg-gradient-to-r from-transparent via-slate-400/[.18] to-transparent rounded-full blur-[18px] pointer-events-none" />
           <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
@@ -193,17 +193,17 @@ export default function Home() {
           {/* Logo - no emoji, clean */}
           <div className="flex items-center justify-center gap-2 mb-2">
             {night
-              ? <div className="moon-anim w-9 h-9 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
-              : <div className="sun-anim w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0" />
+              ? <div className="moon-anim w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
+              : <div className="sun-anim w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0" />
             }
-            <div className={`text-[28px] font-extrabold ${night ? 'text-white' : 'text-slate-800'}`}
+            <div className={`text-[25px] sm:text-[28px] font-extrabold ${night ? 'text-white' : 'text-slate-800'}`}
               style={{ fontFamily: 'Sora', letterSpacing: '-1px' }}>
               FOMO <span className={night ? 'text-amber-400' : 'text-amber-500'}>Sun</span>
             </div>
           </div>
 
           {/* Tagline with emoji at end */}
-          <p className={`text-[15px] italic ${night ? 'text-slate-400' : 'text-slate-500'}`}
+          <p className={`text-[14px] sm:text-[15px] italic ${night ? 'text-slate-400' : 'text-slate-500'}`}
             style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
             {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
           </p>
@@ -211,14 +211,14 @@ export default function Home() {
           {/* Status pills */}
           {data && (
             <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                 🕐 {currentTime}
               </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                 {origin.name}: {data.origin_conditions.description}
               </span>
               {!data.sunset.is_past && (
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                   🌅 Sunset {data.sunset.time} ({fmtMin(data.sunset.minutes_until)})
                 </span>
               )}
@@ -226,23 +226,23 @@ export default function Home() {
           )}
 
           {data && topEscape && (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+            <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
               <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Fog now in {origin.name}</p>
-                <p className={`text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
-                <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>Baseline FOMO {originFomoPct}%</p>
+                <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Fog now in {origin.name}</p>
+                <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
+                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>Baseline FOMO {originFomoPct}%</p>
               </div>
               <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Best escape now</p>
-                <p className={`text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
+                <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Best escape now</p>
+                <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
                   {topEscape.destination.name} · {Math.round(topEscape.sun_score.score * 100)}%
                 </p>
-                <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
                 <a
                   href={topWhatsAppHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+                  className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
                 >
                   WhatsApp this plan
                 </a>
@@ -252,16 +252,16 @@ export default function Home() {
 
           {/* FOMO stat */}
           {data && (
-            <div className={`mt-4 inline-flex items-center gap-2.5 rounded-xl px-5 py-2.5 shadow-sm ${night ? 'bg-white/10' : 'bg-white'}`}>
+            <div className={`mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl px-4 sm:px-5 py-2 sm:py-2.5 shadow-sm ${night ? 'bg-white/10' : 'bg-white'}`}>
               {night ? (
                 <>
-                  <span className="text-xl font-bold text-amber-400" style={{ fontFamily: 'Sora' }}>{data.tomorrow_sun_hours}h</span>
-                  <span className="text-[11px] text-slate-400 leading-tight text-left">of sun forecast<br />tomorrow ☀️</span>
+                  <span className="text-[18px] sm:text-xl font-bold text-amber-400" style={{ fontFamily: 'Sora' }}>{data.tomorrow_sun_hours}h</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight text-left">of sun forecast<br />tomorrow ☀️</span>
                 </>
               ) : (
                 <>
-                  <span className="text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora' }}>{data.max_sun_hours_today}h</span>
-                  <span className="text-[11px] text-slate-400 leading-tight text-left">of sun today<br />above the fog</span>
+                  <span className="text-[18px] sm:text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora' }}>{data.max_sun_hours_today}h</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight text-left">of sun today<br />above the fog</span>
                 </>
               )}
             </div>
@@ -269,10 +269,10 @@ export default function Home() {
 
           {/* Origin sun bar - shows what you need to escape */}
           {data?.origin_timeline && (
-            <div className={`mt-4 max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
+            <div className={`mt-3 sm:mt-4 max-w-[310px] sm:max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
               <div className="flex items-center justify-between mb-1">
-                <span className={`text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Forecast: {origin.name}</span>
-                <span className={`text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                <span className={`text-[8.5px] sm:text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Forecast: {origin.name}</span>
+                <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
                   {data.origin_conditions.sunshine_min} min sun · FOMO {Math.round(data.origin_conditions.sun_score * 100)}%
                 </span>
               </div>
@@ -283,11 +283,11 @@ export default function Home() {
       </section>
 
       {/* ══════ CONTROLS ══════ */}
-      <section className="max-w-xl mx-auto px-4 -mt-7 relative z-20">
+      <section className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
 
           {/* Location */}
-          <div className="px-5 pt-4 pb-2 flex items-center gap-2">
+          <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-2 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 text-[13px]">
               <LocI c="w-[16px] h-[16px] text-amber-500" />
               <span className={`font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{origin.name}</span>
@@ -302,12 +302,12 @@ export default function Home() {
           </div>
 
           {/* Slider with optimal marker */}
-          <div className="px-5 pt-2 pb-4">
+          <div className="px-4 sm:px-5 pt-2 pb-3.5 sm:pb-4">
             <div className="flex justify-between items-baseline mb-2">
               <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
                 Travel time
               </span>
-              <span className="text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
+              <span className="text-[20px] sm:text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
             </div>
             <div className="relative">
               <input type="range" min={1} max={4.5} step={0.25} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
@@ -315,12 +315,12 @@ export default function Home() {
               {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
             {!night && (
-              <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-1 text-[9px] bg-sky-50 text-sky-700 border border-sky-100">
+              <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] bg-sky-50 text-sky-700 border border-sky-100">
                 Active window: {fmtTravelHours(windowMinH)} to {fmtTravelHours(windowMaxH)} (±30m)
               </div>
             )}
             {!night && (
-              <div className="mt-1.5 flex items-center justify-between text-[9px] text-slate-400">
+              <div className="mt-1.5 flex items-center justify-between text-[8.5px] sm:text-[9px] text-slate-400">
                 <span>Less time</span>
                 <span className="font-medium text-slate-500">Net sun optimized</span>
                 <span>More options</span>
@@ -329,13 +329,13 @@ export default function Home() {
             {optimalHint && !night && (
               <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
             )}
-            <div className={`flex justify-between text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
+            <div className={`flex justify-between text-[8.5px] sm:text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
               <span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>4h 30m</span>
             </div>
           </div>
 
           {/* Travel mode */}
-          <button onClick={() => toggleSetting('mode')} className={`setting-toggle w-full flex items-center justify-between px-5 py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
+          <button onClick={() => toggleSetting('mode')} className={`setting-toggle w-full flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
               <CarI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
               <span className={`text-[13px] font-medium ${night ? 'text-slate-200' : 'text-slate-800'}`}>Travel mode</span>
@@ -364,7 +364,7 @@ export default function Home() {
           )}
 
           {/* Filters */}
-          <button onClick={() => toggleSetting('filter')} className={`setting-toggle w-full flex items-center justify-between px-5 py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
+          <button onClick={() => toggleSetting('filter')} className={`setting-toggle w-full flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
               <FilterI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
               <span className={`text-[13px] font-medium ${night ? 'text-slate-200' : 'text-slate-800'}`}>Filters</span>
@@ -388,7 +388,7 @@ export default function Home() {
       </section>
 
       {/* ══════ RESULTS ══════ */}
-      <section className="max-w-xl mx-auto px-4 mt-5 pb-16">
+      <section className="max-w-xl mx-auto px-4 mt-4 sm:mt-5 pb-14 sm:pb-16">
         {loading ? (
           <div className="text-center py-16">
             <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto" />
@@ -403,12 +403,12 @@ export default function Home() {
               <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.escapes.length} found</span>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {data.escapes.map((e, i) => (
                 <div key={e.destination.id}
                   className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
                   onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
-                  <div className="p-3.5 sm:p-4 flex gap-3 items-start">
+                  <div className="p-3 sm:p-4 flex gap-2.5 sm:gap-3 items-start">
                     <div className="score-wrap" onClick={ev => ev.stopPropagation()}>
                       <ScoreRing score={e.sun_score.score} onTap={() => setScorePopup(scorePopup === i ? null : i)} />
                       {scorePopup === i && (
@@ -422,17 +422,17 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1 flex-wrap">
                         <span className="text-[11px]">{FLAG[e.destination.country]}</span>
-                        <span className={`font-semibold text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
+                        <span className={`font-semibold text-[13.5px] sm:text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
                       </div>
-                      <p className={`text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
-                      <p className="text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
+                      <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
+                      <p className="text-[10px] sm:text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
                       {!night && e.net_sun_min > 0 && (
-                        <p className={`text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                        <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
                           Net sun after travel: {fmtMin(e.net_sun_min)}
                         </p>
                       )}
                       {night && (
-                        <p className="text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
+                        <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
                       )}
                       <div className="flex gap-2.5 mt-1.5">
                         {e.travel.car && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
