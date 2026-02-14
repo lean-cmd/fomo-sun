@@ -1,131 +1,66 @@
-// ============================================================
 // FOMO Sun - Core Types
-// ============================================================
 
-/** A curated destination that can be recommended */
 export interface Destination {
-  id: string
-  name: string
-  region: string
-  country: 'CH' | 'DE' | 'FR'
-  lat: number
-  lon: number
-  altitude_m: number
-  types: DestinationType[]
-  plan_template: string
-  webcam_url?: string
-  maps_url?: string
-  sbb_url?: string
-  meteoswiss_point_id?: string // CH destinations
-  description?: string
+  id: string; name: string; region: string; country: 'CH' | 'DE' | 'FR'
+  lat: number; lon: number; altitude_m: number; types: DestinationType[]
+  plan_template: string; webcam_url?: string; maps_url?: string; sbb_url?: string
+  meteoswiss_point_id?: string; description?: string
 }
 
 export type DestinationType = 'nature' | 'viewpoint' | 'town' | 'lake' | 'family' | 'food' | 'mountain' | 'thermal'
-
 export type TravelMode = 'car' | 'train' | 'both'
-
 export type Confidence = 'high' | 'medium' | 'low' | 'uncertain'
-
-/** Sun score for a destination at a point in time */
-export interface SunScore {
-  score: number          // 0-1
-  confidence: Confidence
-  sunshine_forecast_min: number  // predicted sunshine minutes in next 3h
-  low_cloud_cover_pct: number   // predicted low cloud cover %
-  altitude_bonus: number         // 0-1 bonus for altitude during inversions
-  data_freshness: string         // ISO timestamp
-}
-
-/** Travel routing result */
-export interface TravelResult {
-  mode: 'car' | 'train'
-  duration_min: number
-  distance_km?: number
-  changes?: number       // PT only
-  ga_included?: boolean  // PT only
-  departure_time?: string
-}
-
-/** Sunshine timeline segment for forecast bars */
 export type SkyCondition = 'sun' | 'partial' | 'cloud' | 'night'
 
-export interface TimelineSegment {
-  condition: SkyCondition
-  pct: number  // percentage width of the bar
+export interface SunScore {
+  score: number; confidence: Confidence
+  sunshine_forecast_min: number; low_cloud_cover_pct: number
+  altitude_bonus: number; data_freshness: string
 }
 
-export interface SunTimeline {
-  today: TimelineSegment[]
-  tomorrow: TimelineSegment[]
+export interface TravelResult {
+  mode: 'car' | 'train'; duration_min: number
+  distance_km?: number; changes?: number; ga_included?: boolean; departure_time?: string
 }
 
-/** A single escape recommendation */
+export interface TimelineSegment { condition: SkyCondition; pct: number }
+export interface SunTimeline { today: TimelineSegment[]; tomorrow: TimelineSegment[] }
+
 export interface EscapeResult {
-  rank: number
-  destination: Destination
-  sun_score: SunScore
-  conditions: string
-  travel: {
-    car?: TravelResult
-    train?: TravelResult
-  }
-  plan: string[]
-  links: {
-    google_maps?: string
-    sbb?: string
-    webcam?: string
-  }
+  rank: number; destination: Destination; sun_score: SunScore
+  conditions: string  // human-friendly with comparison
+  net_sun_min: number // sunshine minus round-trip travel time
+  travel: { car?: TravelResult; train?: TravelResult }
+  plan: string[]; links: { google_maps?: string; sbb?: string; webcam?: string }
   sun_timeline: SunTimeline
+  tomorrow_sun_hours: number // per-destination tomorrow forecast
 }
 
-/** Full API response */
 export interface SunnyEscapesResponse {
   _meta: {
     request_id: string
-    origin: {
-      name: string
-      lat: number
-      lon: number
-    }
-    generated_at: string
-    weather_data_freshness: string
-    attribution: string[]
-    demo_mode: boolean
+    origin: { name: string; lat: number; lon: number }
+    generated_at: string; weather_data_freshness: string
+    attribution: string[]; demo_mode: boolean
   }
   origin_conditions: {
-    description: string
-    sun_score: number
+    description: string; sun_score: number; sunshine_min: number
   }
+  origin_timeline: SunTimeline // Basel's own sun bar
   max_sun_hours_today: number
-  sunset: {
-    time: string       // "17:34"
-    minutes_until: number
-    is_past: boolean
-  }
-  tomorrow_sun_hours: number  // for night mode
+  sunset: { time: string; minutes_until: number; is_past: boolean }
+  tomorrow_sun_hours: number
+  optimal_travel_h: number // best net-sun travel radius
   escapes: EscapeResult[]
 }
 
-/** User preferences (stored in localStorage) */
 export interface UserPreferences {
-  default_origin?: {
-    name: string
-    lat: number
-    lon: number
-  }
-  max_travel_h: number
-  travel_mode: TravelMode
-  has_ga: boolean
+  default_origin?: { name: string; lat: number; lon: number }
+  max_travel_h: number; travel_mode: TravelMode; has_ga: boolean
   preferred_types: DestinationType[]
 }
 
-/** API query parameters */
 export interface SunnyEscapesQuery {
-  lat: number
-  lon: number
-  max_travel_h: number
-  mode: TravelMode
-  ga?: boolean
-  types?: DestinationType[]
-  limit?: number
+  lat: number; lon: number; max_travel_h: number; mode: TravelMode
+  ga?: boolean; types?: DestinationType[]; limit?: number
 }

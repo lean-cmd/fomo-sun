@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
 
-// ── SVG Icons ─────────────────────────────────────────────────────────
+// ── Icons ─────────────────────────────────────────────────────────────
 const CarI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" /></svg>
 const TrainI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-18v18M3.6 9h16.8M3.6 15h16.8" /></svg>
 const BothI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
@@ -13,47 +13,45 @@ const CamI = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill=
 const ChevD = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
 const LocI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
 
-// ── Helpers ───────────────────────────────────────────────────────────
 const FLAG: Record<string, string> = { CH: '🇨🇭', DE: '🇩🇪', FR: '🇫🇷' }
 const TYPES: { id: DestinationType; label: string }[] = [
-  { id: 'nature', label: 'Nature' }, { id: 'viewpoint', label: 'Views' },
-  { id: 'town', label: 'Town' }, { id: 'lake', label: 'Lake' },
-  { id: 'family', label: 'Family' }, { id: 'food', label: 'Food & Wine' },
-  { id: 'thermal', label: 'Thermal' },
+  { id: 'nature', label: 'Nature' }, { id: 'viewpoint', label: 'Views' }, { id: 'town', label: 'Town' },
+  { id: 'lake', label: 'Lake' }, { id: 'family', label: 'Family' }, { id: 'food', label: 'Food & Wine' }, { id: 'thermal', label: 'Thermal' },
 ]
 const modeLbl: Record<TravelMode, string> = { car: 'Car', train: 'Train', both: 'Car + Train' }
 function fmtMin(m: number) { const h = Math.floor(m / 60); return h > 0 ? `${h}h ${m % 60}m` : `${m}m` }
 
 // ── FOMOscore Ring ────────────────────────────────────────────────────
 function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; onTap?: () => void }) {
-  const pct = Math.round(score * 100)
-  const r = (size - 8) / 2, circ = 2 * Math.PI * r, offset = circ * (1 - score)
+  const pct = Math.round(score * 100), r = (size - 8) / 2, circ = 2 * Math.PI * r
   return (
     <button onClick={e => { e.stopPropagation(); onTap?.() }} aria-label={`FOMOscore ${pct}%`}
       className="relative flex-shrink-0 cursor-pointer" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={4} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f59e0b" strokeWidth={4}
-          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={circ * (1 - score)} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-[13px] font-bold text-slate-800" style={{ fontFamily: 'Sora, sans-serif' }}>{pct}</span>
-        <span className="text-[6.5px] font-bold text-amber-500 uppercase tracking-wider mt-[1px]">fomo</span>
+        <span className="text-[13px] font-bold text-slate-800" style={{ fontFamily: 'Sora' }}>{pct}</span>
+        <span className="text-[6px] font-bold text-amber-500 uppercase tracking-wider mt-[1px]">fomo</span>
       </span>
     </button>
   )
 }
 
-// ── Sun Timeline ──────────────────────────────────────────────────────
-function SunBar({ timeline, demo }: { timeline: SunTimeline; demo: boolean }) {
+// ── Timeline Bar ──────────────────────────────────────────────────────
+function SunBar({ timeline, demo, label }: { timeline: SunTimeline; demo: boolean; label?: string }) {
   const h = demo ? 10.17 : new Date().getHours() + new Date().getMinutes() / 60
   const nowPct = Math.max(0, Math.min(85, ((h - 8) / 10) * 85))
   return (
-    <div className="px-4 pb-3 space-y-1">
+    <div className="space-y-1">
       {(['today', 'tomorrow'] as const).map(day => (
         <div key={day} className="flex items-center gap-1.5">
-          <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">{day}</span>
+          <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">
+            {day === 'today' && label ? label : day}
+          </span>
           <div className="tl-bar">
             {timeline[day].map((seg, i) => (
               <div key={i} className={`h-full tl-${seg.condition} rounded-[2px]`} style={{ width: `${seg.pct}%` }} />
@@ -62,16 +60,13 @@ function SunBar({ timeline, demo }: { timeline: SunTimeline; demo: boolean }) {
           </div>
         </div>
       ))}
-      <div className="flex justify-between text-[8px] text-slate-300 pl-[50px]">
-        <span>8</span><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span>
-      </div>
     </div>
   )
 }
 
 // ══════════════════════════════════════════════════════════════════════
 export default function Home() {
-  const [maxH, setMaxH] = useState(2.5)
+  const [maxH, setMaxH] = useState(2)
   const [mode, setMode] = useState<TravelMode>('both')
   const [ga, setGA] = useState(false)
   const [types, setTypes] = useState<DestinationType[]>([])
@@ -83,8 +78,9 @@ export default function Home() {
   const [scorePopup, setScorePopup] = useState<number | null>(null)
   const [userLoc, setUserLoc] = useState<{ lat: number; lon: number; name: string } | null>(null)
   const [locating, setLocating] = useState(false)
+  const [hasSetOptimal, setHasSetOptimal] = useState(false)
 
-  const nightMode = data ? data.sunset.is_past && !demo : false
+  const night = data ? data.sunset.is_past && !demo : false
   const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
 
   const load = useCallback(async () => {
@@ -96,19 +92,22 @@ export default function Home() {
       })
       if (types.length) p.set('types', types.join(','))
       const res = await fetch(`/api/v1/sunny-escapes?${p}`)
-      setData(await res.json())
+      const d: SunnyEscapesResponse = await res.json()
+      setData(d)
+      // Auto-set slider to optimal on first load
+      if (!hasSetOptimal && d.optimal_travel_h) {
+        setMaxH(d.optimal_travel_h)
+        setHasSetOptimal(true)
+      }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
-  }, [maxH, mode, ga, types, demo, origin.lat, origin.lon])
+  }, [maxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal])
 
   useEffect(() => { load() }, [load])
-
-  // Close popup on outside click
   useEffect(() => {
     if (scorePopup === null) return
     const h = () => setScorePopup(null)
-    document.addEventListener('click', h)
-    return () => document.removeEventListener('click', h)
+    document.addEventListener('click', h); return () => document.removeEventListener('click', h)
   }, [scorePopup])
 
   const detectLocation = async () => {
@@ -116,75 +115,69 @@ export default function Home() {
     setLocating(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
-        const { latitude, longitude } = pos.coords
-        // Reverse geocode with Open-Meteo geocoding (free, no key)
         try {
-          const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${latitude}&longitude=${longitude}&count=1&language=en&format=json`)
+          const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&count=1&language=en&format=json`)
           const d = await r.json()
-          const name = d?.results?.[0]?.name || `${latitude.toFixed(2)}, ${longitude.toFixed(2)}`
-          setUserLoc({ lat: latitude, lon: longitude, name })
-        } catch {
-          setUserLoc({ lat: latitude, lon: longitude, name: `${latitude.toFixed(2)}, ${longitude.toFixed(2)}` })
-        }
-        setLocating(false)
+          setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: d?.results?.[0]?.name || `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` })
+        } catch { setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` }) }
+        setLocating(false); setHasSetOptimal(false) // recalculate optimal for new location
       },
-      () => setLocating(false),
-      { enableHighAccuracy: false, timeout: 8000 }
+      () => setLocating(false), { enableHighAccuracy: false, timeout: 8000 }
     )
   }
 
-  const toggleType = (t: DestinationType) => setTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
-  const toggleSetting = (id: string) => setOpenSetting(prev => prev === id ? null : id)
+  const toggleType = (t: DestinationType) => setTypes(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t])
+  const toggleSetting = (id: string) => setOpenSetting(p => p === id ? null : id)
   const filterSummary = types.length === 0 ? 'All types' : types.length <= 2 ? types.map(t => TYPES.find(x => x.id === t)?.label).join(', ') : `${types.length} selected`
   const currentTime = demo ? '10:10' : new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
+  const optPct = data ? ((data.optimal_travel_h - 1) / 3) * 100 : 50 // position on slider track (1-4h range)
 
   return (
-    <>
+    <div className={night ? 'night' : ''}>
       {/* ══════ HERO ══════ */}
-      <section className={`${nightMode ? 'hero-night' : 'hero-day'} pt-8 pb-14 px-4 relative`}>
-        {!nightMode && <>
+      <section className={`${night ? 'hero-night' : 'hero-day'} pt-8 pb-14 px-4 relative`}>
+        {!night && <>
           <div className="fog-w1 absolute top-10 left-0 w-full h-8 bg-gradient-to-r from-transparent via-slate-400/[.18] to-transparent rounded-full blur-[18px] pointer-events-none" />
           <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
         </>}
 
-        {/* Demo toggle */}
-        <button onClick={() => setDemo(!demo)}
+        <button onClick={() => { setDemo(!demo); setHasSetOptimal(false) }}
           className={`absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border backdrop-blur-sm transition-all
-            ${demo ? 'bg-amber-500/10 border-amber-400/30 text-amber-600' : nightMode ? 'bg-white/10 border-white/20 text-white/60' : 'bg-white/60 border-slate-200 text-slate-500'}`}>
+            ${demo ? 'bg-amber-500/10 border-amber-400/30 text-amber-600' : night ? 'bg-white/10 border-white/20 text-white/60' : 'bg-white/60 border-slate-200 text-slate-500'}`}>
           <span className={`w-2 h-2 rounded-full ${demo ? 'bg-amber-500' : 'bg-slate-400'}`} />
           {demo ? 'Demo' : 'Live'}
         </button>
 
         <div className="relative z-10 max-w-xl mx-auto text-center">
-          {/* Logo with sun */}
-          <div className="flex items-center justify-center gap-2 mb-2.5">
-            {nightMode
-              ? <div className="moon-anim w-10 h-10 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
-              : <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0 flex items-center justify-center text-lg">☀️</div>
+          {/* Logo - no emoji, clean */}
+          <div className="flex items-center justify-center gap-2 mb-2">
+            {night
+              ? <div className="moon-anim w-9 h-9 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
+              : <div className="sun-anim w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0" />
             }
-            <div className={`text-[30px] font-extrabold ${nightMode ? 'text-white' : 'text-slate-800'}`}
-              style={{ fontFamily: 'Sora, sans-serif', letterSpacing: '-1px' }}>
-              FOMO <span className={nightMode ? 'text-amber-400' : 'text-amber-500'}>Sun</span>
+            <div className={`text-[28px] font-extrabold ${night ? 'text-white' : 'text-slate-800'}`}
+              style={{ fontFamily: 'Sora', letterSpacing: '-1px' }}>
+              FOMO <span className={night ? 'text-amber-400' : 'text-amber-500'}>Sun</span>
             </div>
           </div>
 
-          <p className={`text-[15px] italic ${nightMode ? 'text-slate-400' : 'text-slate-500'}`}
+          {/* Tagline with emoji at end */}
+          <p className={`text-[15px] italic ${night ? 'text-slate-400' : 'text-slate-500'}`}
             style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-            {nightMode ? 'The sun will be back.' : 'Stop chasing clouds. Find sun.'}
+            {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
           </p>
 
           {/* Status pills */}
           {data && (
             <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${nightMode ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                 🕐 {currentTime}
               </span>
-              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${nightMode ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
-                <span className="w-[5px] h-[5px] rounded-full bg-slate-400" />
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                 {origin.name}: {data.origin_conditions.description}
               </span>
               {!data.sunset.is_past && (
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${nightMode ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
                   🌅 Sunset {data.sunset.time} ({fmtMin(data.sunset.minutes_until)})
                 </span>
               )}
@@ -193,20 +186,29 @@ export default function Home() {
 
           {/* FOMO stat */}
           {data && (
-            <div className={`mt-4 inline-flex items-center gap-2.5 rounded-xl px-5 py-2.5 shadow-sm ${nightMode ? 'bg-white/10' : 'bg-white'}`}>
-              {nightMode ? (
+            <div className={`mt-4 inline-flex items-center gap-2.5 rounded-xl px-5 py-2.5 shadow-sm ${night ? 'bg-white/10' : 'bg-white'}`}>
+              {night ? (
                 <>
-                  <span className="text-xl">🌤</span>
-                  <span className="text-2xl font-bold text-amber-400" style={{ fontFamily: 'Sora' }}>{data.tomorrow_sun_hours}h</span>
-                  <span className="text-[11px] text-slate-400 leading-tight text-left">of sun forecast<br />tomorrow</span>
+                  <span className="text-xl font-bold text-amber-400" style={{ fontFamily: 'Sora' }}>{data.tomorrow_sun_hours}h</span>
+                  <span className="text-[11px] text-slate-400 leading-tight text-left">of sun forecast<br />tomorrow ☀️</span>
                 </>
               ) : (
                 <>
-                  <span className="text-xl">☀️</span>
-                  <span className="text-2xl font-bold text-amber-500" style={{ fontFamily: 'Sora' }}>{data.max_sun_hours_today}h</span>
+                  <span className="text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora' }}>{data.max_sun_hours_today}h</span>
                   <span className="text-[11px] text-slate-400 leading-tight text-left">of sun today<br />above the fog</span>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Origin sun bar - shows what you need to escape */}
+          {data?.origin_timeline && (
+            <div className={`mt-4 max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className={`text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Your forecast</span>
+                <span className={`text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.origin_conditions.sunshine_min} min sun</span>
+              </div>
+              <SunBar timeline={data.origin_timeline} demo={demo} label={origin.name.slice(0, 6)} />
             </div>
           )}
         </div>
@@ -214,60 +216,63 @@ export default function Home() {
 
       {/* ══════ CONTROLS ══════ */}
       <section className="max-w-xl mx-auto px-4 -mt-7 relative z-20">
-        <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 overflow-visible">
+        <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
 
-          {/* Location bar */}
+          {/* Location */}
           <div className="px-5 pt-4 pb-2 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 text-[13px]">
               <LocI c="w-[16px] h-[16px] text-amber-500" />
-              <span className="font-medium text-slate-700">{origin.name}</span>
-              {userLoc && (
-                <button onClick={() => setUserLoc(null)} className="text-[10px] text-slate-400 hover:text-slate-600">
-                  (reset to Basel)
-                </button>
-              )}
+              <span className={`font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{origin.name}</span>
+              {userLoc && <button onClick={() => { setUserLoc(null); setHasSetOptimal(false) }} className="text-[10px] text-slate-400 hover:text-slate-600">(reset)</button>}
             </div>
             <button onClick={detectLocation} disabled={locating}
               className={`relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border transition-all
-                ${locating ? 'bg-amber-50 border-amber-200 text-amber-500' : 'bg-white border-slate-200 text-slate-500 hover:border-amber-300 hover:text-amber-600'}`}>
+                ${locating ? 'bg-amber-50 border-amber-200 text-amber-500' : night ? 'bg-slate-700 border-slate-600 text-slate-300' : 'bg-white border-slate-200 text-slate-500 hover:border-amber-300'}`}>
               {locating && <span className="loc-pulse relative w-2 h-2 rounded-full bg-amber-500" />}
-              <LocI c="w-3 h-3" />
-              {locating ? 'Locating...' : 'Use my location'}
+              <LocI c="w-3 h-3" /> {locating ? 'Locating...' : 'Use my location'}
             </button>
           </div>
 
-          {/* Slider */}
+          {/* Slider with optimal marker */}
           <div className="px-5 pt-2 pb-4">
             <div className="flex justify-between items-baseline mb-2">
-              <span className="text-[10px] font-semibold uppercase tracking-[1.2px] text-slate-400">Travel time</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                {night ? 'Travel radius' : 'Net sun optimized'}
+              </span>
               <span className="text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{maxH}h</span>
             </div>
-            <input type="range" min={1} max={4} step={0.5} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
-            <div className="flex justify-between text-[9px] text-slate-300 mt-1 px-0.5"><span>1h</span><span>2h</span><span>3h</span><span>4h</span></div>
+            <div className="relative">
+              <input type="range" min={1} max={4} step={0.5} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
+              {/* Optimal marker */}
+              {data && <div className="opt-mark" style={{ left: `${optPct}%` }} />}
+            </div>
+            <div className={`flex justify-between text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
+              <span>1h</span><span>2h</span><span>3h</span><span>4h</span>
+            </div>
           </div>
 
-          {/* Travel mode - collapsible */}
-          <button onClick={() => toggleSetting('mode')} className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer">
+          {/* Travel mode */}
+          <button onClick={() => toggleSetting('mode')} className={`setting-toggle w-full flex items-center justify-between px-5 py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
-              <CarI c="w-[18px] h-[18px] text-slate-400" />
-              <span className="text-[13px] font-medium text-slate-800">Travel mode</span>
-              <span className="text-[12px] text-slate-400">{modeLbl[mode]}</span>
+              <CarI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
+              <span className={`text-[13px] font-medium ${night ? 'text-slate-200' : 'text-slate-800'}`}>Travel mode</span>
+              <span className={`text-[12px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{modeLbl[mode]}</span>
             </div>
-            <ChevD c={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'mode' ? 'rotate-180' : ''}`} />
+            <ChevD c={`w-3.5 h-3.5 ${night ? 'text-slate-600' : 'text-slate-300'} transition-transform ${openSetting === 'mode' ? 'rotate-180' : ''}`} />
           </button>
           {openSetting === 'mode' && (
             <div className="px-5 pb-4">
               <div className="flex gap-1.5">
-                {([['car','Car',CarI],['train','Train',TrainI],['both','Both',BothI]] as [TravelMode,string,typeof CarI][]).map(([m,l,Icon]) => (
+                {([['car','Car',CarI],['train','Train',TrainI],['both','Both',BothI]] as [TravelMode,string,typeof CarI][]).map(([m,l,Ic]) => (
                   <button key={m} onClick={() => setMode(m)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[12px] font-medium border transition-all
-                      ${mode === m ? 'mode-btn-active' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
-                    <Icon c="w-4 h-4" /> {l}
+                      ${mode === m ? 'mode-btn-active' : night ? 'bg-slate-700 text-slate-300 border-slate-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
+                    <Ic c="w-4 h-4" /> {l}
                   </button>
                 ))}
               </div>
               {(mode === 'train' || mode === 'both') && (
-                <label className="flex items-center gap-1.5 mt-2.5 text-[11px] text-slate-500 cursor-pointer select-none">
+                <label className={`flex items-center gap-1.5 mt-2.5 text-[11px] cursor-pointer select-none ${night ? 'text-slate-400' : 'text-slate-500'}`}>
                   <input type="checkbox" checked={ga} onChange={e => setGA(e.target.checked)} className="rounded border-slate-300 accent-amber-500 w-3.5 h-3.5" />
                   I have a GA travelcard
                 </label>
@@ -276,13 +281,13 @@ export default function Home() {
           )}
 
           {/* Filters */}
-          <button onClick={() => toggleSetting('filter')} className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer">
+          <button onClick={() => toggleSetting('filter')} className={`setting-toggle w-full flex items-center justify-between px-5 py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
-              <FilterI c="w-[18px] h-[18px] text-slate-400" />
-              <span className="text-[13px] font-medium text-slate-800">Filters</span>
-              <span className="text-[12px] text-slate-400">{filterSummary}</span>
+              <FilterI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
+              <span className={`text-[13px] font-medium ${night ? 'text-slate-200' : 'text-slate-800'}`}>Filters</span>
+              <span className={`text-[12px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{filterSummary}</span>
             </div>
-            <ChevD c={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'filter' ? 'rotate-180' : ''}`} />
+            <ChevD c={`w-3.5 h-3.5 ${night ? 'text-slate-600' : 'text-slate-300'} transition-transform ${openSetting === 'filter' ? 'rotate-180' : ''}`} />
           </button>
           {openSetting === 'filter' && (
             <div className="px-5 pb-4">
@@ -303,40 +308,30 @@ export default function Home() {
       <section className="max-w-xl mx-auto px-4 mt-5 pb-16">
         {loading ? (
           <div className="text-center py-16">
-            <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto flex items-center justify-center text-lg">☀️</div>
-            <p className="mt-4 text-sm text-slate-400">Finding sunshine...</p>
+            <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto" />
+            <p className={`mt-4 text-sm ${night ? 'text-slate-500' : 'text-slate-400'}`}>Finding sunshine...</p>
           </div>
         ) : data?.escapes?.length ? (
           <>
             <div className="flex items-baseline justify-between mb-3">
-              <h2 className="text-[16px] font-bold text-slate-800" style={{ fontFamily: 'Sora', letterSpacing: '-0.3px' }}>
-                {nightMode ? 'Tomorrow\'s sunny escapes' : 'Your sunny escapes'}
+              <h2 className={`text-[16px] font-bold ${night ? 'text-white' : 'text-slate-800'}`} style={{ fontFamily: 'Sora', letterSpacing: '-0.3px' }}>
+                {night ? 'Tomorrow\'s sunny escapes' : 'Your sunny escapes'}
               </h2>
-              <span className="text-[11px] text-slate-400">{data.escapes.length} found</span>
+              <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.escapes.length} found</span>
             </div>
 
             <div className="space-y-2.5">
               {data.escapes.map((e, i) => (
-                <div key={e.destination.id} className={`escape-card anim-in d${Math.min(i + 1, 5)} cursor-pointer rounded-[14px] border border-slate-100`}
+                <div key={e.destination.id}
+                  className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
                   onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
                   <div className="p-3.5 sm:p-4 flex gap-3 items-start">
-                    {/* FOMOscore with popup - properly positioned */}
                     <div className="score-wrap" onClick={ev => ev.stopPropagation()}>
                       <ScoreRing score={e.sun_score.score} onTap={() => setScorePopup(scorePopup === i ? null : i)} />
                       {scorePopup === i && (
                         <div className="score-popup">
-                          <div className="flex items-center gap-1.5 mb-1.5">
-                            <span className="text-sm">☀️</span>
-                            <span className="text-[13px] font-bold text-amber-500">{Math.round(e.sun_score.score * 100)}% FOMOscore</span>
-                          </div>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
-                            Expected share of clear-sky daylight at this destination. Higher = more sunshine, fewer clouds.
-                          </p>
-                          <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-400">
-                            <span>☀️ {e.sun_score.sunshine_forecast_min} min sunshine</span>
-                            <span>·</span>
-                            <span>☁️ {e.sun_score.low_cloud_cover_pct}% cloud</span>
-                          </div>
+                          <p className="text-[11px] font-semibold text-amber-500">{Math.round(e.sun_score.score * 100)}% FOMOscore</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Clear-sky daylight expected.</p>
                         </div>
                       )}
                     </div>
@@ -344,76 +339,49 @@ export default function Home() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1 flex-wrap">
                         <span className="text-[11px]">{FLAG[e.destination.country]}</span>
-                        <span className="font-semibold text-[14px] text-slate-800">{e.destination.name}</span>
+                        <span className={`font-semibold text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
                       </div>
-                      <p className="text-[11px] text-slate-400 mt-0.5">{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
-
-                      {/* Inline sunshine info with comparison */}
-                      <p className="text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">
-                        ☀️ {e.conditions}
-                      </p>
-
+                      <p className={`text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
+                      <p className="text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
+                      {!night && e.net_sun_min > 0 && (
+                        <p className={`text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                          Net sun after travel: {fmtMin(e.net_sun_min)}
+                        </p>
+                      )}
+                      {night && (
+                        <p className="text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
+                      )}
                       <div className="flex gap-2.5 mt-1.5">
-                        {e.travel.car && (
-                          <span className="flex items-start gap-1 text-[11px] text-slate-500">
-                            <CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" />
-                            <strong className="text-slate-700">{e.travel.car.duration_min} min</strong>
-                          </span>
-                        )}
-                        {e.travel.train && (
-                          <span className="flex items-start gap-1 text-[11px] text-slate-500">
-                            <TrainI c="w-[13px] h-[13px] text-slate-400 mt-0.5" />
-                            <strong className="text-slate-700">{e.travel.train.duration_min} min</strong>
-                            {e.travel.train.changes !== undefined && <span className="text-slate-300">{e.travel.train.changes}×</span>}
-                            {e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}
-                          </span>
-                        )}
+                        {e.travel.car && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
+                        {e.travel.train && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
                       </div>
                     </div>
-                    <ChevD c={`w-3.5 h-3.5 text-slate-300 flex-shrink-0 self-center transition-transform ${openCard === i ? 'rotate-180' : ''}`} />
+                    <ChevD c={`w-3.5 h-3.5 flex-shrink-0 self-center transition-transform ${night ? 'text-slate-600' : 'text-slate-300'} ${openCard === i ? 'rotate-180' : ''}`} />
                   </div>
 
-                  {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} />}
+                  <div className="px-4 pb-3">
+                    {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} />}
+                    <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">
+                      <span>8</span><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span>
+                    </div>
+                  </div>
 
-                  {/* Expanded detail */}
                   {openCard === i && (
-                    <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3.5 anim-in rounded-b-[14px]">
-                      <p className="text-[9px] font-semibold uppercase tracking-[1.2px] text-slate-400 mb-2">Trip plan</p>
+                    <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] ${night ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
+                      <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 ${night ? 'text-slate-500' : 'text-slate-400'}`}>Trip plan</p>
                       <div className="space-y-1.5">
                         {e.plan.map((step, j) => (
                           <div key={j} className="flex gap-2 items-start">
                             <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] font-bold mt-0.5">{j+1}</span>
-                            <span className="text-[12px] text-slate-500 leading-snug">{step}</span>
+                            <span className={`text-[12px] leading-snug ${night ? 'text-slate-400' : 'text-slate-500'}`}>{step}</span>
                           </div>
                         ))}
                       </div>
                       <div className="flex gap-1.5 mt-3">
-                        {e.links.google_maps && (
-                          <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-700 transition-colors">
-                            <MapI /> Navigate
-                          </a>
-                        )}
-                        {e.links.sbb && (
-                          <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors">
-                            <TrainI c="w-3.5 h-3.5" /> SBB
-                          </a>
-                        )}
-                        {e.links.webcam && (
-                          <a href={e.links.webcam} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
-                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white text-slate-500 border border-slate-200 text-[11px] font-semibold hover:bg-slate-50 transition-colors">
-                            <CamI /> Webcam
-                          </a>
-                        )}
+                        {e.links.google_maps && <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-700 transition-colors"><MapI /> Navigate</a>}
+                        {e.links.sbb && <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors"><TrainI c="w-3.5 h-3.5" /> SBB</a>}
+                        {e.links.webcam && <a href={e.links.webcam} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white text-slate-500 border border-slate-200 text-[11px] font-semibold hover:bg-slate-50 transition-colors"><CamI /> Webcam</a>}
                       </div>
-                      <button onClick={ev => {
-                          ev.stopPropagation()
-                          navigator.clipboard?.writeText(`☀️ ${e.destination.name} (${e.destination.region})\nFOMOscore: ${Math.round(e.sun_score.score*100)}%\n${e.conditions}\n${e.plan.join(' > ')}\n\nfomosun.com`)
-                        }}
-                        className="w-full mt-2 py-1.5 text-[10px] text-slate-400 hover:text-slate-600 transition-colors">
-                        Copy & share this escape
-                      </button>
                     </div>
                   )}
                 </div>
@@ -422,11 +390,11 @@ export default function Home() {
           </>
         ) : (
           <div className="text-center py-16">
-            <p className="text-base text-slate-500 mb-1">No sunny escapes found</p>
-            <p className="text-xs text-slate-400">Try increasing your travel time or removing filters</p>
+            <p className={`text-base mb-1 ${night ? 'text-slate-400' : 'text-slate-500'}`}>No sunny escapes found</p>
+            <p className={`text-xs ${night ? 'text-slate-600' : 'text-slate-400'}`}>Try increasing travel time or removing filters</p>
           </div>
         )}
       </section>
-    </>
+    </div>
   )
 }
