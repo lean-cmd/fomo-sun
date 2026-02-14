@@ -37,7 +37,9 @@ export async function GET(request: NextRequest) {
     return { destination: dest, sun_score: computeSunScore(dest, w), conditions: w.conditions_text, temp_c: w.temp_c }
   })
 
-  const top = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, 20)
+  // Keep a much broader candidate set in demo so the slider materially changes outcomes.
+  const topLimit = demoMode ? 48 : 20
+  const top = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
 
   // Add travel
   const withTravel = top.map(c => {
@@ -47,13 +49,30 @@ export async function GET(request: NextRequest) {
     return { ...c, carTravel: car, trainTravel: train ? { ...train, ga_included: hasGA } : undefined, bestTravelMin: best }
   })
 
+  const filtered = withTravel.filter(r => r.bestTravelMin <= maxTravelMin)
+
   // Filter & rank
-  const ranked = rankDestinations(
-    withTravel.filter(r => r.bestTravelMin <= maxTravelMin).map(r => ({
-      destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin,
-    })),
-    maxTravelMin
-  )
+  // Demo mode uses a softer travel-time penalty as slider increases, so longer-distance
+  // high-sun options can naturally surface at the right side of the control.
+  const ranked = demoMode
+    ? filtered
+        .map(r => {
+          const travelRatio = r.bestTravelMin / Math.max(1, maxTravelMin)
+          const travelPenaltyWeight = 0.45 - (((maxTravelH - 1) / (maxSupportedH - 1)) * 0.28) // ~0.45 -> ~0.17
+          return {
+            destination: r.destination,
+            sun_score: r.sun_score,
+            travel_time_min: r.bestTravelMin,
+            combined_score: r.sun_score.score * (1 - travelPenaltyWeight * travelRatio),
+          }
+        })
+        .sort((a, b) => b.combined_score - a.combined_score)
+    : rankDestinations(
+        filtered.map(r => ({
+          destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin,
+        })),
+        maxTravelMin
+      )
 
   // Demo mode curation:
   // - keep results mostly Swiss for MeteoSwiss-first narrative
@@ -79,31 +98,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // At the far right of the slider, force St. Moritz visibility in demo
-    // even if travel estimate is slightly outside the strict filter.
-    if (maxTravelH >= 4.5 && !pickedIds.has('st-moritz')) {
-      const stMoritzAny = withTravel.find(r => r.destination.id === 'st-moritz')
-      if (stMoritzAny) {
-        pickedIds.add('st-moritz')
-      }
-    }
-
     // Keep original ranking order for stable card positions.
     pickedRanked = ranked.filter(r => pickedIds.has(r.destination.id)).slice(0, limit)
-
-    if (maxTravelH >= 4.5 && !pickedRanked.some(r => r.destination.id === 'st-moritz')) {
-      const stMoritzFallback = withTravel.find(r => r.destination.id === 'st-moritz')
-      if (stMoritzFallback) {
-        const fallback = {
-          destination: stMoritzFallback.destination,
-          sun_score: stMoritzFallback.sun_score,
-          travel_time_min: Math.min(stMoritzFallback.bestTravelMin, maxTravelMin),
-          combined_score: stMoritzFallback.sun_score.score * 0.55,
-        }
-        if (pickedRanked.length < limit) pickedRanked.push(fallback)
-        else pickedRanked[pickedRanked.length - 1] = fallback
-      }
-    }
   }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)

@@ -7,7 +7,7 @@ export interface MockWeatherResult {
 }
 
 const DEMO_BUCKET_MIN = 15
-const DEMO_SWISS_HIGHLIGHTS = new Set([
+const DEMO_SWISS_ELITE = new Set([
   'lucerne',
   'pilatus',
   'st-moritz',
@@ -19,13 +19,27 @@ const DEMO_SWISS_HIGHLIGHTS = new Set([
   'grindelwald',
   'adelboden',
   'chasseral',
-  'weissenstein',
   'rochers-de-naye',
   'la-dole',
   'gruyeres',
   'interlaken',
-  'uetliberg',
   'thun',
+])
+const DEMO_SWISS_MEDIUM = new Set([
+  'weissenstein',
+  'uetliberg',
+  'bachtel',
+  'pfannenstiel',
+  'bern',
+  'zurich',
+  'napf',
+  'moléson',
+  'brienz',
+  'hasliberg',
+  'braunwald',
+  'gurten',
+  'bantiger',
+  'leysin',
 ])
 
 // Weather zone overrides for non-altitude-based destinations
@@ -59,10 +73,25 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
   seed = hashSeed(destination.id, demoMode ? demoBucket() : 0)
 
   if (demoMode) {
-    if (destination.country === 'CH' && DEMO_SWISS_HIGHLIGHTS.has(destination.id)) {
-      // 90%+ score candidates for famous Swiss short trips.
-      const sunMin = 176 + Math.round(srand() * 4) // 176-180
-      const lowCloud = Math.round(srand() * 3)     // 0-3
+    if (destination.id === 'st-moritz') {
+      const sunMin = 179 + Math.round(srand()) // 179-180
+      const lowCloud = Math.round(srand() * 2) // 0-2
+      return {
+        sunshine_forecast_min: sunMin,
+        low_cloud_cover_pct: lowCloud,
+        total_cloud_cover_pct: lowCloud + Math.round(srand() * 4),
+        is_inversion_likely: true,
+        ground_truth_available: true,
+        ground_truth_sunny: true,
+        temp_c: -6 + Math.round(srand() * 4),
+        conditions_text: `Engadin bluebird, ${sunMin} min sunshine`,
+      }
+    }
+
+    if (destination.country === 'CH' && DEMO_SWISS_ELITE.has(destination.id)) {
+      // Famous Swiss highlights: typically sunny, but not always perfect.
+      const sunMin = 160 + Math.round(srand() * 18) // 160-178
+      const lowCloud = 2 + Math.round(srand() * 12) // 2-14
       return {
         sunshine_forecast_min: sunMin,
         low_cloud_cover_pct: lowCloud,
@@ -71,7 +100,23 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
         ground_truth_available: true,
         ground_truth_sunny: true,
         temp_c: destination.altitude_m > 1500 ? -4 + Math.round(srand() * 6) : 2 + Math.round(srand() * 5),
-        conditions_text: `Bluebird window above fog, ${sunMin} min sunshine`,
+        conditions_text: `Mostly sunny alpine window, ${sunMin} min sunshine`,
+      }
+    }
+
+    if (destination.country === 'CH' && DEMO_SWISS_MEDIUM.has(destination.id)) {
+      // Mid-confidence options: usable but with meaningful cloud periods.
+      const sunMin = 75 + Math.round(srand() * 60) // 75-135
+      const lowCloud = 25 + Math.round(srand() * 45)
+      return {
+        sunshine_forecast_min: sunMin,
+        low_cloud_cover_pct: Math.min(100, lowCloud),
+        total_cloud_cover_pct: Math.min(100, lowCloud + 8 + Math.round(srand() * 12)),
+        is_inversion_likely: true,
+        ground_truth_available: srand() > 0.45,
+        ground_truth_sunny: sunMin > 95,
+        temp_c: destination.altitude_m > 1000 ? -1 + Math.round(srand() * 6) : 1 + Math.round(srand() * 7),
+        conditions_text: `Patchy cloud breaks, ${sunMin} min sunshine`,
       }
     }
 
@@ -91,8 +136,8 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
       }
     }
 
-    const sunMin = 20 + Math.round(srand() * 120)
-    const lowCloud = 30 + Math.round(srand() * 60)
+    const sunMin = 45 + Math.round(srand() * 75)
+    const lowCloud = 35 + Math.round(srand() * 45)
     return {
       sunshine_forecast_min: sunMin,
       low_cloud_cover_pct: Math.min(100, lowCloud),
@@ -101,7 +146,7 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
       ground_truth_available: srand() > 0.5,
       ground_truth_sunny: sunMin > 80,
       temp_c: destination.altitude_m > 1200 ? -2 + Math.round(srand() * 7) : 1 + Math.round(srand() * 7),
-      conditions_text: `Mixed cloud deck, ${sunMin} min sunshine`,
+      conditions_text: `Variable cloud deck, ${sunMin} min sunshine`,
     }
   }
 
@@ -203,13 +248,23 @@ export function getMockSunTimeline(destination: Destination, demoMode = false): 
   seed = hashSeed(`${destination.id}:timeline`, demoMode ? demoBucket() : 0)
 
   function genDay(bias: number): TimelineSegment[] {
-    const sc = zone ? zone.sun_bias + bias : alt > 1000 ? 0.72 + bias : alt > 600 ? 0.38 + bias : 0.12 + bias
+    let sc = zone ? zone.sun_bias + bias : alt > 1000 ? 0.72 + bias : alt > 600 ? 0.38 + bias : 0.12 + bias
+    if (demoMode) {
+      if (destination.id === 'st-moritz') sc = 0.92 + bias
+      else if (DEMO_SWISS_ELITE.has(destination.id)) sc = 0.72 + bias
+      else if (DEMO_SWISS_MEDIUM.has(destination.id)) sc = 0.43 + bias
+      else if (destination.country === 'CH') sc = 0.36 + bias
+      else sc = 0.24 + bias
+    }
     const segs: TimelineSegment[] = []
     let rem = 85
-    const n = 4 + Math.round(srand() * 2) // 4-6 segments for more variance
+    const n = 5 + Math.round(srand() * 2) // 5-7 segments for more visible change
+    const cloudBurstIndex = Math.round(srand() * (n - 1))
     for (let i = 0; i < n && rem > 5; i++) {
       const pct = Math.min(rem, 8 + Math.round(srand() * 22))
-      rem -= pct; const r = srand()
+      rem -= pct
+      let r = srand()
+      if (demoMode && i === cloudBurstIndex) r = 0.95 // explicit cloud period burst
       segs.push({ condition: r < sc ? 'sun' : r < sc + 0.18 ? 'partial' : 'cloud', pct })
     }
     if (rem > 0) segs.push({ condition: srand() < sc ? 'sun' : 'partial', pct: rem })
@@ -221,9 +276,17 @@ export function getMockSunTimeline(destination: Destination, demoMode = false): 
 
 /** Per-destination tomorrow sun hours */
 export function getMockTomorrowSunHoursForDest(destination: Destination, demoMode = false): number {
-  if (demoMode && destination.country === 'CH' && DEMO_SWISS_HIGHLIGHTS.has(destination.id)) {
+  if (demoMode && destination.id === 'st-moritz') {
     seed = hashSeed(`${destination.id}:tomorrow`, demoBucket())
-    return parseFloat((7.8 + srand() * 2.2).toFixed(1))
+    return parseFloat((8.6 + srand() * 1.2).toFixed(1))
+  }
+  if (demoMode && destination.country === 'CH' && DEMO_SWISS_ELITE.has(destination.id)) {
+    seed = hashSeed(`${destination.id}:tomorrow`, demoBucket())
+    return parseFloat((6.8 + srand() * 2.0).toFixed(1))
+  }
+  if (demoMode && destination.country === 'CH' && DEMO_SWISS_MEDIUM.has(destination.id)) {
+    seed = hashSeed(`${destination.id}:tomorrow`, demoBucket())
+    return parseFloat((3.2 + srand() * 2.4).toFixed(1))
   }
   const zone = ZONE[destination.id]
   const base = zone ? zone.sun_bias * 7 : destination.altitude_m > 1000 ? 5.5 : destination.altitude_m > 600 ? 3.5 : 1.5
