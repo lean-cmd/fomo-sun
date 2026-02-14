@@ -3,66 +3,25 @@
 import { useState, useEffect, useCallback } from 'react'
 import { SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
 
-// ── SVG Icons (no emoji) ──────────────────────────────────────────────
-function CarIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" />
-    </svg>
-  )
-}
-function TrainIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-18v18M3.6 9h16.8M3.6 15h16.8" />
-    </svg>
-  )
-}
-function BothIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
-  )
-}
-function FilterIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" />
-    </svg>
-  )
-}
-function MapIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
-    </svg>
-  )
-}
-function CameraIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" />
-    </svg>
-  )
-}
-function ChevDown({ className = 'w-3.5 h-3.5' }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
-  )
-}
+// ── SVG Icons ─────────────────────────────────────────────────────────
+const CarIcon = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" /></svg>
+const TrainIcon = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-18v18M3.6 9h16.8M3.6 15h16.8" /></svg>
+const BothIcon = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
+const FilterIcon = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
+const MapIcon = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
+const CamIcon = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" /></svg>
+const ChevDown = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+const LocIcon = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
 
-// ── Score Ring ─────────────────────────────────────────────────────────
-function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
+// ── FOMOscore Ring ────────────────────────────────────────────────────
+function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; onTap?: () => void }) {
   const pct = Math.round(score * 100)
   const r = (size - 8) / 2
   const circ = 2 * Math.PI * r
   const offset = circ * (1 - score)
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+    <button onClick={e => { e.stopPropagation(); onTap?.() }}
+      className="relative flex-shrink-0 cursor-pointer group" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={4} />
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f59e0b" strokeWidth={4}
@@ -71,24 +30,43 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
       </svg>
       <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-slate-800"
         style={{ fontFamily: 'Sora, sans-serif' }}>{pct}</span>
+      <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 text-[7px] font-semibold text-amber-500 uppercase tracking-wider opacity-70">fomo</span>
+    </button>
+  )
+}
+
+// ── FOMOscore Popup ───────────────────────────────────────────────────
+function ScorePopup({ score, onClose }: { score: number; onClose: () => void }) {
+  return (
+    <div className="score-popup bg-white rounded-xl shadow-lg border border-slate-100 px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+      <p className="text-[11px] text-slate-500 leading-relaxed max-w-[200px]">
+        <strong className="text-amber-500">{Math.round(score * 100)}% FOMOscore</strong><br />
+        Expected clear-sky daylight hours. Higher = more sun, less cloud.
+      </p>
+      <button onClick={onClose} className="mt-1 text-[9px] text-slate-400 hover:text-slate-600">dismiss</button>
     </div>
   )
 }
 
 // ── Sunshine Timeline ─────────────────────────────────────────────────
-function SunTimelineBar({ timeline }: { timeline: SunTimeline }) {
-  const bgClass: Record<string, string> = {
-    sun: 'tl-sun', partial: 'tl-partial', cloud: 'tl-cloud', night: 'tl-night',
-  }
+function SunTimelineBar({ timeline, sunset }: { timeline: SunTimeline; sunset?: { time: string; minutes_until: number; is_past: boolean } }) {
+  // Calculate "now" marker position (8:00 = 0%, 18:00 = 85%, rest is night)
+  const now = new Date()
+  const h = now.getHours() + now.getMinutes() / 60
+  const nowPct = Math.max(0, Math.min(85, ((h - 8) / 10) * 85)) // 8-18 mapped to 0-85%
+
   return (
     <div className="px-4 pb-3 space-y-1">
       {(['today', 'tomorrow'] as const).map(day => (
         <div key={day} className="flex items-center gap-1.5">
           <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">{day}</span>
-          <div className="flex-1 h-[14px] rounded bg-slate-100 flex overflow-hidden">
+          <div className="flex-1 h-[14px] rounded bg-slate-100 flex gap-[1px] overflow-hidden relative">
             {timeline[day].map((seg, i) => (
-              <div key={i} className={`h-full ${bgClass[seg.condition]}`} style={{ width: `${seg.pct}%` }} />
+              <div key={i} className={`h-full tl-${seg.condition} rounded-[2px]`} style={{ width: `${seg.pct}%` }} />
             ))}
+            {day === 'today' && h >= 8 && h <= 18 && (
+              <div className="tl-now" style={{ left: `${nowPct}%` }} />
+            )}
           </div>
         </div>
       ))}
@@ -102,20 +80,18 @@ function SunTimelineBar({ timeline }: { timeline: SunTimeline }) {
 // ── Data ───────────────────────────────────────────────────────────────
 const FLAG: Record<string, string> = { CH: '🇨🇭', DE: '🇩🇪', FR: '🇫🇷' }
 const TYPES: { id: DestinationType; label: string }[] = [
-  { id: 'nature', label: 'Nature' },
-  { id: 'viewpoint', label: 'Views' },
-  { id: 'town', label: 'Town' },
-  { id: 'lake', label: 'Lake' },
-  { id: 'family', label: 'Family' },
-  { id: 'food', label: 'Food & Wine' },
+  { id: 'nature', label: 'Nature' }, { id: 'viewpoint', label: 'Views' },
+  { id: 'town', label: 'Town' }, { id: 'lake', label: 'Lake' },
+  { id: 'family', label: 'Family' }, { id: 'food', label: 'Food & Wine' },
   { id: 'thermal', label: 'Thermal' },
 ]
-
-function badgeClass(c: string) {
-  return c === 'high' ? 'badge-high' : c === 'medium' ? 'badge-medium' : c === 'low' ? 'badge-low' : 'badge-uncertain'
-}
-
 const modeLabels: Record<TravelMode, string> = { car: 'Car', train: 'Train', both: 'Car + Train' }
+
+function formatMinsLeft(m: number) {
+  const h = Math.floor(m / 60)
+  const mins = m % 60
+  return h > 0 ? `${h}h ${mins}m` : `${mins}m`
+}
 
 // ── Main Page ─────────────────────────────────────────────────────────
 export default function Home() {
@@ -127,6 +103,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [openCard, setOpenCard] = useState<number | null>(null)
   const [openSetting, setOpenSetting] = useState<string | null>(null)
+  const [demo, setDemo] = useState(true)
+  const [scorePopup, setScorePopup] = useState<number | null>(null)
+
+  const isNight = data ? data.sunset.is_past : false
+  const nightMode = isNight && !demo
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -134,63 +115,102 @@ export default function Home() {
       const p = new URLSearchParams({
         lat: '47.5596', lon: '7.5886',
         max_travel_h: String(maxH), mode, ga: String(ga), limit: '5',
+        demo: String(demo),
       })
       if (types.length) p.set('types', types.join(','))
       const res = await fetch(`/api/v1/sunny-escapes?${p}`)
       setData(await res.json())
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
-  }, [maxH, mode, ga, types])
+  }, [maxH, mode, ga, types, demo])
 
   useEffect(() => { load() }, [load])
 
   const toggleType = (t: DestinationType) =>
     setTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
-
   const toggleSetting = (id: string) =>
     setOpenSetting(prev => prev === id ? null : id)
-
   const filterSummary = types.length === 0 ? 'All types' : types.length <= 2 ? types.map(t => TYPES.find(x => x.id === t)?.label).join(', ') : `${types.length} selected`
 
   return (
     <>
       {/* ══════ HERO ══════ */}
-      <section className="hero-bg pt-9 pb-14 px-4 relative">
-        <div className="fog-w1 absolute top-10 left-0 w-full h-8 bg-gradient-to-r from-transparent via-slate-400/[.18] to-transparent rounded-full blur-[18px] pointer-events-none" />
-        <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
+      <section className={`${nightMode ? 'hero-night' : 'hero-day'} pt-9 pb-14 px-4 relative`}>
+        {!nightMode && <>
+          <div className="fog-w1 absolute top-10 left-0 w-full h-8 bg-gradient-to-r from-transparent via-slate-400/[.18] to-transparent rounded-full blur-[18px] pointer-events-none" />
+          <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
+        </>}
+
+        {/* Demo toggle - top right */}
+        <button onClick={() => setDemo(!demo)}
+          className={`demo-toggle absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border
+            ${demo
+              ? 'bg-amber-500/10 border-amber-400/30 text-amber-600'
+              : nightMode ? 'bg-white/10 border-white/20 text-white/60' : 'bg-white/60 border-slate-200 text-slate-500'}`}>
+          <span className={`w-2 h-2 rounded-full ${demo ? 'bg-amber-500' : 'bg-slate-400'}`} />
+          {demo ? 'Demo' : 'Live'}
+        </button>
 
         <div className="relative z-10 max-w-xl mx-auto text-center">
           {/* Logo */}
           <div className="flex items-center justify-center gap-2.5 mb-3.5">
-            <div className="sun-anim w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0" />
-            <div className="text-[28px] font-extrabold tracking-tight text-slate-800" style={{ fontFamily: 'Sora, sans-serif', letterSpacing: '-1px' }}>
-              FOMO <span className="text-amber-500">Sun</span>
+            {nightMode ? (
+              <div className="moon-anim w-9 h-9 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
+            ) : (
+              <div className="sun-anim w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex-shrink-0" />
+            )}
+            <div className={`text-[28px] font-extrabold tracking-tight ${nightMode ? 'text-white' : 'text-slate-800'}`}
+              style={{ fontFamily: 'Sora, sans-serif', letterSpacing: '-1px' }}>
+              FOMO <span className={nightMode ? 'text-amber-400' : 'text-amber-500'}>Sun</span>
             </div>
           </div>
 
           {/* Tagline */}
-          <p className="text-[15px] text-slate-500 italic" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-            Stop chasing clouds. Find sun.
+          <p className={`text-[15px] italic ${nightMode ? 'text-slate-400' : 'text-slate-500'}`}
+            style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            {nightMode ? 'The sun will be back.' : 'Stop chasing clouds. Find sun.'}
           </p>
 
-          {/* Origin conditions */}
-          {data?.origin_conditions && (
-            <div className="mt-3.5 inline-flex items-center gap-1.5 bg-white/60 backdrop-blur-sm rounded-full px-3.5 py-1.5 text-[11px] text-slate-500">
-              <span className="w-[5px] h-[5px] rounded-full bg-slate-400" />
-              Basel now: {data.origin_conditions.description}
+          {/* Origin + Sunset */}
+          {data && (
+            <div className="mt-3.5 flex items-center justify-center gap-3 flex-wrap">
+              <div className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] ${nightMode ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+                <span className={`w-[5px] h-[5px] rounded-full ${nightMode ? 'bg-slate-500' : 'bg-slate-400'}`} />
+                Basel: {data.origin_conditions.description}
+              </div>
+              {!data.sunset.is_past && (
+                <div className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] ${nightMode ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+                  Sunset {data.sunset.time} ({formatMinsLeft(data.sunset.minutes_until)} left)
+                </div>
+              )}
             </div>
           )}
 
           {/* FOMO stat */}
-          {data?.max_sun_hours_today && (
-            <div className="mt-4 inline-flex items-center gap-2.5 bg-white rounded-xl px-4 py-2 shadow-sm">
-              <div className="w-[18px] h-[18px] rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex-shrink-0" />
-              <span className="text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora, sans-serif' }}>
-                {data.max_sun_hours_today}h
-              </span>
-              <span className="text-[11px] text-slate-400 leading-tight text-left">
-                of sun today<br />above the fog
-              </span>
+          {data && (
+            <div className={`mt-4 inline-flex items-center gap-2.5 rounded-xl px-4 py-2 shadow-sm ${nightMode ? 'bg-white/10' : 'bg-white'}`}>
+              {nightMode ? (
+                <>
+                  <svg className="w-[18px] h-[18px] text-amber-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" /></svg>
+                  <span className="text-xl font-bold text-amber-400" style={{ fontFamily: 'Sora, sans-serif' }}>
+                    {data.tomorrow_sun_hours}h
+                  </span>
+                  <span className="text-[11px] text-slate-400 leading-tight text-left">
+                    of sun forecast<br />tomorrow
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="w-[18px] h-[18px] rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex-shrink-0" />
+                  <span className="text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora, sans-serif' }}>
+                    {data.max_sun_hours_today}h
+                  </span>
+                  <span className="text-[11px] text-slate-400 leading-tight text-left">
+                    of sun today<br />above the fog
+                  </span>
+                </>
+              )}
             </div>
           )}
         </div>
@@ -199,8 +219,7 @@ export default function Home() {
       {/* ══════ CONTROLS ══════ */}
       <section className="max-w-xl mx-auto px-4 -mt-7 relative z-20">
         <div className="bg-white rounded-2xl shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden">
-
-          {/* Slider - always visible */}
+          {/* Slider */}
           <div className="px-5 pt-[18px] pb-4">
             <div className="flex justify-between items-baseline mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-[1.2px] text-slate-400">Travel time</span>
@@ -214,16 +233,14 @@ export default function Home() {
           </div>
 
           {/* Travel mode - collapsible */}
-          <button
-            onClick={() => toggleSetting('mode')}
-            className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer"
-          >
+          <button onClick={() => toggleSetting('mode')}
+            className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer">
             <div className="flex items-center gap-2">
-              <CarIcon className="w-[18px] h-[18px] text-slate-400" />
+              <CarIcon c="w-[18px] h-[18px] text-slate-400" />
               <span className="text-[13px] font-medium text-slate-800">Travel mode</span>
               <span className="text-[12px] text-slate-400">{modeLabels[mode]}</span>
             </div>
-            <ChevDown className={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'mode' ? 'rotate-180' : ''}`} />
+            <ChevDown c={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'mode' ? 'rotate-180' : ''}`} />
           </button>
           {openSetting === 'mode' && (
             <div className="px-5 pb-4">
@@ -232,7 +249,7 @@ export default function Home() {
                   <button key={m} onClick={() => setMode(m)}
                     className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-[12px] font-medium border transition-all
                       ${mode === m ? 'mode-btn-active' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'}`}>
-                    <Icon className="w-4 h-4" /> {l}
+                    <Icon c="w-4 h-4" /> {l}
                   </button>
                 ))}
               </div>
@@ -247,16 +264,14 @@ export default function Home() {
           )}
 
           {/* Filters - collapsible */}
-          <button
-            onClick={() => toggleSetting('filter')}
-            className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer"
-          >
+          <button onClick={() => toggleSetting('filter')}
+            className="setting-toggle w-full flex items-center justify-between px-5 py-3 border-t border-slate-100 cursor-pointer">
             <div className="flex items-center gap-2">
-              <FilterIcon className="w-[18px] h-[18px] text-slate-400" />
+              <FilterIcon c="w-[18px] h-[18px] text-slate-400" />
               <span className="text-[13px] font-medium text-slate-800">Filters</span>
               <span className="text-[12px] text-slate-400">{filterSummary}</span>
             </div>
-            <ChevDown className={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'filter' ? 'rotate-180' : ''}`} />
+            <ChevDown c={`w-3.5 h-3.5 text-slate-300 transition-transform ${openSetting === 'filter' ? 'rotate-180' : ''}`} />
           </button>
           {openSetting === 'filter' && (
             <div className="px-5 pb-4">
@@ -285,36 +300,38 @@ export default function Home() {
           <>
             <div className="flex items-baseline justify-between mb-3">
               <h2 className="text-[16px] font-bold text-slate-800" style={{ fontFamily: 'Sora, sans-serif', letterSpacing: '-0.3px' }}>
-                Your sunny escapes
+                {nightMode ? 'Tomorrow\'s sunny escapes' : 'Your sunny escapes'}
               </h2>
               <span className="text-[11px] text-slate-400">{data.escapes.length} found</span>
             </div>
 
             <div className="space-y-2.5">
               {data.escapes.map((e, i) => (
-                <div key={e.destination.id} className={`escape-card anim-in d${i+1} cursor-pointer`}
-                  onClick={() => setOpenCard(openCard === i ? null : i)}>
+                <div key={e.destination.id} className={`escape-card anim-in d${i + 1} cursor-pointer`}
+                  onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
                   <div className="p-3.5 sm:p-4 flex gap-3 items-start">
-                    <ScoreRing score={e.sun_score.score} />
+                    {/* FOMOscore */}
+                    <div className="relative">
+                      <ScoreRing score={e.sun_score.score} onTap={() => setScorePopup(scorePopup === i ? null : i)} />
+                      {scorePopup === i && <ScorePopup score={e.sun_score.score} onClose={() => setScorePopup(null)} />}
+                    </div>
+
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1 flex-wrap">
                         <span className="text-[11px]">{FLAG[e.destination.country]}</span>
                         <span className="font-semibold text-[14px] text-slate-800">{e.destination.name}</span>
-                        <span className={`text-[8px] font-semibold uppercase tracking-[.5px] px-1.5 py-0.5 rounded-full ${badgeClass(e.sun_score.confidence)}`}>
-                          {e.sun_score.confidence}
-                        </span>
                       </div>
                       <p className="text-[11px] text-slate-400 mt-0.5">{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                       <div className="flex gap-2.5 mt-1.5">
                         {e.travel.car && (
                           <span className="flex items-start gap-1 text-[11px] text-slate-500">
-                            <CarIcon className="w-[13px] h-[13px] text-slate-400 mt-0.5" />
+                            <CarIcon c="w-[13px] h-[13px] text-slate-400 mt-0.5" />
                             <strong className="text-slate-700">{e.travel.car.duration_min} min</strong>
                           </span>
                         )}
                         {e.travel.train && (
                           <span className="flex items-start gap-1 text-[11px] text-slate-500">
-                            <TrainIcon className="w-[13px] h-[13px] text-slate-400 mt-0.5" />
+                            <TrainIcon c="w-[13px] h-[13px] text-slate-400 mt-0.5" />
                             <strong className="text-slate-700">{e.travel.train.duration_min} min</strong>
                             {e.travel.train.changes !== undefined && <span className="text-slate-300">{e.travel.train.changes}×</span>}
                             {e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}
@@ -322,52 +339,47 @@ export default function Home() {
                         )}
                       </div>
                     </div>
-                    <ChevDown className={`w-3.5 h-3.5 text-slate-300 flex-shrink-0 self-center transition-transform ${openCard === i ? 'rotate-180' : ''}`} />
+                    <ChevDown c={`w-3.5 h-3.5 text-slate-300 flex-shrink-0 self-center transition-transform ${openCard === i ? 'rotate-180' : ''}`} />
                   </div>
 
                   {/* Sunshine timeline */}
-                  {e.sun_timeline && <SunTimelineBar timeline={e.sun_timeline} />}
+                  {e.sun_timeline && <SunTimelineBar timeline={e.sun_timeline} sunset={data.sunset} />}
 
-                  {/* Expanded section */}
+                  {/* Expanded */}
                   {openCard === i && (
                     <div className="border-t border-slate-50 bg-slate-50/50 px-4 py-3.5 anim-in">
                       <p className="text-[9px] font-semibold uppercase tracking-[1.2px] text-slate-400 mb-2">Trip plan</p>
                       <div className="space-y-1.5">
                         {e.plan.map((step, j) => (
                           <div key={j} className="flex gap-2 items-start">
-                            <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] font-bold mt-0.5">
-                              {j + 1}
-                            </span>
+                            <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] font-bold mt-0.5">{j + 1}</span>
                             <span className="text-[12px] text-slate-500 leading-snug">{step}</span>
                           </div>
                         ))}
                       </div>
                       <div className="flex gap-1.5 mt-3">
                         {e.links.google_maps && (
-                          <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer"
-                            onClick={ev => ev.stopPropagation()}
+                          <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-700 transition-colors">
                             <MapIcon /> Navigate
                           </a>
                         )}
                         {e.links.sbb && (
-                          <a href={e.links.sbb} target="_blank" rel="noopener noreferrer"
-                            onClick={ev => ev.stopPropagation()}
+                          <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors">
-                            <TrainIcon className="w-3.5 h-3.5" /> SBB
+                            <TrainIcon c="w-3.5 h-3.5" /> SBB
                           </a>
                         )}
                         {e.links.webcam && (
-                          <a href={e.links.webcam} target="_blank" rel="noopener noreferrer"
-                            onClick={ev => ev.stopPropagation()}
+                          <a href={e.links.webcam} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()}
                             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white text-slate-500 border border-slate-200 text-[11px] font-semibold hover:bg-slate-50 transition-colors">
-                            <CameraIcon /> Webcam
+                            <CamIcon /> Webcam
                           </a>
                         )}
                       </div>
                       <button onClick={ev => {
                           ev.stopPropagation()
-                          const txt = `${e.destination.name} (${e.destination.region})\nSun score: ${Math.round(e.sun_score.score*100)}%\n${e.travel.car ? `Car: ${e.travel.car.duration_min} min ` : ''}${e.travel.train ? `Train: ${e.travel.train.duration_min} min` : ''}\n${e.plan.join(' > ')}\n\nfomosun.com`
+                          const txt = `${e.destination.name} (${e.destination.region})\nFOMOscore: ${Math.round(e.sun_score.score * 100)}%\n${e.travel.car ? `Car: ${e.travel.car.duration_min} min ` : ''}${e.travel.train ? `Train: ${e.travel.train.duration_min} min` : ''}\n${e.plan.join(' > ')}\n\nfomosun.com`
                           navigator.clipboard?.writeText(txt)
                         }}
                         className="w-full mt-2 py-1.5 text-[10px] text-slate-400 hover:text-slate-600 transition-colors">

@@ -5,22 +5,27 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Sora:wght@600;700;800&family=Playfair+Display:ital,wght@0,400;1,400&display=swap');
 
 :root {
-  --fog: #94a3b8; --fog-light: #cbd5e1; --fog-pale: #f1f5f9;
-  --sun: #f59e0b; --sun-light: #fbbf24; --sun-pale: #fffbeb; --sun-deep: #d97706;
-  --sky: #0ea5e9; --peak: #0f172a;
-  --text: #1e293b; --muted: #64748b;
+  --fog:#94a3b8;--fog-light:#cbd5e1;--fog-pale:#f1f5f9;
+  --sun:#f59e0b;--sun-light:#fbbf24;--sun-pale:#fffbeb;--sun-deep:#d97706;
+  --sky:#0ea5e9;--peak:#0f172a;--text:#1e293b;--muted:#64748b;
 }
 
-body { font-family:'DM Sans',system-ui,sans-serif; color:var(--text); background:#f8fafc; -webkit-font-smoothing:antialiased; }
+body{font-family:'DM Sans',system-ui,sans-serif;color:var(--text);background:#f8fafc;-webkit-font-smoothing:antialiased}
 
-/* Hero */
-.hero-bg { background:linear-gradient(180deg,#c8cfd6 0%,#dce1e7 20%,#eef2f6 45%,#fef9ee 75%,#fffbeb 100%); position:relative; overflow:hidden; }
+/* Hero day */
+.hero-day{background:linear-gradient(180deg,#c8cfd6 0%,#dce1e7 20%,#eef2f6 45%,#fef9ee 75%,#fffbeb 100%);position:relative;overflow:hidden}
+/* Hero night */
+.hero-night{background:linear-gradient(180deg,#0f172a 0%,#1e293b 30%,#1e3a5f 60%,#1e3a5f 100%);position:relative;overflow:hidden}
+
 @keyframes fd1{0%,100%{transform:translateX(-2%);opacity:.18}50%{transform:translateX(2%);opacity:.08}}
 @keyframes fd2{0%,100%{transform:translateX(1%);opacity:.12}50%{transform:translateX(-2%);opacity:.06}}
 .fog-w1{animation:fd1 12s ease-in-out infinite}
 .fog-w2{animation:fd2 16s ease-in-out infinite}
 @keyframes glow{0%,100%{box-shadow:0 0 16px rgba(245,158,11,.25),0 0 48px rgba(245,158,11,.1)}50%{box-shadow:0 0 24px rgba(245,158,11,.4),0 0 64px rgba(245,158,11,.15)}}
 .sun-anim{animation:glow 4s ease-in-out infinite}
+/* Moon glow for night */
+@keyframes moonglow{0%,100%{box-shadow:0 0 12px rgba(148,163,184,.2),0 0 36px rgba(148,163,184,.08)}50%{box-shadow:0 0 20px rgba(148,163,184,.35),0 0 48px rgba(148,163,184,.12)}}
+.moon-anim{animation:moonglow 5s ease-in-out infinite}
 
 /* Slider */
 input[type=range]{-webkit-appearance:none;width:100%;height:5px;background:linear-gradient(90deg,#e2e8f0,#f59e0b);border-radius:3px;outline:none;cursor:pointer}
@@ -37,24 +42,35 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;bord
 .badge-low{background:#fee2e2;color:#b91c1c}
 .badge-uncertain{background:#f1f5f9;color:#64748b}
 
-/* Sunshine timeline bar */
-.tl-sun{background:linear-gradient(90deg,#fcd34d,#f59e0b)}
-.tl-partial{background:linear-gradient(90deg,#fde68a,#fcd34d)}
-.tl-cloud{background:#e2e8f0}
-.tl-night{background:#cbd5e1}
+/* Sun timeline - FLAT blocks with gaps */
+.tl-bar{flex:1;height:14px;border-radius:4px;background:#f1f5f9;display:flex;gap:1px;overflow:hidden}
+.tl-sun{background:#f59e0b}
+.tl-partial{background:#fcd34d}
+.tl-cloud{background:#d1d5db}
+.tl-night{background:#94a3b8}
+
+/* Now marker */
+.tl-now{position:absolute;top:0;bottom:0;width:2px;background:#ef4444;z-index:2}
+.tl-now::after{content:'';position:absolute;top:-3px;left:-2px;width:6px;height:6px;background:#ef4444;border-radius:50%}
 
 /* Setting toggles */
 .setting-toggle{transition:background .15s}
 .setting-toggle:hover{background:#fafbfc}
 
 /* Mode buttons */
-.mode-btn{transition:all .15s}
 .mode-btn-active{background:var(--peak);color:white;border-color:var(--peak);box-shadow:0 2px 6px rgba(15,23,42,.15)}
 
 /* Chips */
 .chip-inactive{border-color:#e2e8f0;background:white;color:var(--muted)}
 .chip-inactive:hover{border-color:#cbd5e1}
 .chip-active{background:var(--sun-pale);color:var(--sun-deep);border-color:var(--sun-light)}
+
+/* Demo toggle */
+.demo-toggle{backdrop-filter:blur(8px);transition:all .15s}
+
+/* FOMOscore popup */
+.score-popup{position:absolute;top:100%;left:50%;transform:translateX(-50%);z-index:50;margin-top:6px;white-space:nowrap}
+.score-popup::before{content:'';position:absolute;bottom:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-bottom-color:white}
 
 /* Stagger entrance */
 @keyframes su{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}

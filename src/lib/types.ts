@@ -90,12 +90,19 @@ export interface SunnyEscapesResponse {
     generated_at: string
     weather_data_freshness: string
     attribution: string[]
+    demo_mode: boolean
   }
   origin_conditions: {
     description: string
     sun_score: number
   }
-  max_sun_hours_today: number  // FOMO stat: max available sun hours above the fog
+  max_sun_hours_today: number
+  sunset: {
+    time: string       // "17:34"
+    minutes_until: number
+    is_past: boolean
+  }
+  tomorrow_sun_hours: number  // for night mode
   escapes: EscapeResult[]
 }
 

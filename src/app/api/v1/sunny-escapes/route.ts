@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, preFilterByDistance, rankDestinations } from '@/lib/scoring'
-import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours } from '@/lib/mock-weather'
+import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours } from '@/lib/mock-weather'
 import { EscapeResult, SunnyEscapesResponse, TravelMode } from '@/lib/types'
 
 /**
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
   const typesParam = searchParams.get('types')
   const types = typesParam ? typesParam.split(',') : []
   const limit = Math.min(10, Math.max(1, parseInt(searchParams.get('limit') || '5')))
+  const demoMode = searchParams.get('demo') === 'true'
 
   // Validate coordinates
   if (isNaN(lat) || isNaN(lon) || lat < 44 || lat > 50 || lon < 4 || lon > 12) {
@@ -149,18 +150,21 @@ export async function GET(request: NextRequest) {
       request_id: requestId,
       origin: { name: originName, lat, lon },
       generated_at: new Date().toISOString(),
-      weather_data_freshness: new Date().toISOString(), // Mock: always fresh
+      weather_data_freshness: new Date().toISOString(),
       attribution: [
         'Weather data: MeteoSwiss, Swiss Federal Office of Meteorology and Climatology (CC BY 4.0)',
         'Routing: Open Journey Planner, opentransportdata.swiss',
         'FOMO Sun - Find sun fast. https://fomosun.com',
       ],
+      demo_mode: demoMode,
     },
     origin_conditions: {
-      description: originWeather.description,
+      description: demoMode ? 'Fog, 3°C, low visibility' : originWeather.description,
       sun_score: originWeather.sun_score,
     },
     max_sun_hours_today: getMockMaxSunHours(),
+    sunset: getMockSunset(demoMode),
+    tomorrow_sun_hours: getMockTomorrowSunHours(),
     escapes,
   }
 

@@ -166,9 +166,40 @@ export function getMockSunTimeline(destination: Destination): SunTimeline {
 
 /**
  * Get the maximum sunshine hours available today above the fog
- * (used for the FOMO stat in the hero)
  */
 export function getMockMaxSunHours(): number {
-  // On a typical inversion day, summits above the fog get 5-7 hours
   return parseFloat((5 + Math.random() * 2.5).toFixed(1))
+}
+
+/**
+ * Get sunset info for Basel area (varies by month)
+ */
+export function getMockSunset(demoMode: boolean): { time: string; minutes_until: number; is_past: boolean } {
+  // Feb sunset in Basel is around 17:30-17:45
+  const sunsetHour = 17
+  const sunsetMin = 34
+
+  if (demoMode) {
+    // In demo mode, always show as if it's early afternoon (plenty of sun left)
+    return { time: `${sunsetHour}:${sunsetMin}`, minutes_until: 195, is_past: false }
+  }
+
+  const now = new Date()
+  const sunsetToday = new Date()
+  sunsetToday.setHours(sunsetHour, sunsetMin, 0, 0)
+  const diffMs = sunsetToday.getTime() - now.getTime()
+  const diffMin = Math.round(diffMs / 60000)
+
+  return {
+    time: `${sunsetHour}:${sunsetMin}`,
+    minutes_until: Math.max(0, diffMin),
+    is_past: diffMin <= 0,
+  }
+}
+
+/**
+ * Get forecasted sun hours for tomorrow
+ */
+export function getMockTomorrowSunHours(): number {
+  return parseFloat((4 + Math.random() * 3.5).toFixed(1))
 }

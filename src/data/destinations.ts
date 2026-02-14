@@ -603,6 +603,95 @@ export const destinations: Destination[] = [
     maps_url: 'https://maps.google.com/?q=47.890,8.150',
     description: 'Scenic Black Forest lake at 845m. Good altitude to be above most fog. Black Forest cake capital.'
   },
+
+  // ===== POPULAR TOURIST DESTINATIONS FROM BASEL =====
+  {
+    id: 'strasbourg',
+    name: 'Strasbourg',
+    region: 'Alsace, Bas-Rhin',
+    country: 'FR',
+    lat: 48.5734,
+    lon: 7.7521,
+    altitude_m: 142,
+    types: ['town', 'food', 'family'],
+    plan_template: 'Petite France quarter & half-timbered houses | Strasbourg Cathedral (climb the tower) | Tarte flambée lunch at a winstub | Boat tour on the Ill river',
+    webcam_url: 'https://www.strasbourg.eu/webcams',
+    maps_url: 'https://maps.google.com/?q=48.5734,7.7521',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=Strasbourg',
+    description: 'UNESCO old town, cathedral, Petite France. 1.5h from Basel by train. Often in a different weather zone than Basel.'
+  },
+  {
+    id: 'lucerne',
+    name: 'Lucerne',
+    region: 'Central Switzerland',
+    country: 'CH',
+    lat: 47.0502,
+    lon: 8.3093,
+    altitude_m: 436,
+    types: ['town', 'lake', 'food', 'family'],
+    plan_template: 'Chapel Bridge & Water Tower photo stop | Old town walk & lion monument | Lake cruise (1h) or Rigi/Pilatus day trip | Dinner at a lakeside restaurant',
+    webcam_url: 'https://www.luzern.com/en/webcams/',
+    maps_url: 'https://maps.google.com/?q=47.0502,8.3093',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=Luzern',
+    description: 'Classic Swiss lake town. Gateway to Rigi and Pilatus. Can be foggy itself but often clears by midday.'
+  },
+  {
+    id: 'st-moritz',
+    name: 'St. Moritz',
+    region: 'Engadin, GR',
+    country: 'CH',
+    lat: 46.4908,
+    lon: 9.8355,
+    altitude_m: 1822,
+    types: ['town', 'viewpoint', 'nature', 'food'],
+    plan_template: 'Arrive via scenic train (Glacier Express route) | Lake St. Moritz walk | Muottas Muragl panorama viewpoint | Engadin café culture & Bündner Nusstorte',
+    webcam_url: 'https://www.stmoritz.ch/en/live/webcams/',
+    maps_url: 'https://maps.google.com/?q=46.4908,9.8355',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=St.+Moritz',
+    description: 'Famous Engadin resort at 1822m. One of the sunniest places in Switzerland (322 sunny days/year). Well above any fog.'
+  },
+  {
+    id: 'interlaken',
+    name: 'Interlaken',
+    region: 'Bernese Oberland',
+    country: 'CH',
+    lat: 46.6863,
+    lon: 7.8632,
+    altitude_m: 568,
+    types: ['town', 'nature', 'lake', 'family'],
+    plan_template: 'Höhematte promenade with Jungfrau views | Lake Thun or Lake Brienz cruise | Harder Kulm funicular for panorama | Fondue dinner',
+    maps_url: 'https://maps.google.com/?q=46.6863,7.8632',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=Interlaken+Ost',
+    description: 'Between two lakes, gateway to Jungfrau. Can be foggy but often breaks through. Classic tourist base.'
+  },
+  {
+    id: 'bern',
+    name: 'Bern',
+    region: 'Canton Bern',
+    country: 'CH',
+    lat: 46.9480,
+    lon: 7.4474,
+    altitude_m: 540,
+    types: ['town', 'food', 'family'],
+    plan_template: 'UNESCO old town arcade walk | Bear Park & Rosengarten viewpoint | Zytglogge clock tower | Lunch at Kornhauskeller or Altes Tramdepot',
+    maps_url: 'https://maps.google.com/?q=46.9480,7.4474',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=Bern',
+    description: 'Swiss capital with UNESCO old town. 55 min from Basel. Often similar weather but Rosengarten offers views above the Aare.'
+  },
+  {
+    id: 'zurich',
+    name: 'Zürich',
+    region: 'Canton Zürich',
+    country: 'CH',
+    lat: 47.3769,
+    lon: 8.5417,
+    altitude_m: 408,
+    types: ['town', 'food', 'lake', 'family'],
+    plan_template: 'Bahnhofstrasse & Lindenhof viewpoint | Old town (Niederdorf) wander | Lake Zürich promenade | Uetliberg for sunset above the fog',
+    maps_url: 'https://maps.google.com/?q=47.3769,8.5417',
+    sbb_url: 'https://www.sbb.ch/en/buying/pages/fahrplan/fahrplan.xhtml?nach=Zürich+HB',
+    description: 'Largest Swiss city. Often foggy itself but combine with Uetliberg (already in list) for guaranteed sun above.'
+  },
 ]
 
 /** Default fallback origin: Basel */
