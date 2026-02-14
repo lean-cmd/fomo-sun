@@ -49,57 +49,40 @@ export async function GET(request: NextRequest) {
     return { ...c, carTravel: car, trainTravel: train ? { ...train, ga_included: hasGA } : undefined, bestTravelMin: best }
   })
 
-  const filtered = withTravel.filter(r => r.bestTravelMin <= maxTravelMin)
-
   // Filter & rank
-  // Demo mode uses a softer travel-time penalty as slider increases, so longer-distance
-  // high-sun options can naturally surface at the right side of the control.
-  const ranked = demoMode
-    ? filtered
-        .map(r => {
-          const travelRatio = r.bestTravelMin / Math.max(1, maxTravelMin)
-          const travelPenaltyWeight = 0.45 - (((maxTravelH - 1) / (maxSupportedH - 1)) * 0.28) // ~0.45 -> ~0.17
-          return {
-            destination: r.destination,
-            sun_score: r.sun_score,
-            travel_time_min: r.bestTravelMin,
-            combined_score: r.sun_score.score * (1 - travelPenaltyWeight * travelRatio),
-          }
-        })
-        .sort((a, b) => b.combined_score - a.combined_score)
-    : rankDestinations(
-        filtered.map(r => ({
-          destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin,
-        })),
-        maxTravelMin
-      )
+  // Demo mode: primarily consider destinations within a 60-minute band centered
+  // on the slider (selected ±30 min), then sort by FOMO score.
+  let pickedRanked = rankDestinations(
+    withTravel
+      .filter(r => r.bestTravelMin <= maxTravelMin)
+      .map(r => ({
+        destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin,
+      })),
+    maxTravelMin
+  )
 
-  // Demo mode curation:
-  // - keep results mostly Swiss for MeteoSwiss-first narrative
-  // - include St. Moritz on longer travel settings when feasible
-  let pickedRanked = ranked
   if (demoMode) {
-    const swiss = ranked.filter(r => r.destination.country === 'CH')
-    const intl = ranked.filter(r => r.destination.country !== 'CH')
-    const swissTarget = Math.max(1, Math.min(limit, Math.round(limit * 0.9)))
+    const windowMin = Math.max(30, maxTravelMin - 30)
+    const windowMax = maxTravelMin + 30
 
-    const basePick = [...swiss.slice(0, swissTarget), ...intl.slice(0, Math.max(0, limit - swissTarget))]
-    const pickedIds = new Set(basePick.map(r => r.destination.id))
+    const inWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
+    const fallbackWindow = withTravel.filter(r => r.bestTravelMin <= windowMax)
+    const demoPool = (inWindow.length >= Math.max(4, limit)) ? inWindow : fallbackWindow
 
-    if (maxTravelH >= 4) {
-      const stMoritz = ranked.find(r => r.destination.id === 'st-moritz')
-      if (stMoritz && !pickedIds.has('st-moritz')) {
-        if (basePick.length < limit) {
-          basePick.push(stMoritz)
-        } else {
-          basePick[basePick.length - 1] = stMoritz
-        }
-        pickedIds.add('st-moritz')
-      }
-    }
-
-    // Keep original ranking order for stable card positions.
-    pickedRanked = ranked.filter(r => pickedIds.has(r.destination.id)).slice(0, limit)
+    pickedRanked = demoPool
+      .map(r => ({
+        destination: r.destination,
+        sun_score: r.sun_score,
+        travel_time_min: r.bestTravelMin,
+        combined_score: r.sun_score.score,
+      }))
+      .sort((a, b) => {
+        if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+        const da = Math.abs(a.travel_time_min - maxTravelMin)
+        const db = Math.abs(b.travel_time_min - maxTravelMin)
+        return da - db
+      })
+      .slice(0, limit)
   }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
