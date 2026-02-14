@@ -20,6 +20,12 @@ const TYPES: { id: DestinationType; label: string }[] = [
 ]
 const modeLbl: Record<TravelMode, string> = { car: 'Car', train: 'Train', both: 'Car + Train' }
 function fmtMin(m: number) { const h = Math.floor(m / 60); return h > 0 ? `${h}h ${m % 60}m` : `${m}m` }
+function fmtTravelHours(h: number) {
+  const hh = Math.floor(h)
+  const mm = Math.round((h - hh) * 60)
+  if (mm === 0) return `${hh}h`
+  return `${hh}h ${mm}m`
+}
 
 // ── FOMOscore Ring ────────────────────────────────────────────────────
 function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; onTap?: () => void }) {
@@ -80,6 +86,7 @@ export default function Home() {
   const [locating, setLocating] = useState(false)
   const [hasSetOptimal, setHasSetOptimal] = useState(false)
   const [optimalHint, setOptimalHint] = useState(false)
+  const [optimalH, setOptimalH] = useState<number | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
   const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
@@ -97,7 +104,9 @@ export default function Home() {
       setData(d)
       // Auto-set slider to optimal on first load
       if (!hasSetOptimal && d.optimal_travel_h) {
-        setMaxH(d.optimal_travel_h)
+        const normalizedOpt = Math.round(Math.min(4.5, Math.max(1, d.optimal_travel_h)) * 4) / 4
+        setMaxH(normalizedOpt)
+        setOptimalH(normalizedOpt)
         setHasSetOptimal(true)
         setOptimalHint(true)
       }
@@ -127,7 +136,7 @@ export default function Home() {
           const d = await r.json()
           setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: d?.results?.[0]?.name || `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` })
         } catch { setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` }) }
-        setLocating(false); setHasSetOptimal(false) // recalculate optimal for new location
+        setLocating(false); setHasSetOptimal(false); setOptimalH(null) // recalculate optimal for new location
       },
       () => setLocating(false), { enableHighAccuracy: false, timeout: 8000 }
     )
@@ -137,7 +146,8 @@ export default function Home() {
   const toggleSetting = (id: string) => setOpenSetting(p => p === id ? null : id)
   const filterSummary = types.length === 0 ? 'All types' : types.length <= 2 ? types.map(t => TYPES.find(x => x.id === t)?.label).join(', ') : `${types.length} selected`
   const currentTime = demo ? '10:10' : new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
-  const optPct = data ? ((data.optimal_travel_h - 1) / 3) * 100 : 50 // position on slider track (1-4h range)
+  const markerOptH = optimalH ?? data?.optimal_travel_h ?? 2.5
+  const optPct = ((markerOptH - 1) / 3.5) * 100 // position on slider track (1-4.5h range)
 
   return (
     <div className={night ? 'night' : ''}>
@@ -148,7 +158,7 @@ export default function Home() {
           <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
         </>}
 
-        <button onClick={() => { setDemo(!demo); setHasSetOptimal(false) }}
+        <button onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
           className={`absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border backdrop-blur-sm transition-all
             ${demo ? 'bg-amber-500/10 border-amber-400/30 text-amber-600' : night ? 'bg-white/10 border-white/20 text-white/60' : 'bg-white/60 border-slate-200 text-slate-500'}`}>
           <span className={`w-2 h-2 rounded-full ${demo ? 'bg-amber-500' : 'bg-slate-400'}`} />
@@ -246,10 +256,10 @@ export default function Home() {
               <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
                 Travel time
               </span>
-              <span className="text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{maxH}h</span>
+              <span className="text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
             </div>
             <div className="relative">
-              <input type="range" min={1} max={4} step={0.5} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
+              <input type="range" min={1} max={4.5} step={0.25} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
               {/* Optimal marker */}
               {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
@@ -264,7 +274,7 @@ export default function Home() {
               <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
             )}
             <div className={`flex justify-between text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
-              <span>1h</span><span>2h</span><span>3h</span><span>4h</span>
+              <span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>4h 30m</span>
             </div>
           </div>
 

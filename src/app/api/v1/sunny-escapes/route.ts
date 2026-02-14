@@ -6,9 +6,10 @@ import { EscapeResult, SunnyEscapesResponse, TravelMode } from '@/lib/types'
 
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
+  const maxSupportedH = 4.5
   const lat = parseFloat(sp.get('lat') || String(DEFAULT_ORIGIN.lat))
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
-  const maxTravelH = Math.min(4, Math.max(1, parseFloat(sp.get('max_travel_h') || '2.5')))
+  const maxTravelH = Math.min(maxSupportedH, Math.max(1, parseFloat(sp.get('max_travel_h') || '2.5')))
   const mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
@@ -26,11 +27,11 @@ export async function GET(request: NextRequest) {
   const originSunMin = originWeather.sunshine_min
 
   // Pre-filter & score
-  let candidates = preFilterByDistance(lat, lon, destinations, maxTravelH)
+  let candidates = preFilterByDistance(lat, lon, destinations, maxSupportedH)
   if (types.length > 0) candidates = candidates.filter(d => d.types.some(t => types.includes(t)))
 
   const scored = candidates.map(dest => {
-    const w = getMockWeather(dest)
+    const w = getMockWeather(dest, demoMode)
     return { destination: dest, sun_score: computeSunScore(dest, w), conditions: w.conditions_text, temp_c: w.temp_c }
   })
 
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest) {
     const basePick = [...swiss.slice(0, swissTarget), ...intl.slice(0, Math.max(0, limit - swissTarget))]
     const pickedIds = new Set(basePick.map(r => r.destination.id))
 
-    if (maxTravelH >= 3) {
+    if (maxTravelH >= 4) {
       const stMoritz = ranked.find(r => r.destination.id === 'st-moritz')
       if (stMoritz && !pickedIds.has('st-moritz')) {
         if (basePick.length < limit) {
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
 
   let bestOptH = 1.5
   let bestNetSun = 0
-  for (let testH = 1; testH <= 4; testH += 0.5) {
+  for (let testH = 1; testH <= maxSupportedH; testH += 0.25) {
     const testMin = testH * 60
     const bucket = withTravel.filter(r => r.bestTravelMin <= testMin && r.bestTravelMin > (testH - 0.5) * 60)
     if (bucket.length === 0) continue
@@ -131,8 +132,8 @@ export async function GET(request: NextRequest) {
       },
       plan: r.destination.plan_template.split(' | '),
       links: { google_maps: r.destination.maps_url, sbb: r.destination.sbb_url, webcam: r.destination.webcam_url },
-      sun_timeline: getMockSunTimeline(r.destination),
-      tomorrow_sun_hours: getMockTomorrowSunHoursForDest(r.destination),
+      sun_timeline: getMockSunTimeline(r.destination, demoMode),
+      tomorrow_sun_hours: getMockTomorrowSunHoursForDest(r.destination, demoMode),
     }
   })
 
