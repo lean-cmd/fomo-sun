@@ -104,16 +104,25 @@ export async function GET(request: NextRequest) {
 
   const finalRanked = rankDestinations(ranked, maxTravelMin)
 
+  // Origin conditions (needed for comparison)
+  const originWeather = getMockOriginWeather()
+  const originSunMin = originWeather.sunshine_min
+
   // Step 7: Build response
   const escapes: EscapeResult[] = finalRanked
     .slice(0, limit)
     .map((r, i) => {
       const full = withTravel.find(w => w.destination.id === r.destination.id)!
+      const destSunMin = r.sun_score.sunshine_forecast_min
+      const moreSunPct = originSunMin > 0
+        ? Math.round(((destSunMin - originSunMin) / originSunMin) * 100)
+        : destSunMin > 0 ? 999 : 0
+      const comparison = moreSunPct > 10 ? ` | +${Math.min(moreSunPct, 999)}% more sun than Basel` : ''
       return {
         rank: i + 1,
         destination: r.destination,
         sun_score: r.sun_score,
-        conditions: full.conditions,
+        conditions: `${destSunMin} min sunshine expected${comparison}`,
         travel: {
           car: full.carTravel ? {
             mode: 'car' as const,
@@ -136,9 +145,6 @@ export async function GET(request: NextRequest) {
         sun_timeline: getMockSunTimeline(r.destination),
       }
     })
-
-  // Origin conditions
-  const originWeather = getMockOriginWeather()
 
   // Resolve origin name
   const originName = (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
