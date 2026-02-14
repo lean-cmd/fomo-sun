@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, preFilterByDistance, rankDestinations } from '@/lib/scoring'
-import { getMockWeather, getMockOriginWeather, getMockTravelTime } from '@/lib/mock-weather'
+import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours } from '@/lib/mock-weather'
 import { EscapeResult, SunnyEscapesResponse, TravelMode } from '@/lib/types'
 
 /**
@@ -132,6 +132,7 @@ export async function GET(request: NextRequest) {
           sbb: r.destination.sbb_url,
           webcam: r.destination.webcam_url,
         },
+        sun_timeline: getMockSunTimeline(r.destination),
       }
     })
 
@@ -159,6 +160,7 @@ export async function GET(request: NextRequest) {
       description: originWeather.description,
       sun_score: originWeather.sun_score,
     },
+    max_sun_hours_today: getMockMaxSunHours(),
     escapes,
   }
 

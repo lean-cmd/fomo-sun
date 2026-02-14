@@ -1,4 +1,4 @@
-import { Destination } from './types'
+import { Destination, SunTimeline, TimelineSegment } from './types'
 
 /**
  * Mock Weather Service (v0)
@@ -127,4 +127,48 @@ export function getMockTravelTime(
       changes: 1 + Math.floor(Math.random() * 2),
     }
   }
+}
+
+/**
+ * Generate a mock sunshine timeline for a destination
+ * Simulates hourly sun/cloud conditions from 8:00-18:00
+ */
+export function getMockSunTimeline(destination: Destination): SunTimeline {
+  const alt = destination.altitude_m
+
+  function generateDay(bias: number): TimelineSegment[] {
+    // Higher altitude = more sun segments
+    const sunChance = alt > 1000 ? 0.7 + bias : alt > 600 ? 0.4 + bias : 0.15 + bias
+    const segments: TimelineSegment[] = []
+    let remaining = 85 // 85% daylight, 15% night
+
+    // Generate 3-5 segments for the day
+    const numSegments = 3 + Math.floor(Math.random() * 3)
+    for (let i = 0; i < numSegments && remaining > 5; i++) {
+      const pct = Math.min(remaining, 10 + Math.floor(Math.random() * 25))
+      remaining -= pct
+      const roll = Math.random()
+      const condition = roll < sunChance ? 'sun' : roll < sunChance + 0.2 ? 'partial' : 'cloud'
+      segments.push({ condition, pct })
+    }
+    if (remaining > 0) {
+      segments.push({ condition: Math.random() < sunChance ? 'sun' : 'partial', pct: remaining })
+    }
+    segments.push({ condition: 'night', pct: 15 })
+    return segments
+  }
+
+  return {
+    today: generateDay(0),
+    tomorrow: generateDay(0.05),
+  }
+}
+
+/**
+ * Get the maximum sunshine hours available today above the fog
+ * (used for the FOMO stat in the hero)
+ */
+export function getMockMaxSunHours(): number {
+  // On a typical inversion day, summits above the fog get 5-7 hours
+  return parseFloat((5 + Math.random() * 2.5).toFixed(1))
 }

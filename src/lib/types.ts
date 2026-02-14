@@ -46,6 +46,19 @@ export interface TravelResult {
   departure_time?: string
 }
 
+/** Sunshine timeline segment for forecast bars */
+export type SkyCondition = 'sun' | 'partial' | 'cloud' | 'night'
+
+export interface TimelineSegment {
+  condition: SkyCondition
+  pct: number  // percentage width of the bar
+}
+
+export interface SunTimeline {
+  today: TimelineSegment[]
+  tomorrow: TimelineSegment[]
+}
+
 /** A single escape recommendation */
 export interface EscapeResult {
   rank: number
@@ -62,6 +75,7 @@ export interface EscapeResult {
     sbb?: string
     webcam?: string
   }
+  sun_timeline: SunTimeline
 }
 
 /** Full API response */
@@ -81,6 +95,7 @@ export interface SunnyEscapesResponse {
     description: string
     sun_score: number
   }
+  max_sun_hours_today: number  // FOMO stat: max available sun hours above the fog
   escapes: EscapeResult[]
 }
 

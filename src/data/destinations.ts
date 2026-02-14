@@ -1,4 +1,4 @@
-import { Destination } from './types'
+import { Destination } from '@/lib/types'
 
 /**
  * FOMO Sun - Curated Destination List (v0)
