@@ -27,6 +27,8 @@ function fmtTravelHours(h: number) {
   return `${hh}h ${mm}m`
 }
 
+type EscapeCard = SunnyEscapesResponse['escapes'][number]
+
 // ── FOMOscore Ring ────────────────────────────────────────────────────
 function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; onTap?: () => void }) {
   const pct = Math.round(score * 100), r = (size - 8) / 2, circ = 2 * Math.PI * r
@@ -156,15 +158,20 @@ export default function Home() {
     ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
     : Infinity
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
-  const topShareText = topEscape ? [
-    'FOMO Sun proposal',
-    `${origin.name} FOMO ${originFomoPct}% -> ${topEscape.destination.name} FOMO ${Math.round(topEscape.sun_score.score * 100)}%`,
-    `Travel time: ${topTravelText}`,
-    `Why now: ${topEscape.conditions}`,
-    `Plan: ${topEscape.plan[0]} > ${topEscape.plan[1]}`,
-    topEscape.links.google_maps || 'https://fomosun.com',
-  ].join('\n') : ''
-  const topWhatsAppHref = `https://wa.me/?text=${encodeURIComponent(topShareText)}`
+  const buildWhatsAppHref = (escape: EscapeCard) => {
+    const bestTravelMin = Math.min(escape.travel.car?.duration_min ?? Infinity, escape.travel.train?.duration_min ?? Infinity)
+    const bestTravel = Number.isFinite(bestTravelMin) ? fmtMin(bestTravelMin) : 'n/a'
+    const shareText = [
+      'FOMO Sun proposal',
+      `${origin.name} FOMO ${originFomoPct}% -> ${escape.destination.name} FOMO ${Math.round(escape.sun_score.score * 100)}%`,
+      `Travel time: ${bestTravel}`,
+      `Why now: ${escape.conditions}`,
+      `Plan: ${escape.plan[0]} > ${escape.plan[1]}`,
+      escape.links.google_maps || 'https://fomosun.com',
+    ].join('\n')
+    return `https://wa.me/?text=${encodeURIComponent(shareText)}`
+  }
+  const topWhatsAppHref = topEscape ? buildWhatsAppHref(topEscape) : '#'
 
   return (
     <div className={night ? 'night' : ''}>
@@ -231,19 +238,16 @@ export default function Home() {
                   {topEscape.destination.name} · {Math.round(topEscape.sun_score.score * 100)}%
                 </p>
                 <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                <a
+                  href={topWhatsAppHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+                >
+                  WhatsApp this plan
+                </a>
               </div>
             </div>
-          )}
-
-          {topEscape && (
-            <a
-              href={topWhatsAppHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`mt-2 inline-flex items-center rounded-full px-4 py-1.5 text-[11px] font-semibold border transition-colors ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
-            >
-              Send top proposal via WhatsApp
-            </a>
           )}
 
           {/* FOMO stat */}
@@ -398,16 +402,6 @@ export default function Home() {
               </h2>
               <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.escapes.length} found</span>
             </div>
-            {topEscape && (
-              <a
-                href={topWhatsAppHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`mb-3 inline-flex items-center rounded-lg px-3 py-2 text-[11px] font-semibold ${night ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-400/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}
-              >
-                WhatsApp top pick: {topEscape.destination.name}
-              </a>
-            )}
 
             <div className="space-y-2.5">
               {data.escapes.map((e, i) => (
@@ -444,19 +438,16 @@ export default function Home() {
                         {e.travel.car && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
                         {e.travel.train && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
                       </div>
-                      <div className="mt-2">
-                        <p className={`text-[9px] uppercase tracking-[1px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Why sunny now</p>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-sky-50 text-sky-700'}`}>
-                            Low cloud {e.sun_score.low_cloud_cover_pct}%
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-amber-50 text-amber-700'}`}>
-                            Altitude boost {Math.round(e.sun_score.altitude_bonus * 100)}%
-                          </span>
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${night ? 'bg-slate-700 text-slate-300' : 'bg-emerald-50 text-emerald-700'}`}>
-                            {e.sun_score.confidence} confidence
-                          </span>
-                        </div>
+                      <div className="mt-1.5">
+                        <a
+                          href={buildWhatsAppHref(e)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={ev => ev.stopPropagation()}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
+                        >
+                          Send this via WhatsApp
+                        </a>
                       </div>
                     </div>
                     <ChevD c={`w-3.5 h-3.5 flex-shrink-0 self-center transition-transform ${night ? 'text-slate-600' : 'text-slate-300'} ${openCard === i ? 'rotate-180' : ''}`} />
