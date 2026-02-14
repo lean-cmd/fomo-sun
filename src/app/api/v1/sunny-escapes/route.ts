@@ -52,6 +52,34 @@ export async function GET(request: NextRequest) {
     maxTravelMin
   )
 
+  // Demo mode curation:
+  // - keep results mostly Swiss for MeteoSwiss-first narrative
+  // - include St. Moritz on longer travel settings when feasible
+  let pickedRanked = ranked
+  if (demoMode) {
+    const swiss = ranked.filter(r => r.destination.country === 'CH')
+    const intl = ranked.filter(r => r.destination.country !== 'CH')
+    const swissTarget = Math.max(1, Math.min(limit, Math.round(limit * 0.9)))
+
+    const basePick = [...swiss.slice(0, swissTarget), ...intl.slice(0, Math.max(0, limit - swissTarget))]
+    const pickedIds = new Set(basePick.map(r => r.destination.id))
+
+    if (maxTravelH >= 3) {
+      const stMoritz = ranked.find(r => r.destination.id === 'st-moritz')
+      if (stMoritz && !pickedIds.has('st-moritz')) {
+        if (basePick.length < limit) {
+          basePick.push(stMoritz)
+        } else {
+          basePick[basePick.length - 1] = stMoritz
+        }
+        pickedIds.add('st-moritz')
+      }
+    }
+
+    // Keep original ranking order for stable card positions.
+    pickedRanked = ranked.filter(r => pickedIds.has(r.destination.id)).slice(0, limit)
+  }
+
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
   // Test all travel buckets and find the one with highest average net sun
   const sunsetInfo = getMockSunset(demoMode)
@@ -84,7 +112,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Build escapes
-  const escapes: EscapeResult[] = ranked.slice(0, limit).map((r, i) => {
+  const escapes: EscapeResult[] = pickedRanked.slice(0, limit).map((r, i) => {
     const full = withTravel.find(w => w.destination.id === r.destination.id)!
     const destSunMin = r.sun_score.sunshine_forecast_min
     const roundTrip = full.bestTravelMin * 2

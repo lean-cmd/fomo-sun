@@ -79,6 +79,7 @@ export default function Home() {
   const [userLoc, setUserLoc] = useState<{ lat: number; lon: number; name: string } | null>(null)
   const [locating, setLocating] = useState(false)
   const [hasSetOptimal, setHasSetOptimal] = useState(false)
+  const [optimalHint, setOptimalHint] = useState(false)
 
   const night = data ? data.sunset.is_past && !demo : false
   const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
@@ -98,6 +99,7 @@ export default function Home() {
       if (!hasSetOptimal && d.optimal_travel_h) {
         setMaxH(d.optimal_travel_h)
         setHasSetOptimal(true)
+        setOptimalHint(true)
       }
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
@@ -109,6 +111,11 @@ export default function Home() {
     const h = () => setScorePopup(null)
     document.addEventListener('click', h); return () => document.removeEventListener('click', h)
   }, [scorePopup])
+  useEffect(() => {
+    if (!optimalHint) return
+    const t = setTimeout(() => setOptimalHint(false), 2200)
+    return () => clearTimeout(t)
+  }, [optimalHint])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -237,15 +244,25 @@ export default function Home() {
           <div className="px-5 pt-2 pb-4">
             <div className="flex justify-between items-baseline mb-2">
               <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                {night ? 'Travel radius' : 'Net sun optimized'}
+                Travel time
               </span>
               <span className="text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{maxH}h</span>
             </div>
             <div className="relative">
               <input type="range" min={1} max={4} step={0.5} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
               {/* Optimal marker */}
-              {data && <div className="opt-mark" style={{ left: `${optPct}%` }} />}
+              {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
+            {!night && (
+              <div className="mt-1.5 flex items-center justify-between text-[9px] text-slate-400">
+                <span>Less time</span>
+                <span className="font-medium text-slate-500">Net sun optimized</span>
+                <span>More options</span>
+              </div>
+            )}
+            {optimalHint && !night && (
+              <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
+            )}
             <div className={`flex justify-between text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
               <span>1h</span><span>2h</span><span>3h</span><span>4h</span>
             </div>
