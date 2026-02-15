@@ -29,10 +29,12 @@ const DEMO_TRAIN_FAST_IDS = new Set([
 ])
 
 const LIVE_RATE_WINDOW_MS = 60_000
-const LIVE_RATE_MAX_PER_WINDOW = 24
+const LIVE_RATE_MAX_PER_WINDOW = 90
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
+const LIVE_WEATHER_POOL_MIN = 60
+const LIVE_WEATHER_POOL_MAX = 140
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 
 function clamp(v: number, min: number, max: number) {
@@ -50,7 +52,30 @@ function demoTrainFactor(id: string): number {
 }
 
 function locationKey(lat: number, lon: number) {
-  return `${lat.toFixed(4)},${lon.toFixed(4)}`
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`
+}
+
+function liveWeatherLookup(
+  lat: number,
+  lon: number,
+  byKey: Map<string, Awaited<ReturnType<typeof batchGetWeather>>[number]>,
+  rows: Awaited<ReturnType<typeof batchGetWeather>>
+) {
+  const exact = byKey.get(locationKey(lat, lon))
+  if (exact) return exact
+  let best: Awaited<ReturnType<typeof batchGetWeather>>[number] | null = null
+  let bestDist = Infinity
+  for (const row of rows) {
+    const dLat = row.lat - lat
+    const dLon = row.lon - lon
+    const dist2 = dLat * dLat + dLon * dLon
+    if (dist2 < bestDist) {
+      bestDist = dist2
+      best = row
+    }
+  }
+  // ~2.2km at CH latitudes, tolerant to provider coordinate rounding.
+  return best && bestDist <= 0.0004 ? best : null
 }
 
 function clientIp(request: NextRequest): string {
@@ -125,6 +150,51 @@ function normalizeQueryCacheKey(input: {
   ].join('&')
 }
 
+function selectLiveWeatherPool(candidates: Array<{
+  destination: typeof destinations[number]
+  bestTravelMin: number
+  carTravel?: ReturnType<typeof getMockTravelTime>
+  trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
+}>, maxTravelMin: number) {
+  if (candidates.length <= LIVE_WEATHER_POOL_MAX) return candidates
+
+  const target = clamp(
+    Math.round((maxTravelMin / 60) * 28),
+    LIVE_WEATHER_POOL_MIN,
+    LIVE_WEATHER_POOL_MAX
+  )
+
+  const nearQuota = Math.max(24, Math.round(target * 0.6))
+  const altitudeQuota = Math.max(16, Math.round(target * 0.25))
+  const farQuota = Math.max(8, target - nearQuota - altitudeQuota)
+
+  const byNear = [...candidates]
+    .sort((a, b) => a.bestTravelMin - b.bestTravelMin)
+    .slice(0, nearQuota)
+
+  const byAltitude = [...candidates]
+    .sort((a, b) => b.destination.altitude_m - a.destination.altitude_m)
+    .slice(0, altitudeQuota)
+
+  const byFar = [...candidates]
+    .sort((a, b) => b.bestTravelMin - a.bestTravelMin)
+    .slice(0, farQuota)
+
+  const merged = [...byNear, ...byAltitude, ...byFar]
+  const deduped = new Map<string, typeof candidates[number]>()
+  for (const row of merged) deduped.set(row.destination.id, row)
+
+  if (deduped.size < target) {
+    for (const row of [...candidates].sort((a, b) => b.destination.altitude_m - a.destination.altitude_m)) {
+      if (deduped.has(row.destination.id)) continue
+      deduped.set(row.destination.id, row)
+      if (deduped.size >= target) break
+    }
+  }
+
+  return Array.from(deduped.values())
+}
+
 function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
   const now = Date.now()
   const next3 = hours.filter(h => {
@@ -161,8 +231,8 @@ function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionL
 }
 
 function hourCondition(h: LiveForecastBundle['hours'][number]) {
-  if (h.sunshine_duration_min >= 35 && h.low_cloud_cover_pct < 40) return 'sun'
-  if (h.sunshine_duration_min >= 15 || h.cloud_cover_pct < 65) return 'partial'
+  if (h.sunshine_duration_min >= 45) return 'sun'
+  if (h.sunshine_duration_min >= 15) return 'partial'
   return 'cloud'
 }
 
@@ -244,10 +314,15 @@ export async function GET(request: NextRequest) {
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
   const types = typesParam ? typesParam.split(',') : []
-  const limit = Math.min(10, Math.max(1, parseInt(sp.get('limit') || '6')))
+  const adminView = sp.get('admin') === 'true'
+  const rawLimit = parseInt(sp.get('limit') || '6')
+  const limit = adminView
+    ? Math.min(500, Math.max(1, rawLimit))
+    : Math.min(10, Math.max(1, rawLimit))
   const tripSpan = normalizeTripSpan(sp.get('trip_span'))
 
   const requestedDemo = sp.get('demo') === 'true'
+  let liveDebugPath = requestedDemo ? 'demo-requested' : 'live-requested'
 
   if (isNaN(lat) || isNaN(lon) || lat < 44 || lat > 50 || lon < 4 || lon > 12) {
     return NextResponse.json({ error: 'Invalid coordinates.' }, { status: 400 })
@@ -275,6 +350,7 @@ export async function GET(request: NextRequest) {
   let demoMode = requestedDemo || liveRateLimited
   let liveFallbackReason = liveRateLimited ? 'rate_limited' : ''
   let fallbackNotice = ''
+  if (liveRateLimited) liveDebugPath = 'rate-limited'
 
   const maxTravelMin = maxTravelH * 60
   const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -319,6 +395,9 @@ export async function GET(request: NextRequest) {
       bestTravelMin,
     }
   })
+  const liveCandidatesWithTravel = (demoMode || adminView)
+    ? candidatesWithTravel
+    : selectLiveWeatherPool(candidatesWithTravel, maxTravelMin)
 
   let scored: ScoredWithTravel[] = []
   const buildDemoScored = () => {
@@ -348,12 +427,12 @@ export async function GET(request: NextRequest) {
     scored = buildDemoScored()
   } else {
     try {
-      livePoolCount = candidatesWithTravel.length
+      livePoolCount = liveCandidatesWithTravel.length
       const [originCurrent, originHourly, sunTimes, destinationWeather] = await Promise.all([
         getCurrentWeather(lat, lon),
         getHourlyForecast(lat, lon),
         getSunTimes(lat, lon),
-        batchGetWeather(candidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon }))),
+        batchGetWeather(liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon }))),
       ])
       weatherFreshness = new Date().toISOString()
 
@@ -383,8 +462,8 @@ export async function GET(request: NextRequest) {
         is_past: sunTimes.sunset_minutes_until <= 0,
       }
       const weatherByKey = new Map(destinationWeather.map(w => [locationKey(w.lat, w.lon), w]))
-      scored = candidatesWithTravel.map(c => {
-        const live = weatherByKey.get(locationKey(c.destination.lat, c.destination.lon))
+      scored = liveCandidatesWithTravel.map(c => {
+        const live = liveWeatherLookup(c.destination.lat, c.destination.lon, weatherByKey, destinationWeather)
         if (!live) {
           throw new Error(`Missing live weather for ${c.destination.id}`)
         }
@@ -414,7 +493,13 @@ export async function GET(request: NextRequest) {
           },
         }
       })
-    } catch {
+      liveDebugPath = 'open-meteo-success'
+    } catch (err) {
+      const errMsg = String((err as { message?: string })?.message || err || '')
+      const msg = String((errMsg || '')).toLowerCase()
+      if (msg.includes('timeout') || msg.includes('abort')) liveDebugPath = 'open-meteo-timeout'
+      else if (msg.includes('429') || msg.includes('rate')) liveDebugPath = 'open-meteo-rate-limit'
+      else liveDebugPath = 'error-fallback'
       demoMode = true
       liveFallbackReason = 'cached_forecast'
       fallbackNotice = 'Using cached forecast'
@@ -633,6 +718,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-POI-Target': String(TARGET_POI_COUNT),
     'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
+    'X-FOMO-Debug-Live-Path': liveDebugPath,
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
   if (fallbackNotice) headers['X-FOMO-Fallback-Notice'] = fallbackNotice

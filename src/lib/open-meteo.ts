@@ -56,7 +56,9 @@ export interface LiveBatchWeatherResult extends LiveHourlyForecastResult {
 const BASE = 'https://api.open-meteo.com/v1'
 const CURRENT_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,visibility,sunshine_duration,wind_speed_10m'
 const HOURLY_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,wind_speed_10m,sunshine_duration'
-const BATCH_CHUNK_SIZE = 40
+const BATCH_CHUNK_SIZE = 30
+const BATCH_PARALLELISM = 3
+const OPEN_METEO_TIMEOUT_MS = 9_000
 
 const CURRENT_TTL_MS = 5 * 60 * 1000
 const HOURLY_TTL_MS = 5 * 60 * 1000
@@ -71,7 +73,8 @@ function cacheKey(lat: number, lon: number) {
 }
 
 function batchPointKey(lat: number, lon: number) {
-  return `${lat.toFixed(4)},${lon.toFixed(4)}`
+  // Open-Meteo may round coordinates in multi-point responses.
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`
 }
 
 function clamp(v: number, min: number, max: number) {
@@ -190,18 +193,41 @@ async function fetchBatchChunk(locations: { lat: number; lon: number }[]): Promi
   const latCsv = locations.map(l => l.lat.toFixed(5)).join(',')
   const lonCsv = locations.map(l => l.lon.toFixed(5)).join(',')
   const url = `${BASE}/forecast?latitude=${latCsv}&longitude=${lonCsv}&current=${CURRENT_FIELDS}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
-
-  const res = await fetch(url, { next: { revalidate: 300 } })
-  if (!res.ok) throw new Error(`Open-Meteo batch failed: ${res.status}`)
-
-  const payload = await res.json()
+  const payload = await fetchOpenMeteoJson(url, 300)
   const rows = normalizeBatchPayload(payload)
   const parsed = rows
-    .map(parseBatchRecord)
+    .map((row, idx) => {
+      const parsedRow = parseBatchRecord(row)
+      if (!parsedRow) return null
+      const srcPoint = locations[idx]
+      return srcPoint
+        ? { ...parsedRow, lat: srcPoint.lat, lon: srcPoint.lon }
+        : parsedRow
+    })
     .filter((r): r is LiveBatchWeatherResult => Boolean(r))
 
   if (parsed.length === 0) throw new Error('Open-Meteo batch parse produced no rows')
   return parsed
+}
+
+async function fetchOpenMeteoJson(url: string, revalidate: number) {
+  const ctrl = new AbortController()
+  const timeout = setTimeout(() => ctrl.abort(), OPEN_METEO_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      next: { revalidate },
+      signal: ctrl.signal,
+    })
+    if (!res.ok) throw new Error(`open-meteo-http-${res.status}`)
+    return await res.json()
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw new Error('open-meteo-timeout')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 /**
@@ -215,9 +241,7 @@ export async function getCurrentWeather(lat: number, lon: number): Promise<LiveW
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&current=${CURRENT_FIELDS}&timezone=Europe%2FZurich`
 
-  const res = await fetch(url, { next: { revalidate: 300 } }) // Cache 5 min
-  if (!res.ok) throw new Error(`Open-Meteo current failed: ${res.status}`)
-  const data = await res.json()
+  const data = await fetchOpenMeteoJson(url, 300)
   const result = parseCurrent(data)
 
   currentCache.set(key, { expires_at: now + CURRENT_TTL_MS, data: result })
@@ -235,9 +259,7 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<LiveH
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
 
-  const res = await fetch(url, { next: { revalidate: 300 } })
-  if (!res.ok) throw new Error(`Open-Meteo hourly failed: ${res.status}`)
-  const payload = await res.json()
+  const payload = await fetchOpenMeteoJson(url, 300)
 
   const hours = parseHourly(payload)
   const result: LiveHourlyForecastResult = {
@@ -260,9 +282,7 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=2&timezone=Europe%2FZurich`
 
-  const res = await fetch(url, { next: { revalidate: 3600 } })
-  if (!res.ok) throw new Error(`Open-Meteo sun-times failed: ${res.status}`)
-  const data = await res.json()
+  const data = await fetchOpenMeteoJson(url, 3600)
 
   const sunrise = data.daily.sunrise[0]
   const sunset = data.daily.sunset[0]
@@ -304,7 +324,8 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
 
   const outByKey = new Map<string, LiveBatchWeatherResult>()
 
-  for (const group of chunk(deduped, BATCH_CHUNK_SIZE)) {
+  const groups = chunk(deduped, BATCH_CHUNK_SIZE)
+  const processGroup = async (group: { lat: number; lon: number }[]) => {
     try {
       const batched = await fetchBatchChunk(group)
       for (const row of batched) {
@@ -343,6 +364,10 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
       )
       for (const row of fallbackRows) outByKey.set(batchPointKey(row.lat, row.lon), row)
     }
+  }
+
+  for (let i = 0; i < groups.length; i += BATCH_PARALLELISM) {
+    await Promise.all(groups.slice(i, i + BATCH_PARALLELISM).map(processGroup))
   }
 
   return Array.from(outByKey.values())

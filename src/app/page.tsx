@@ -261,7 +261,9 @@ function SunBar({
         const leftNightPct = (win.start_hour / 24) * 100
         const daylightPct = ((win.end_hour - win.start_hour) / 24) * 100
         const rightNightPct = Math.max(0, 100 - leftNightPct - daylightPct)
-        const daySegments = compressSegments(compactDaySegments(timeline[day]))
+        const daySegments = demo
+          ? compressSegments(compactDaySegments(timeline[day]))
+          : compactDaySegments(timeline[day])
         const dayTotal = Math.max(1, daySegments.reduce((sum, seg) => sum + seg.pct, 0))
 
         return (
@@ -907,6 +909,11 @@ export default function Home() {
           </div>
         )}
       </section>
+      <footer className={`px-4 pb-6 text-center ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+        <a href="/admin" className="text-[11px] underline-offset-2 hover:underline">
+          Diagnostics
+        </a>
+      </footer>
     </div>
   )
 }
