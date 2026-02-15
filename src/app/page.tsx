@@ -309,8 +309,8 @@ function SunBar({
 
         return (
           <div key={day} className="flex items-center gap-1.5">
-            <span className="text-[9px] text-slate-400 w-[54px] text-right flex-shrink-0 font-medium capitalize">
-              {day === 'today' && label ? label : day}
+            <span className="text-[9px] text-slate-400 w-[68px] text-right flex-shrink-0 font-medium capitalize truncate">
+              {label || day}
             </span>
             <div className="tl-bar">
               {leftNightPct > 0 && <div className="h-full tl-night-soft" style={{ width: `${leftNightPct}%` }} />}
@@ -500,7 +500,6 @@ export default function Home() {
   const toggleType = (t: DestinationType) => setTypes(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t])
   const toggleSetting = (id: string) => setOpenSetting(p => p === id ? null : id)
   const filterSummary = types.length === 0 ? 'All types' : types.length <= 2 ? types.map(t => TYPES.find(x => x.id === t)?.label).join(', ') : `${types.length} selected`
-  const currentTime = demo ? '10:10' : new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
   const markerOptH = optimalH ?? data?.optimal_travel_h ?? 2.5
   const optPct = ((markerOptH - 1) / 3.5) * 100
   const topEscape = data?.escapes?.[0] ?? null
@@ -509,22 +508,15 @@ export default function Home() {
   const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
   const sunGainMin = Math.max(0, topSunMin - originSunMin)
   const sunGainTag = formatGainTag(sunGainMin, originSunMin, origin.name)
-  const sunsetLine = data
-    ? data.sunset.is_past
-      ? `Sunset already passed`
-      : `Sunset ${data.sunset.time} (${fmtMin(data.sunset.minutes_until)})`
-    : ''
   const topTravelMin = topEscape
     ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
     : Infinity
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
-  const timelineTicks = buildHourTicks(data?.sun_window?.today)
+  const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
+  const timelineTicks = buildHourTicks(dayFocus === 'tomorrow' ? data?.sun_window?.tomorrow : data?.sun_window?.today)
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
   const originWeatherText = weatherChipLabel(data?.origin_conditions.description || '')
-  const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
-  const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
   const fallbackNotice = data?._meta?.fallback_notice || ''
-  const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
   const bestEscapeLabel = dayFocus === 'tomorrow' ? 'Best escape tomorrow' : 'Best escape today'
   const sortLabel = sortBy === 'best' ? 'Best now' : sortBy === 'fastest' ? 'Fastest' : 'Warmest'
   const sortedEscapes = useMemo(() => {
@@ -553,14 +545,38 @@ export default function Home() {
   }, [data?.escapes, sortBy])
 
   // v15: WhatsApp share includes fomosun.com link for virality
+  const timelineEmojiPreview = (timeline?: SunTimeline) => {
+    const segments = (dayFocus === 'tomorrow' ? timeline?.tomorrow : timeline?.today) || []
+    if (!segments.length) return '☁️☁️⛅☀️'
+    const slotCount = 8
+    const slots: string[] = []
+    for (const seg of segments) {
+      const icon = seg.condition === 'sun'
+        ? '☀️'
+        : seg.condition === 'partial'
+          ? '⛅'
+          : seg.condition === 'night'
+            ? '🌙'
+            : '☁️'
+      const n = Math.max(1, Math.round((seg.pct / 100) * slotCount))
+      for (let i = 0; i < n; i += 1) slots.push(icon)
+    }
+    return slots.slice(0, slotCount).join('')
+  }
+
   const buildWhatsAppHref = (escape: EscapeCard) => {
     const bestTravelMin = Math.min(escape.travel.car?.duration_min ?? Infinity, escape.travel.train?.duration_min ?? Infinity)
     const bestTravel = Number.isFinite(bestTravelMin) ? fmtMin(bestTravelMin) : 'n/a'
+    const originSky = timelineEmojiPreview(data?.origin_timeline)
+    const destinationSky = timelineEmojiPreview(escape.sun_timeline)
     const shareText = [
       `☀️ FOMO Sun: escape the fog!`,
       ``,
       `${origin.name} (${originFomoPct}%) → ${escape.destination.name} (${Math.round(escape.sun_score.score * 100)}%)`,
       `${bestTravel} away · ${escape.conditions}`,
+      `${dayFocus === 'tomorrow' ? 'Tomorrow' : 'Today'} sky`,
+      `${origin.name}: ${originSky}`,
+      `${escape.destination.name}: ${destinationSky}`,
       ``,
       `Plan: ${escape.plan[0]}`,
       escape.links.google_maps || '',
@@ -649,58 +665,22 @@ export default function Home() {
               </button>
             </div>
           </div>
+          {data && (
+            <p className={`mt-1 text-[10px] sm:text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+              {origin.name} now: {originWeatherText} {Math.round(originTempC)}° · {originSunMin} min sun
+            </p>
+          )}
 
           {data && topEscape && (
             <div className={`mt-3 sm:mt-4 rounded-2xl border text-left ${night ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200/80 bg-white/80 backdrop-blur-sm'}`}>
-              <div className="grid grid-cols-1 sm:grid-cols-[0.78fr_1.45fr]">
-                <div className={`order-2 sm:order-1 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-r ${night ? 'border-slate-700' : 'border-slate-200/80'}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <ScoreRing score={data.origin_conditions.sun_score} size={34} compact />
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
-                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{currentTime} · {sunsetLine}</p>
-                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-500'}`}>
-                          {data.origin_conditions.sunshine_min} min sun forecast
-                        </p>
-                      </div>
-                    </div>
-                    <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                      <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
-                      <span>{originWeatherText || 'Now'}</span>
-                      <span>{Math.round(originTempC)}°</span>
-                    </div>
-                  </div>
-                  {data.origin_timeline && (
-                    <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
-                      <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} />
-                    </div>
-                  )}
-                </div>
-
-                <div className={`order-1 sm:order-2 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-l ${night ? 'bg-amber-500/12 border-amber-300/20' : 'bg-amber-50/90 border-amber-200/70'}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <ScoreRing score={topEscape.sun_score.score} size={38} compact />
-                      <div className="flex-1 min-w-0">
+              <div className={`px-3.5 sm:px-4 py-3 ${night ? 'bg-amber-500/12' : 'bg-amber-50/90'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <ScoreRing score={topEscape.sun_score.score} size={40} compact />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
                         <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-300/90' : 'text-amber-700/80'}`}>{bestEscapeLabel}</p>
-                        <p className={`text-[13px] sm:text-[14px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-900'}`}>
-                          {topEscape.destination.name}
-                        </p>
-                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-300' : 'text-slate-600'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                        <p className="mt-1 flex items-center gap-1.5">
-                          <span className="text-[11px]" aria-hidden="true">☀️</span>
-                          {sunGainMin > 0 ? (
-                            <span className={`text-[10px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                              {topSunMin} min sun · {sunGainTag}
-                            </span>
-                          ) : (
-                            <span className={`text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {topSunMin} min sun forecast in this travel window
-                            </span>
-                          )}
-                        </p>
-                        <div className="relative mt-0.5">
+                        <div className="relative">
                           <button
                             type="button"
                             onMouseEnter={() => setShowTopWhyInfo(true)}
@@ -710,7 +690,7 @@ export default function Home() {
                             onClick={(ev) => { ev.stopPropagation(); setShowTopWhyInfo(v => !v) }}
                             className={`text-[9px] underline-offset-2 hover:underline ${night ? 'text-slate-400' : 'text-slate-500'}`}
                           >
-                            Why this option
+                            Why
                           </button>
                           {showTopWhyInfo && (
                             <div className={`absolute z-10 mt-1 w-[220px] rounded-lg border px-2.5 py-2 text-[10px] leading-snug shadow-lg ${night ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-200 text-slate-600'}`}>
@@ -719,26 +699,36 @@ export default function Home() {
                           )}
                         </div>
                       </div>
-                    </div>
-                    <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                      <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
-                      <span>{topWeatherText || 'Sunny'}</span>
-                      <span>{topTempC}°</span>
+                      <p className={`text-[14px] sm:text-[15px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-900'}`}>
+                        {topEscape.destination.name}
+                      </p>
+                      <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-300' : 'text-slate-600'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                      <p className="mt-1 flex items-center gap-1.5">
+                        <span className="text-[11px]" aria-hidden="true">☀️</span>
+                        {sunGainMin > 0 ? (
+                          <span className={`text-[10px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                            {topSunMin} min sun · {sunGainTag}
+                          </span>
+                        ) : (
+                          <span className={`text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {topSunMin} min sun forecast in this travel window
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                   <a
                     href={topWhatsAppHref}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={`wa-btn mt-2 inline-flex items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}
+                    className={`wa-btn inline-flex items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold transition-all self-start ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}
                   >
-                    <WaIcon c="w-3.5 h-3.5" /> Share this escape
+                    <WaIcon c="w-3.5 h-3.5" /> Share
                   </a>
-                  {topEscape.sun_timeline && (
-                    <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
-                      <SunBar timeline={topEscape.sun_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} />
-                    </div>
-                  )}
+                </div>
+                <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
+                  <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} label={origin.name} />
+                  <SunBar timeline={topEscape.sun_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} label={topEscape.destination.name} />
                 </div>
               </div>
             </div>
