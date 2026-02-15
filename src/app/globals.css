@@ -218,6 +218,14 @@ body {
   transition: transform 80ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
 }
 
+.center-slider.joystick-nudge::-webkit-slider-thumb {
+  animation: joystickNudge 1.2s ease-in-out infinite;
+}
+
+.center-slider.joystick-nudge::-moz-range-thumb {
+  animation: joystickNudge 1.2s ease-in-out infinite;
+}
+
 .center-slider:active::-webkit-slider-thumb {
   transform: scale(1.05);
   border-color: var(--sun-400);
@@ -228,6 +236,16 @@ body {
   transform: scale(1.05);
   border-color: var(--sun-400);
   box-shadow: 0 2px 6px rgba(245, 158, 11, 0.25);
+}
+
+@keyframes joystickNudge {
+  0%,
+  100% {
+    transform: translateX(-3px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
 }
 
 @keyframes cardIn {

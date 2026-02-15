@@ -177,6 +177,7 @@ function normalizeQueryCacheKey(input: {
   lat: number
   lon: number
   maxTravelH: number
+  travelWindowH: number
   mode: TravelMode
   hasGA: boolean
   types: string[]
@@ -189,11 +190,13 @@ function normalizeQueryCacheKey(input: {
   const latKey = input.lat.toFixed(3)
   const lonKey = input.lon.toFixed(3)
   const hKey = (Math.round(input.maxTravelH * 4) / 4).toFixed(2)
+  const whKey = (Math.round(input.travelWindowH * 4) / 4).toFixed(2)
   const typeKey = [...input.types].sort().join(',')
   return [
     `lat=${latKey}`,
     `lon=${lonKey}`,
     `h=${hKey}`,
+    `wh=${whKey}`,
     `mode=${input.mode}`,
     `ga=${input.hasGA ? 1 : 0}`,
     `types=${typeKey || '-'}`,
@@ -379,6 +382,7 @@ export async function GET(request: NextRequest) {
   const lat = parseFloat(sp.get('lat') || String(DEFAULT_ORIGIN.lat))
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
   const maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
+  const travelWindowH = Math.min(2, Math.max(0.5, parseFloat(sp.get('travel_window_h') || '0.5')))
   const mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
@@ -387,7 +391,7 @@ export async function GET(request: NextRequest) {
   const rawLimit = parseInt(sp.get('limit') || '6')
   const limit = adminView
     ? Math.min(500, Math.max(1, rawLimit))
-    : Math.min(10, Math.max(1, rawLimit))
+    : Math.min(20, Math.max(1, rawLimit))
   const tripSpan = normalizeTripSpan(sp.get('trip_span'))
   const originNameParam = (sp.get('origin_name') || '').trim().slice(0, 80)
   const originKind = sp.get('origin_kind') === 'manual'
@@ -433,7 +437,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
+    lat, lon, maxTravelH, travelWindowH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
   })
   const cached = queryResponseCache.get(cacheKey)
   if (cached && cached.expires_at > Date.now()) {
@@ -649,20 +653,22 @@ export async function GET(request: NextRequest) {
   // Keep a much broader candidate set in demo so slider materially changes outcomes.
   const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
   const withTravel = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
-  const windowMin = Math.max(30, maxTravelMin - 30)
-  const windowMax = maxTravelMin + 30
+  const windowHalfMin = Math.round(travelWindowH * 60)
+  const windowMin = Math.max(0, maxTravelMin - windowHalfMin)
+  const windowMax = maxTravelMin + windowHalfMin
   const inTravelWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
+  const betterThanOrigin = inTravelWindow.filter(r => r.sun_score.sunshine_forecast_min > originSunMin)
 
   // Default ranking path
   let pickedRanked = rankDestinations(
-    inTravelWindow
+    betterThanOrigin
       .map(r => ({ destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin })),
     maxTravelMin
   )
 
   // Live mode: rank primarily by sun quality, with a lighter travel-time tie-breaker.
   if (!demoMode) {
-    const rankedLive = inTravelWindow
+    const rankedLive = betterThanOrigin
       .map(r => {
         const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
         const combined = r.sun_score.score * 0.88 + travelConvenience * 0.12
@@ -683,7 +689,7 @@ export async function GET(request: NextRequest) {
 
   // Demo mode uses slider-centered window sorting for material list changes.
   if (demoMode) {
-    const sortedByScore = inTravelWindow
+    const sortedByScore = betterThanOrigin
       .map(r => ({
         destination: r.destination,
         sun_score: r.sun_score,

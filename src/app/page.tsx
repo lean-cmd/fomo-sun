@@ -6,6 +6,7 @@ import {
   Clock3,
   ChevronDown,
   Cloud,
+  Heart,
   Info,
   LocateFixed,
   MapPinned,
@@ -14,6 +15,7 @@ import {
   Sun,
   Thermometer,
   TrainFront,
+  X,
 } from 'lucide-react'
 import {
   DaylightWindow,
@@ -32,8 +34,9 @@ type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 
 type CitySeed = { name: string; lat: number; lon: number }
 
-const MIN_TRAVEL_H = 0.5
-const MAX_TRAVEL_H = 4.5
+const MIN_TRAVEL_H = 1
+const MAX_TRAVEL_H = 3
+const JOYSTICK_CENTER_H = 2
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
@@ -314,38 +317,35 @@ function getBestTravel(escape: EscapeCard) {
 
 export default function Home() {
   const [maxH, setMaxH] = useState(2)
-  const [centerH, setCenterH] = useState(2)
   const [sliderPos, setSliderPos] = useState(0)
   const [isDraggingSlider, setIsDraggingSlider] = useState(false)
   const [showSliderValue, setShowSliderValue] = useState(false)
+  const [joystickNudge, setJoystickNudge] = useState(true)
 
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [showResultFilters, setShowResultFilters] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
+  const [dismissedIds, setDismissedIds] = useState<string[]>([])
+  const [savedIds, setSavedIds] = useState<string[]>([])
 
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [demo, setDemo] = useState(true)
   const [openCard, setOpenCard] = useState<number | null>(0)
   const [openFastest, setOpenFastest] = useState(false)
-  const [openSetting, setOpenSetting] = useState<'mode' | null>(null)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
   const [originMode, setOriginMode] = useState<'manual' | 'gps'>('manual')
   const [locating, setLocating] = useState(false)
 
-  const [hasSetOptimal, setHasSetOptimal] = useState(false)
-  const [optimalHint, setOptimalHint] = useState(false)
-  const [showOptimalInfo, setShowOptimalInfo] = useState(false)
   const [queryMaxH, setQueryMaxH] = useState(maxH)
 
   const [expandedScoreDetails, setExpandedScoreDetails] = useState<Record<string, boolean>>({})
 
   const requestCtrlRef = useRef<AbortController | null>(null)
-  const snapPulseRef = useRef<number | null>(null)
   const resultsRef = useRef<HTMLElement | null>(null)
 
   const manualOrigin = useMemo(
@@ -386,6 +386,14 @@ export default function Home() {
     return () => clearTimeout(t)
   }, [maxH])
 
+  const travelWindowH = useMemo(() => {
+    if (maxH <= JOYSTICK_CENTER_H) {
+      const ratio = (maxH - MIN_TRAVEL_H) / (JOYSTICK_CENTER_H - MIN_TRAVEL_H)
+      return 0.5 + clamp(ratio, 0, 1) * 0.5
+    }
+    return 1
+  }, [maxH])
+
   useEffect(() => {
     requestCtrlRef.current?.abort()
     const ctrl = new AbortController()
@@ -398,8 +406,9 @@ export default function Home() {
           lat: String(origin.lat),
           lon: String(origin.lon),
           max_travel_h: String(queryMaxH),
+          travel_window_h: String(Number(travelWindowH.toFixed(2))),
           mode,
-          limit: '5',
+          limit: '15',
           demo: String(demo),
           trip_span: tripSpan,
           origin_kind: originMode,
@@ -408,15 +417,6 @@ export default function Home() {
         const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { signal: ctrl.signal })
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
-
-        if (!hasSetOptimal && payload.optimal_travel_h) {
-          const center = clamp(quantizeHour(payload.optimal_travel_h), 1.25, 3.25)
-          setCenterH(center)
-          setMaxH(center)
-          setSliderPos(0)
-          setHasSetOptimal(true)
-          setOptimalHint(true)
-        }
       } catch (err) {
         if ((err as Error)?.name !== 'AbortError') console.error(err)
       } finally {
@@ -425,20 +425,17 @@ export default function Home() {
     }
 
     run()
-  }, [queryMaxH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal])
+  }, [queryMaxH, travelWindowH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
-    if (snapPulseRef.current !== null) {
-      window.clearTimeout(snapPulseRef.current)
-    }
   }, [])
 
   useEffect(() => {
-    if (!optimalHint) return
-    const t = setTimeout(() => setOptimalHint(false), 2500)
+    if (!joystickNudge) return
+    const t = setTimeout(() => setJoystickNudge(false), 4500)
     return () => clearTimeout(t)
-  }, [optimalHint])
+  }, [joystickNudge])
 
   useEffect(() => {
     if (!data || tripSpanTouched) return
@@ -447,14 +444,6 @@ export default function Home() {
       setTripSpan('plus1day')
     }
   }, [data, tripSpanTouched])
-
-  useEffect(() => {
-    if (!data?.escapes?.length) {
-      setOpenCard(null)
-      return
-    }
-    setOpenCard(0)
-  }, [data?.escapes])
 
   const originSentences = useMemo(() => {
     if (!data || !topEscape) return []
@@ -496,7 +485,6 @@ export default function Home() {
         }
         setOriginMode('gps')
         setLocating(false)
-        setHasSetOptimal(false)
       },
       () => setLocating(false),
       { enableHighAccuracy: false, timeout: 8000 }
@@ -506,12 +494,12 @@ export default function Home() {
   const selectManualCity = (name: string) => {
     setSelectedCity(name)
     setOriginMode('manual')
-    setHasSetOptimal(false)
   }
 
   const handleSliderChange = (posRaw: number) => {
-    const nextTravel = quantizeHour(sliderPosToTravel(posRaw, centerH))
-    const snappedPos = sliderTravelToPos(nextTravel, centerH)
+    setJoystickNudge(false)
+    const nextTravel = quantizeHour(sliderPosToTravel(posRaw, JOYSTICK_CENTER_H))
+    const snappedPos = sliderTravelToPos(nextTravel, JOYSTICK_CENTER_H)
     setSliderPos(snappedPos)
     setMaxH(nextTravel)
     navigator.vibrate?.(3)
@@ -533,6 +521,15 @@ export default function Home() {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
+  const toggleSaved = (id: string) => {
+    setSavedIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
+  }
+
+  const dismissSuggestion = (id: string) => {
+    setDismissedIds(prev => prev.includes(id) ? prev : [...prev, id])
+    setSavedIds(prev => prev.filter(v => v !== id))
+  }
+
   const jumpToBestDetails = () => {
     setOpenCard(0)
     requestAnimationFrame(() => {
@@ -541,15 +538,28 @@ export default function Home() {
   }
 
   const filteredRows = useMemo(() => {
-    if (activeTypeChips.length === 0) return resultRows
-    return resultRows.filter((escape) => {
-      const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
-      return activeTypeChips.some((chip) => {
-        if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
-        return has(chip)
+    const better = resultRows.filter(escape => escape.sun_score.sunshine_forecast_min > originSunMin)
+    const typed = activeTypeChips.length === 0
+      ? better
+      : better.filter((escape) => {
+        const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
+        return activeTypeChips.some((chip) => {
+          if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
+          return has(chip)
+        })
       })
-    })
-  }, [activeTypeChips, resultRows])
+    return typed.filter(escape => !dismissedIds.includes(escape.destination.id))
+  }, [activeTypeChips, dismissedIds, resultRows, originSunMin])
+
+  const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
+
+  useEffect(() => {
+    if (!visibleRows.length) {
+      setOpenCard(null)
+      return
+    }
+    setOpenCard(0)
+  }, [visibleRows.length])
 
   const timelineOriginPreview = timelineEmojiPreview(data?.origin_timeline, dayFocus)
 
@@ -602,13 +612,13 @@ export default function Home() {
           <div className="flex-1 flex justify-center">
             <div className="inline-flex p-0.5 rounded-full border border-slate-200 bg-slate-100">
               <button
-                onClick={() => { setTripSpan('daytrip'); setTripSpanTouched(true); setHasSetOptimal(false) }}
+                onClick={() => { setTripSpan('daytrip'); setTripSpanTouched(true) }}
                 className={`px-2.5 h-7 rounded-full text-[10px] font-semibold transition ${tripSpan === 'daytrip' ? 'bg-white text-slate-900' : 'text-slate-500'}`}
               >
                 Today
               </button>
               <button
-                onClick={() => { setTripSpan('plus1day'); setTripSpanTouched(true); setHasSetOptimal(false) }}
+                onClick={() => { setTripSpan('plus1day'); setTripSpanTouched(true) }}
                 className={`px-2.5 h-7 rounded-full text-[10px] font-semibold transition ${tripSpan === 'plus1day' ? 'bg-white text-slate-900' : 'text-slate-500'}`}
               >
                 Tomorrow
@@ -617,7 +627,7 @@ export default function Home() {
           </div>
 
           <button
-            onClick={() => { setDemo(v => !v); setHasSetOptimal(false) }}
+            onClick={() => { setDemo(v => !v) }}
             className={`live-toggle ${demo ? 'is-demo' : 'is-live'}`}
             aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
           >
@@ -734,25 +744,13 @@ export default function Home() {
         <section className="fomo-card p-3.5 sm:p-4 mb-3">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel time</p>
+              <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick</p>
               <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
-                {formatTravelClock(maxH)}
+                {formatTravelClock(maxH)} <span className="text-[13px] text-slate-500">±{formatTravelClock(travelWindowH)}</span>
               </p>
             </div>
-            <button
-              type="button"
-              className="text-[11px] text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline"
-              onClick={() => setShowOptimalInfo(v => !v)}
-            >
-              Optimal?
-            </button>
+            <p className="text-[11px] text-slate-500">Push left or right</p>
           </div>
-
-          {showOptimalInfo && (
-            <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-600">
-              Center mark is the recommended sweet spot for net sun after travel.
-            </div>
-          )}
 
           <div
             className="relative h-14"
@@ -787,6 +785,7 @@ export default function Home() {
               onPointerDown={() => {
                 setIsDraggingSlider(true)
                 setShowSliderValue(true)
+                setJoystickNudge(false)
               }}
               onPointerUp={() => {
                 setIsDraggingSlider(false)
@@ -796,51 +795,19 @@ export default function Home() {
                 setIsDraggingSlider(false)
                 setShowSliderValue(false)
               }}
-              className="center-slider"
+              className={`center-slider ${joystickNudge ? 'joystick-nudge' : ''}`}
               aria-label="Travel time slider"
             />
           </div>
 
           <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-            <span>30 min</span>
-            <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>~{formatTravelClock(centerH)}</span>
-            <span>4h 30</span>
+            <span>1h ±30m</span>
+            <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>2h ±1h</span>
+            <span>3h ±1h</span>
           </div>
           <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-400">
             <span>← closer</span>
             <span>more options →</span>
-          </div>
-
-          {optimalHint && <p className="mt-1 text-[10px] text-amber-700">Auto-centered on current optimal range</p>}
-
-          <div className="mt-3 grid grid-cols-1 gap-2">
-            <button
-              onClick={() => setOpenSetting(prev => prev === 'mode' ? null : 'mode')}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-left text-[12px] font-medium text-slate-700 inline-flex items-center justify-between"
-            >
-              <span>Travel mode: {mode === 'both' ? 'Car + Train' : mode === 'car' ? 'Car' : 'Train'}</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${openSetting === 'mode' ? 'rotate-180' : ''}`} />
-            </button>
-            {openSetting === 'mode' && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                <div className="inline-flex rounded-full border border-slate-200 bg-white p-0.5">
-                  {([
-                    ['car', 'Car'],
-                    ['both', 'Car + Train'],
-                    ['train', 'Train'],
-                  ] as [TravelMode, string][]).map(([key, label]) => (
-                    <button
-                      key={key}
-                      onClick={() => setMode(key)}
-                      className={`h-8 px-3 rounded-full text-[11px] font-semibold ${mode === key ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
           </div>
         </section>
 
@@ -998,7 +965,20 @@ export default function Home() {
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
                 Filter
               </button>
-              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{filteredRows.length}</span>
+              <label className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 inline-flex items-center gap-1">
+                {mode === 'car' ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} /> : mode === 'train' ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} /> : <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                <select
+                  value={mode}
+                  onChange={e => setMode(e.target.value as TravelMode)}
+                  className="bg-transparent focus:outline-none"
+                  aria-label="Travel mode"
+                >
+                  <option value="both">Car + Train</option>
+                  <option value="car">Car</option>
+                  <option value="train">Train</option>
+                </select>
+              </label>
+              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{visibleRows.length}</span>
             </div>
           </div>
 
@@ -1026,15 +1006,21 @@ export default function Home() {
             </section>
           )}
 
-          {filteredRows.length === 0 && !loading && (
+          {savedIds.length > 0 && (
+            <p className="mb-2 text-[11px] text-emerald-700 inline-flex items-center gap-1">
+              <Heart className="w-3.5 h-3.5" strokeWidth={1.8} fill="currentColor" /> {savedIds.length} saved
+            </p>
+          )}
+
+          {visibleRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
-              <p className="text-[14px] text-slate-700">No matches in this travel window.</p>
-              <p className="text-[12px] text-slate-500 mt-1">Try expanding your travel time.</p>
+              <p className="text-[14px] text-slate-700">No better escapes than {origin.name} in this joystick range.</p>
+              <p className="text-[12px] text-slate-500 mt-1">Push the joystick right for broader options.</p>
             </div>
           )}
 
           <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isDraggingSlider) ? 'opacity-60' : 'opacity-100'}`}>
-            {filteredRows.map((escape, index) => {
+            {visibleRows.map((escape, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCard === index
               const scoreBreakdown = escape.sun_score.score_breakdown
@@ -1047,48 +1033,75 @@ export default function Home() {
                   className="fomo-card overflow-hidden"
                   style={{ animation: `cardIn 180ms ease-out ${Math.min(index * 60, 240)}ms both` }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => setOpenCard(prev => prev === index ? null : index)}
-                    className="w-full text-left px-3.5 pt-3.5 pb-2.5"
-                  >
-                    <div className="flex items-start gap-3">
-                      <ScoreRing score={escape.sun_score.score} size={40} />
+                  <div className="px-3.5 pt-3.5 pb-2.5">
+                    <div className="flex items-start gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setOpenCard(prev => prev === index ? null : index)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="flex items-start gap-3">
+                          <ScoreRing score={escape.sun_score.score} size={40} />
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
-                            <p className="text-[11px] text-slate-500 mt-0.5">{escape.destination.region} · {escape.destination.altitude_m.toLocaleString()}m · {FLAG[escape.destination.country]}</p>
-                            <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
-                              <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
-                              <span>{weatherEmoji(escape.weather_now?.summary)}</span>
-                              <span>{weatherLabel(escape.weather_now?.summary)}</span>
-                            </div>
-                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
+                                <p className="text-[11px] text-slate-500 mt-0.5">{escape.destination.region} · {escape.destination.altitude_m.toLocaleString()}m · {FLAG[escape.destination.country]}</p>
+                                <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
+                                  <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
+                                  <span>{weatherEmoji(escape.weather_now?.summary)}</span>
+                                  <span>{weatherLabel(escape.weather_now?.summary)}</span>
+                                </div>
+                              </div>
 
-                          <div className="shrink-0 text-right">
-                            <div className="inline-flex items-end gap-2">
-                              <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                                <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                                {formatSunHours(escape.sun_score.sunshine_forecast_min)}
-                              </p>
-                              {bestTravel && (
-                                <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
-                                  <IconForMode mode={bestTravel.mode} />
-                                  {formatTravelClock(bestTravel.min / 60)}
-                                </p>
-                              )}
-                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              <div className="shrink-0 text-right">
+                                <div className="inline-flex items-end gap-2">
+                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
+                                    {formatSunHours(escape.sun_score.sunshine_forecast_min)}
+                                  </p>
+                                  {bestTravel && (
+                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                      <IconForMode mode={bestTravel.mode} />
+                                      {formatTravelClock(bestTravel.min / 60)}
+                                    </p>
+                                  )}
+                                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                </div>
+                                {gainMin > 0 && (
+                                  <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</p>
+                                )}
+                              </div>
                             </div>
-                            {gainMin > 0 && (
-                              <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</p>
-                            )}
                           </div>
                         </div>
+                      </button>
+
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleSaved(escape.destination.id)}
+                          className={`w-8 h-8 rounded-full border inline-flex items-center justify-center transition ${
+                            savedIds.includes(escape.destination.id)
+                              ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
+                              : 'border-slate-200 bg-white text-slate-500 hover:text-slate-700'
+                          }`}
+                          aria-label={savedIds.includes(escape.destination.id) ? 'Unsave escape' : 'Save escape'}
+                        >
+                          <Heart className="w-3.5 h-3.5" strokeWidth={1.9} fill={savedIds.includes(escape.destination.id) ? 'currentColor' : 'none'} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => dismissSuggestion(escape.destination.id)}
+                          className="w-8 h-8 rounded-full border border-slate-200 bg-white text-slate-500 inline-flex items-center justify-center hover:text-slate-700"
+                          aria-label="Don't suggest again"
+                        >
+                          <X className="w-3.5 h-3.5" strokeWidth={1.9} />
+                        </button>
                       </div>
                     </div>
-                  </button>
+                  </div>
 
                   <div className={`grid transition-all duration-200 ease-out ${isOpen ? 'grid-rows-[1fr] border-t border-slate-200' : 'grid-rows-[0fr]'}`}>
                     <div className="overflow-hidden">
