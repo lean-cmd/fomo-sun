@@ -49,18 +49,32 @@ function compactDaySegments(segments: SunTimeline['today']) {
   return merged.length ? merged : [{ condition: 'cloud', pct: 100 }]
 }
 
-function weatherGlyph(summary?: string) {
+type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
+
+function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
-  if (s.includes('fog')) return '🌫️'
-  if (s.includes('overcast') || s.includes('cloudy') || s.includes('cloud')) return '☁️'
-  if (s.includes('partly')) return '⛅'
-  if (s.includes('clear') || s.includes('sunny') || s.includes('sun')) return '☀️'
-  return '⛅'
+  if (s.includes('fog') || s.includes('low cloud')) return 'foggy'
+  if (s.includes('partly')) return 'partly'
+  if (s.includes('clear') || s.includes('sunny') || s.includes('sun')) return 'sunny'
+  return 'cloudy'
 }
 
-function weatherLabel(summary?: string) {
-  if (!summary) return ''
-  return summary.replace(/,\s*-?\d+\s*°c/i, '').trim()
+function weatherChipLabel(summary?: string) {
+  const kind = weatherKind(summary)
+  if (kind === 'foggy') return 'Foggy'
+  if (kind === 'partly') return 'Partly sunny'
+  if (kind === 'sunny') return 'Sunny'
+  return 'Cloudy'
+}
+
+function WeatherDot({ summary }: { summary?: string }) {
+  const kind = weatherKind(summary)
+  const tone =
+    kind === 'sunny' ? 'bg-amber-400'
+    : kind === 'partly' ? 'bg-sky-400'
+    : kind === 'foggy' ? 'bg-slate-400'
+    : 'bg-slate-500'
+  return <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${tone}`} />
 }
 
 function extractTemp(summary?: string) {
@@ -370,9 +384,9 @@ export default function Home() {
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
   const timelineTicks = buildHourTicks(data?.sun_window?.today)
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
-  const originWeatherText = weatherLabel(data?.origin_conditions.description || '')
+  const originWeatherText = weatherChipLabel(data?.origin_conditions.description || '')
   const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
-  const topWeatherText = topEscape ? weatherLabel(topEscape.weather_now?.summary || '') : ''
+  const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
 
   // v15: WhatsApp share includes fomosun.com link for virality
   const buildWhatsAppHref = (escape: EscapeCard) => {
@@ -405,7 +419,7 @@ export default function Home() {
         <button
           onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
           aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-          className={`live-toggle absolute top-3 right-3 z-20 ${demo ? 'is-demo' : 'is-live'} ${night ? 'is-night' : ''}`}
+          className={`live-toggle fixed top-3 right-3 sm:top-4 sm:right-4 z-40 ${demo ? 'is-demo' : 'is-live'} ${night ? 'is-night' : ''}`}
         >
           <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
           <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
@@ -445,9 +459,9 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 max-w-[146px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
-                    <span className="truncate">{originWeatherText || 'Now'}</span>
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <WeatherDot summary={data.origin_conditions.description} />
+                    <span>{originWeatherText || 'Now'}</span>
                     <span>{Math.round(originTempC)}°</span>
                   </div>
                 </div>
@@ -481,14 +495,14 @@ export default function Home() {
                         )}
                       </p>
                       <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
-                        className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white text-emerald-700 shadow-sm hover:shadow'}`}>
+                        className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}>
                         <WaIcon c="w-3 h-3" /> Share this escape
                       </a>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 max-w-[146px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
-                    <span className="truncate">{topWeatherText || 'Clear'}</span>
+                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <WeatherDot summary={topEscape.weather_now?.summary} />
+                    <span>{topWeatherText || 'Sunny'}</span>
                     <span>{topTempC}°</span>
                   </div>
                 </div>
@@ -661,9 +675,9 @@ export default function Home() {
                           </div>
                           <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                         </div>
-                        <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border max-w-[150px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                          <span aria-hidden="true">{weatherGlyph(e.weather_now?.summary)}</span>
-                          <span className="truncate">{weatherLabel(e.weather_now?.summary)}</span>
+                        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                          <WeatherDot summary={e.weather_now?.summary} />
+                          <span>{weatherChipLabel(e.weather_now?.summary)}</span>
                           <span>{Math.round(e.weather_now?.temp_c ?? 0)}°</span>
                         </div>
                       </div>

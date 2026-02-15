@@ -32,6 +32,7 @@ const LIVE_DEST_WEATHER_LIMIT = 8
 const LIVE_RATE_WINDOW_MS = 60_000
 const LIVE_RATE_MAX_PER_WINDOW = 24
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
+const TARGET_POI_COUNT = 500
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -52,20 +53,28 @@ function clientIp(request: NextRequest): string {
   return xff?.split(',')[0]?.trim() || 'unknown'
 }
 
-function isRateLimited(ip: string): boolean {
+type LiveRateState = { limited: boolean; count: number; remaining: number; reset_at: number }
+
+function consumeRateBudget(ip: string): LiveRateState {
   const now = Date.now()
   if (liveReqCounter.size > 500) {
     for (const [k, rec] of Array.from(liveReqCounter.entries())) {
       if (rec.reset_at <= now) liveReqCounter.delete(k)
     }
   }
-  const rec = liveReqCounter.get(ip)
+  let rec = liveReqCounter.get(ip)
   if (!rec || rec.reset_at <= now) {
-    liveReqCounter.set(ip, { reset_at: now + LIVE_RATE_WINDOW_MS, count: 1 })
-    return false
+    rec = { reset_at: now + LIVE_RATE_WINDOW_MS, count: 0 }
+    liveReqCounter.set(ip, rec)
   }
   rec.count += 1
-  return rec.count > LIVE_RATE_MAX_PER_WINDOW
+  const remaining = Math.max(0, LIVE_RATE_MAX_PER_WINDOW - rec.count)
+  return {
+    limited: rec.count > LIVE_RATE_MAX_PER_WINDOW,
+    count: rec.count,
+    remaining,
+    reset_at: rec.reset_at,
+  }
 }
 
 function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
@@ -172,7 +181,10 @@ export async function GET(request: NextRequest) {
 
   const requestedDemo = sp.get('demo') === 'true'
   const ip = clientIp(request)
-  const liveRateLimited = !requestedDemo && isRateLimited(ip)
+  const liveRate = requestedDemo
+    ? { limited: false, count: 0, remaining: LIVE_RATE_MAX_PER_WINDOW, reset_at: Date.now() + LIVE_RATE_WINDOW_MS }
+    : consumeRateBudget(ip)
+  const liveRateLimited = !requestedDemo && liveRate.limited
   const demoMode = requestedDemo || liveRateLimited
   const liveFallbackReason = liveRateLimited ? 'rate_limited' : ''
 
@@ -199,6 +211,8 @@ export async function GET(request: NextRequest) {
   // Pre-filter by rough distance and user filters
   let candidates = preFilterByDistance(lat, lon, destinations, maxTravelH)
   if (types.length > 0) candidates = candidates.filter(d => d.types.some(t => types.includes(t)))
+  const prefilterCandidateCount = candidates.length
+  let livePoolCount = 0
 
   const candidatesWithTravel = candidates.map(dest => {
     const car = (mode === 'car' || mode === 'both') ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'car') : undefined
@@ -248,6 +262,7 @@ export async function GET(request: NextRequest) {
         return b.destination.altitude_m - a.destination.altitude_m
       })
       .slice(0, LIVE_DEST_WEATHER_LIMIT)
+    livePoolCount = livePool.length
 
     const swissOrigin = await getSwissMeteoOriginSnapshot(lat, lon)
     if (swissOrigin) {
@@ -482,8 +497,16 @@ export async function GET(request: NextRequest) {
 
   const headers: Record<string, string> = {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    'X-FOMO-Sun-Version': '0.4.0',
+    'X-FOMO-Sun-Version': '0.4.1',
     'X-FOMO-Live-Source': demoMode ? 'mock' : (usedSwissMeteo ? 'meteoswiss+open-meteo' : 'open-meteo'),
+    'X-FOMO-Live-Rate-Limit': `${LIVE_RATE_MAX_PER_WINDOW};w=${Math.round(LIVE_RATE_WINDOW_MS / 1000)}`,
+    'X-FOMO-Live-Rate-Remaining': String(liveRate.remaining),
+    'X-FOMO-Live-Rate-Count': String(liveRate.count),
+    'X-FOMO-Live-Rate-Reset-S': String(Math.max(0, Math.round((liveRate.reset_at - Date.now()) / 1000))),
+    'X-FOMO-POI-Count': String(destinations.length),
+    'X-FOMO-POI-Target': String(TARGET_POI_COUNT),
+    'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
+    'X-FOMO-Live-Pool-Count': String(livePoolCount),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
 
