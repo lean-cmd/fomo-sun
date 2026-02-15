@@ -179,8 +179,6 @@ export default function Home() {
       ? `Sunset already passed`
       : `Sunset ${data.sunset.time} (${fmtMin(data.sunset.minutes_until)})`
     : ''
-  const windowMinH = Math.max(0.5, maxH - 0.5)
-  const windowMaxH = maxH + 0.5
   const topTravelMin = topEscape
     ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
     : Infinity
@@ -318,18 +316,13 @@ export default function Home() {
 
           <div className="px-4 sm:px-5 pt-2 pb-3.5 sm:pb-4">
             <div className="flex justify-between items-baseline mb-2">
-              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel time</span>
-              <span className="text-[20px] sm:text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel time (±30m)</span>
+              <span className={`text-[20px] sm:text-[22px] font-bold tabular-nums ${night ? 'text-slate-200' : 'text-slate-700'}`} style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
             </div>
             <div className="relative">
               <input type="range" min={1} max={4.5} step={0.25} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
               {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
-            {!night && (
-              <div className="mt-1 inline-flex items-center rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] bg-sky-50 text-sky-700 border border-sky-100">
-                Active window: {fmtTravelHours(windowMinH)} to {fmtTravelHours(windowMaxH)} (±30m)
-              </div>
-            )}
             {!night && (
               <div className="mt-1.5 flex items-center justify-between text-[8.5px] sm:text-[9px] text-slate-400">
                 <span>Less time</span><span className="font-medium text-slate-500">Net sun optimized</span><span>More options</span>
@@ -396,7 +389,6 @@ export default function Home() {
 
       {/* ══════ RESULTS ══════ */}
       <section className="max-w-xl mx-auto px-4 mt-4 sm:mt-5 pb-14 sm:pb-16">
-        <p className={`text-[11px] sm:text-[12px] font-medium mb-2 ${night ? 'text-slate-500' : 'text-slate-500'}`}>Fine tune & discover more escapes</p>
         {loading ? (
           <div className="text-center py-16">
             <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto" />
