@@ -284,6 +284,19 @@ function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionL
   }
 }
 
+function buildTripPlan(destination: typeof destinations[number]) {
+  if (destination.trip_plan) {
+    const steps = [
+      `📍 ${destination.trip_plan.arrival}`,
+      `🥾 ${destination.trip_plan.do}`,
+      `🍽️ ${destination.trip_plan.eat}`,
+    ]
+    if (destination.trip_plan.pro_tip) steps.push(`💡 ${destination.trip_plan.pro_tip}`)
+    return steps
+  }
+  return destination.plan_template.split(' | ')
+}
+
 function hourCondition(h: LiveForecastBundle['hours'][number]) {
   if (h.sunshine_duration_min >= 45) return 'sun'
   if (h.sunshine_duration_min >= 15) return 'partial'
@@ -723,7 +736,7 @@ export async function GET(request: NextRequest) {
         car: full.carTravel ? { mode: 'car' as const, duration_min: full.carTravel.duration_min, distance_km: full.carTravel.distance_km } : undefined,
         train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
       },
-      plan: r.destination.plan_template.split(' | '),
+      plan: buildTripPlan(r.destination),
       links: {
         google_maps: buildGoogleMapsDirectionsUrl(r.destination.maps_name, mapsOriginName),
         sbb: buildSbbTimetableUrl(r.destination.sbb_name, sbbOriginName),

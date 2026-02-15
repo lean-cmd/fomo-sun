@@ -103,6 +103,25 @@ type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
 type SortMode = 'best' | 'fastest' | 'warmest'
 type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
+type TrainPreviewRow = {
+  id: string
+  category: string
+  line: string
+  departure_hhmm: string
+  arrival_hhmm: string
+  duration_min: number
+  platform?: string
+  transfers: number
+  sbb_url: string
+  note?: string
+}
+
+function trainCategoryClass(category: string) {
+  if (category.startsWith('IC')) return 'bg-rose-100 text-rose-700 border-rose-200'
+  if (category.startsWith('IR')) return 'bg-sky-100 text-sky-700 border-sky-200'
+  if (category.startsWith('S')) return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  return 'bg-amber-100 text-amber-700 border-amber-200'
+}
 
 function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
@@ -420,9 +439,11 @@ export default function Home() {
   const [showTopWhyInfo, setShowTopWhyInfo] = useState(false)
   const [isDraggingSlider, setIsDraggingSlider] = useState(false)
   const [sliderSnapPulse, setSliderSnapPulse] = useState(false)
+  const [trainPreview, setTrainPreview] = useState<Record<string, { loading: boolean; rows: TrainPreviewRow[]; error?: string }>>({})
   const requestCtrlRef = useRef<AbortController | null>(null)
   const controlAnchorRef = useRef<HTMLElement | null>(null)
   const snapPulseRef = useRef<number | null>(null)
+  const loadedTrainKeys = useRef<Set<string>>(new Set())
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -605,6 +626,34 @@ export default function Home() {
     }
     return list
   }, [data?.escapes, sortBy])
+  useEffect(() => {
+    if (openCard === null) return
+    const escape = sortedEscapes[openCard]
+    if (!escape) return
+    if (mode === 'car' || !escape.travel.train) return
+
+    const toName = escape.destination.sbb_name || escape.destination.name
+    if (!toName) return
+    const cacheKey = `${escape.destination.id}|${origin.name}|${demo ? 'demo' : 'live'}`
+    if (loadedTrainKeys.current.has(cacheKey)) return
+    loadedTrainKeys.current.add(cacheKey)
+
+    setTrainPreview(prev => ({
+      ...prev,
+      [cacheKey]: { loading: true, rows: prev[cacheKey]?.rows || [] },
+    }))
+
+    fetch(`/api/v1/sbb-connections?from=${encodeURIComponent(origin.name)}&to=${encodeURIComponent(toName)}&limit=3&demo=${String(demo)}`)
+      .then(async res => {
+        if (!res.ok) throw new Error(`sbb-${res.status}`)
+        const payload = await res.json()
+        const rows = Array.isArray(payload?.connections) ? payload.connections as TrainPreviewRow[] : []
+        setTrainPreview(prev => ({ ...prev, [cacheKey]: { loading: false, rows } }))
+      })
+      .catch(() => {
+        setTrainPreview(prev => ({ ...prev, [cacheKey]: { loading: false, rows: [], error: 'unavailable' } }))
+      })
+  }, [openCard, sortedEscapes, mode, origin.name, demo])
 
   // v15: WhatsApp share includes fomosun.com link for virality
   const timelineEmojiPreview = (timeline?: SunTimeline) => {
@@ -1033,6 +1082,8 @@ export default function Home() {
                     ? Number.isFinite(carMin) ? 'car' : Number.isFinite(trainMin) ? 'train' : null
                     : Number.isFinite(trainMin) ? 'train' : Number.isFinite(carMin) ? 'car' : null
                 const bestMin = Math.min(carMin, trainMin)
+                const trainCacheKey = `${e.destination.id}|${origin.name}|${demo ? 'demo' : 'live'}`
+                const trainState = trainPreview[trainCacheKey]
 
                 return (
                 <div key={e.destination.id}
@@ -1114,6 +1165,49 @@ export default function Home() {
                   {openCard === i && (
                     <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] border-slate-100 bg-slate-50/50`}>
                       <p className={`text-[11px] mb-2 leading-snug text-slate-600`}>Forecast: {e.weather_now?.summary || 'Mixed conditions'}</p>
+                      {mode !== 'car' && e.travel.train && e.destination.sbb_name && (
+                        <div className="mb-3 rounded-xl border border-slate-200 bg-white px-2.5 py-2">
+                          <p className="text-[10px] font-semibold text-slate-700 mb-1.5">🚆 Next trains from {origin.name}</p>
+                          {trainState?.loading ? (
+                            <p className="text-[10px] text-slate-500">Loading live connections...</p>
+                          ) : trainState?.rows?.length ? (
+                            <div className="space-y-1.5">
+                              {trainState.rows.slice(0, 3).map(row => (
+                                <a
+                                  key={`${row.id}-${row.departure_hhmm}`}
+                                  href={row.sbb_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={ev => ev.stopPropagation()}
+                                  className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg border border-slate-100 px-2 py-1.5 hover:bg-slate-50"
+                                >
+                                  <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${trainCategoryClass(row.category)}`}>{row.line}</span>
+                                  <span className="text-[10px] text-slate-600 font-medium tabular-nums">
+                                    <strong className="text-slate-800">{row.departure_hhmm}</strong> → {row.arrival_hhmm}
+                                  </span>
+                                  <span className="text-[9px] text-slate-500 tabular-nums">
+                                    {row.duration_min}m{row.transfers === 0 ? ', direct' : `, ${row.transfers}×`}
+                                    {row.platform ? ` · Pl ${row.platform}` : ''}
+                                  </span>
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-slate-500">Live connection preview unavailable right now.</p>
+                          )}
+                          {e.links.sbb && (
+                            <a
+                              href={e.links.sbb}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={ev => ev.stopPropagation()}
+                              className="mt-1 inline-block text-[10px] font-medium text-red-600 hover:underline"
+                            >
+                              View all on SBB
+                            </a>
+                          )}
+                        </div>
+                      )}
                       <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 text-slate-400`}>Travel options</p>
                       <div className="flex items-center flex-wrap gap-2 mb-3">
                         {e.travel.car && (
@@ -1137,10 +1231,7 @@ export default function Home() {
                       <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 text-slate-400`}>Trip plan</p>
                       <div className="space-y-1.5">
                         {e.plan.map((step, j) => (
-                          <div key={j} className="flex gap-2 items-start">
-                            <span className="flex-shrink-0 w-[18px] h-[18px] rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-[9px] font-bold mt-0.5">{j+1}</span>
-                            <span className={`text-[12px] leading-snug text-slate-500`}>{step}</span>
-                          </div>
+                          <p key={j} className="text-[12px] leading-snug text-slate-600">{step}</p>
                         ))}
                       </div>
                       <div className="flex gap-1.5 mt-3">
