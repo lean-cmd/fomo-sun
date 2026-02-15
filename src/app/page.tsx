@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   Car,
   Clock3,
@@ -37,6 +37,7 @@ type CitySeed = { name: string; lat: number; lon: number }
 const MIN_TRAVEL_H = 1
 const MAX_TRAVEL_H = 3
 const JOYSTICK_CENTER_H = 2
+const JOYSTICK_MAX_PX = 42
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
@@ -317,9 +318,8 @@ function getBestTravel(escape: EscapeCard) {
 
 export default function Home() {
   const [maxH, setMaxH] = useState(2)
-  const [sliderPos, setSliderPos] = useState(0)
-  const [isDraggingSlider, setIsDraggingSlider] = useState(false)
-  const [showSliderValue, setShowSliderValue] = useState(false)
+  const [joyX, setJoyX] = useState(0)
+  const [isJoystickActive, setIsJoystickActive] = useState(false)
   const [joystickNudge, setJoystickNudge] = useState(true)
 
   const [mode, setMode] = useState<TravelMode>('both')
@@ -335,6 +335,8 @@ export default function Home() {
   const [demo, setDemo] = useState(true)
   const [openCard, setOpenCard] = useState<number | null>(0)
   const [openFastest, setOpenFastest] = useState(false)
+  const [heroFlowDir, setHeroFlowDir] = useState<'left' | 'right'>('right')
+  const [heroFlowTick, setHeroFlowTick] = useState(0)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
@@ -347,6 +349,14 @@ export default function Home() {
 
   const requestCtrlRef = useRef<AbortController | null>(null)
   const resultsRef = useRef<HTMLElement | null>(null)
+  const joystickZoneRef = useRef<HTMLDivElement | null>(null)
+  const joyAnimRef = useRef<number | null>(null)
+  const joyPosRef = useRef(0)
+  const joyVelRef = useRef(0)
+  const joyPrevTsRef = useRef(0)
+  const joyPrevXRef = useRef(0)
+  const joystickPointerRef = useRef<number | null>(null)
+  const joystickDirRef = useRef<'left' | 'right' | null>(null)
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -363,36 +373,116 @@ export default function Home() {
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
 
-  const sliderTravelToPos = useCallback((travelH: number, center: number) => {
-    if (travelH <= center) {
-      const denom = Math.max(0.001, center - MIN_TRAVEL_H)
-      return -100 + ((travelH - MIN_TRAVEL_H) / denom) * 100
-    }
-    const denom = Math.max(0.001, MAX_TRAVEL_H - center)
-    return ((travelH - center) / denom) * 100
+  const travelFromJoy = useCallback((nextJoy: number) => {
+    const rawTravel = JOYSTICK_CENTER_H + nextJoy
+    return quantizeHour(clamp(rawTravel, MIN_TRAVEL_H, MAX_TRAVEL_H))
   }, [])
 
-  const sliderPosToTravel = useCallback((pos: number, center: number) => {
-    if (pos <= 0) {
-      const ratio = (pos + 100) / 100
-      return MIN_TRAVEL_H + ratio * (center - MIN_TRAVEL_H)
+  const applyJoyPosition = useCallback((nextJoy: number) => {
+    const clamped = clamp(nextJoy, -1, 1)
+    joyPosRef.current = clamped
+    setJoyX(clamped)
+    setMaxH(prev => {
+      const nextTravel = travelFromJoy(clamped)
+      return prev === nextTravel ? prev : nextTravel
+    })
+    if (Math.abs(clamped) > 0.06) {
+      joystickDirRef.current = clamped > 0 ? 'right' : 'left'
     }
-    const ratio = pos / 100
-    return center + ratio * (MAX_TRAVEL_H - center)
+  }, [travelFromJoy])
+
+  const stopJoystickAnim = useCallback(() => {
+    if (joyAnimRef.current !== null) {
+      cancelAnimationFrame(joyAnimRef.current)
+      joyAnimRef.current = null
+    }
   }, [])
+
+  const startJoystickSpringBack = useCallback(() => {
+    stopJoystickAnim()
+    let x = joyPosRef.current
+    let v = joyVelRef.current
+    let lastTs = performance.now()
+    const spring = 28
+    const damping = 11
+    const step = (ts: number) => {
+      const dt = Math.min(0.032, Math.max(0.008, (ts - lastTs) / 1000))
+      lastTs = ts
+      const a = -spring * x - damping * v
+      v += a * dt
+      x += v * dt
+      applyJoyPosition(x)
+      if (Math.abs(x) < 0.002 && Math.abs(v) < 0.01) {
+        joyVelRef.current = 0
+        applyJoyPosition(0)
+        setIsJoystickActive(false)
+        joyAnimRef.current = null
+        return
+      }
+      joyVelRef.current = v
+      joyAnimRef.current = requestAnimationFrame(step)
+    }
+    joyAnimRef.current = requestAnimationFrame(step)
+  }, [applyJoyPosition, stopJoystickAnim])
+
+  const joyFromPointerX = useCallback((clientX: number) => {
+    const el = joystickZoneRef.current
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const center = rect.left + rect.width / 2
+    return clamp((clientX - center) / JOYSTICK_MAX_PX, -1, 1)
+  }, [])
+
+  const onJoystickPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    joystickPointerRef.current = e.pointerId
+    joystickZoneRef.current?.setPointerCapture(e.pointerId)
+    setJoystickNudge(false)
+    setIsJoystickActive(true)
+    stopJoystickAnim()
+    const next = joyFromPointerX(e.clientX)
+    joyPrevTsRef.current = performance.now()
+    joyPrevXRef.current = next
+    joyVelRef.current = 0
+    applyJoyPosition(next)
+  }
+
+  const onJoystickPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (joystickPointerRef.current !== e.pointerId) return
+    const next = joyFromPointerX(e.clientX)
+    const now = performance.now()
+    const dt = Math.max(1, now - joyPrevTsRef.current)
+    joyVelRef.current = (next - joyPrevXRef.current) / (dt / 1000)
+    joyPrevTsRef.current = now
+    joyPrevXRef.current = next
+    applyJoyPosition(next)
+  }
+
+  const onJoystickPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (joystickPointerRef.current !== e.pointerId) return
+    try {
+      joystickZoneRef.current?.releasePointerCapture(e.pointerId)
+    } catch {
+      // no-op if pointer capture was already released
+    }
+    joystickPointerRef.current = null
+    startJoystickSpringBack()
+  }
 
   useEffect(() => {
     const t = setTimeout(() => setQueryMaxH(maxH), 200)
     return () => clearTimeout(t)
   }, [maxH])
 
-  const travelWindowH = useMemo(() => {
-    if (maxH <= JOYSTICK_CENTER_H) {
-      const ratio = (maxH - MIN_TRAVEL_H) / (JOYSTICK_CENTER_H - MIN_TRAVEL_H)
+  const computeTravelWindowH = useCallback((travelH: number) => {
+    if (travelH <= JOYSTICK_CENTER_H) {
+      const ratio = (travelH - MIN_TRAVEL_H) / (JOYSTICK_CENTER_H - MIN_TRAVEL_H)
       return 0.5 + clamp(ratio, 0, 1) * 0.5
     }
     return 1
-  }, [maxH])
+  }, [])
+
+  const travelWindowH = useMemo(() => computeTravelWindowH(maxH), [maxH, computeTravelWindowH])
+  const queryTravelWindowH = useMemo(() => computeTravelWindowH(queryMaxH), [queryMaxH, computeTravelWindowH])
 
   useEffect(() => {
     requestCtrlRef.current?.abort()
@@ -406,7 +496,7 @@ export default function Home() {
           lat: String(origin.lat),
           lon: String(origin.lon),
           max_travel_h: String(queryMaxH),
-          travel_window_h: String(Number(travelWindowH.toFixed(2))),
+          travel_window_h: String(Number(queryTravelWindowH.toFixed(2))),
           mode,
           limit: '15',
           demo: String(demo),
@@ -417,6 +507,10 @@ export default function Home() {
         const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { signal: ctrl.signal })
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
+        if (joystickDirRef.current) {
+          setHeroFlowDir(joystickDirRef.current)
+          setHeroFlowTick(v => v + 1)
+        }
       } catch (err) {
         if ((err as Error)?.name !== 'AbortError') console.error(err)
       } finally {
@@ -425,11 +519,12 @@ export default function Home() {
     }
 
     run()
-  }, [queryMaxH, travelWindowH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
+  }, [queryMaxH, queryTravelWindowH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
-  }, [])
+    stopJoystickAnim()
+  }, [stopJoystickAnim])
 
   useEffect(() => {
     if (!joystickNudge) return
@@ -495,20 +590,6 @@ export default function Home() {
     setSelectedCity(name)
     setOriginMode('manual')
   }
-
-  const handleSliderChange = (posRaw: number) => {
-    setJoystickNudge(false)
-    const nextTravel = quantizeHour(sliderPosToTravel(posRaw, JOYSTICK_CENTER_H))
-    const snappedPos = sliderTravelToPos(nextTravel, JOYSTICK_CENTER_H)
-    setSliderPos(snappedPos)
-    setMaxH(nextTravel)
-    navigator.vibrate?.(3)
-  }
-
-  const sliderThumbPct = ((sliderPos + 100) / 2)
-  const centerPct = 50
-  const fillStart = Math.min(sliderThumbPct, centerPct)
-  const fillWidth = Math.abs(sliderThumbPct - centerPct)
 
   const fallbackNotice = data?._meta?.fallback_notice || ''
   const resultRows = data?.escapes || []
@@ -656,7 +737,10 @@ export default function Home() {
         )}
 
         {topEscape && (
-          <section className="fomo-card p-3.5 sm:p-4 mb-3">
+          <section
+            key={`hero-${topEscape.destination.id}-${heroFlowTick}`}
+            className={`fomo-card p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <ScoreRing score={topEscape.sun_score.score} size={44} />
@@ -749,57 +833,35 @@ export default function Home() {
                 {formatTravelClock(maxH)} <span className="text-[13px] text-slate-500">±{formatTravelClock(travelWindowH)}</span>
               </p>
             </div>
-            <p className="text-[11px] text-slate-500">Push left or right</p>
+            <p className="text-[11px] text-slate-500">Flick left or right</p>
           </div>
 
-          <div
-            className="relative h-14"
-            onMouseEnter={() => setShowSliderValue(true)}
-            onMouseLeave={() => !isDraggingSlider && setShowSliderValue(false)}
+          <div className="flex justify-center mt-2"
           >
-            <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-slate-200" />
-            {fillWidth > 0.3 && (
-              <div
-                className={`absolute top-1/2 -translate-y-1/2 h-1 rounded-full ${sliderThumbPct < centerPct ? 'bg-sky-300' : 'bg-amber-300'}`}
-                style={{ left: `${fillStart}%`, width: `${fillWidth}%` }}
-              />
-            )}
-            <div className="absolute top-1/2 -translate-y-1/2 w-[2px] h-2 rounded-full bg-slate-400" style={{ left: '50%' }} />
-
-            {(showSliderValue || isDraggingSlider) && (
-              <div
-                className="absolute -top-0.5 -translate-x-1/2 rounded-full border border-slate-200 bg-white px-2.5 h-7 inline-flex items-center text-[11px] text-slate-800"
-                style={{ left: `${sliderThumbPct}%`, fontFamily: 'DM Mono, monospace' }}
-              >
-                {formatTravelClock(maxH)}
+            <div
+              ref={joystickZoneRef}
+              className={`fomo-joystick ${isJoystickActive ? 'is-active' : ''}`}
+              onPointerDown={onJoystickPointerDown}
+              onPointerMove={onJoystickPointerMove}
+              onPointerUp={onJoystickPointerUp}
+              onPointerCancel={onJoystickPointerUp}
+              role="slider"
+              aria-label="Travel joystick"
+              aria-valuemin={MIN_TRAVEL_H}
+              aria-valuemax={MAX_TRAVEL_H}
+              aria-valuenow={maxH}
+            >
+              <div className="fomo-joystick-base" />
+              <div className="fomo-joystick-track" />
+              <div className="fomo-joystick-stick" style={{ transform: `translateX(${joyX * JOYSTICK_MAX_PX}px)` }}>
+                <div className={`fomo-joystick-knob ${joystickNudge ? 'joystick-knob-nudge' : ''}`} />
               </div>
-            )}
-
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              step={1}
-              value={sliderPos}
-              onChange={e => handleSliderChange(Number(e.target.value))}
-              onPointerDown={() => {
-                setIsDraggingSlider(true)
-                setShowSliderValue(true)
-                setJoystickNudge(false)
-              }}
-              onPointerUp={() => {
-                setIsDraggingSlider(false)
-                setShowSliderValue(false)
-              }}
-              onBlur={() => {
-                setIsDraggingSlider(false)
-                setShowSliderValue(false)
-              }}
-              className={`center-slider ${joystickNudge ? 'joystick-nudge' : ''}`}
-              aria-label="Travel time slider"
-            />
+            </div>
           </div>
 
+          <div className="mt-2 text-center text-[11px] text-slate-500">
+            Range now: {formatTravelClock(Math.max(MIN_TRAVEL_H, maxH - travelWindowH))} to {formatTravelClock(Math.min(MAX_TRAVEL_H, maxH + travelWindowH))}
+          </div>
           <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
             <span>1h ±30m</span>
             <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>2h ±1h</span>
@@ -1019,7 +1081,7 @@ export default function Home() {
             </div>
           )}
 
-          <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isDraggingSlider) ? 'opacity-60' : 'opacity-100'}`}>
+          <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isJoystickActive) ? 'opacity-60' : 'opacity-100'}`}>
             {visibleRows.map((escape, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCard === index
