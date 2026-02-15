@@ -307,6 +307,7 @@ function SunBar({
   forecastSunMin,
   showHourLabels = true,
   isLoading = false,
+  compact = false,
 }: {
   timeline: SunTimeline
   demo: boolean
@@ -317,6 +318,7 @@ function SunBar({
   forecastSunMin?: number
   showHourLabels?: boolean
   isLoading?: boolean
+  compact?: boolean
 }) {
   const h = demo ? 10.17 : new Date().getHours() + new Date().getMinutes() / 60
   const nowPct = Math.max(0, Math.min(100, (h / 24) * 100))
@@ -352,7 +354,7 @@ function SunBar({
                 {label || day}
               </span>
               <div className={`tl-wrap flex-1 ${isLoading ? 'timeline-loading' : ''}`}>
-                <div className="tl-bar">
+                <div className={`tl-bar ${compact ? 'h-[20px]' : ''}`}>
                   {leftNightPct > 0 && <div className="tl-seg tl-night" style={{ width: `${leftNightPct}%` }} />}
                   <div className="h-full flex" style={{ width: `${daylightPct}%` }}>
                     {daySegments.map((seg, i) => (
@@ -665,20 +667,52 @@ export default function Home() {
 
   return (
     <div>
-      <div
-        className="fixed right-2.5 sm:right-4 z-[100] flex items-center"
-        style={{ top: 'max(8px, env(safe-area-inset-top))' }}
-      >
-        <button
-          onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
-          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-          className={`live-toggle ${demo ? 'is-demo' : 'is-live'} `}
-        >
-          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
-          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
-          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
-        </button>
-      </div>
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="max-w-xl mx-auto px-2.5 h-12 flex items-center gap-2">
+          <label className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-[10px] font-medium border bg-white border-slate-200 text-slate-600 min-w-0">
+            <LocI c="w-3 h-3" />
+            <select
+              value={selectedCity}
+              onChange={e => selectManualCity(e.target.value)}
+              className="bg-transparent text-[10px] font-semibold focus:outline-none text-slate-700 min-w-0"
+              aria-label="Select origin city"
+            >
+              {MANUAL_ORIGIN_CITIES.map(city => (
+                <option key={city.name} value={city.name} className="text-slate-800">
+                  {city.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex-1 flex justify-center">
+            <div className="inline-flex p-0.5 rounded-full border border-slate-200 bg-slate-50">
+              <button
+                onClick={() => setTripSpanManual('daytrip')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTripSpanManual('plus1day')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
+              >
+                Tomorrow
+              </button>
+            </div>
+          </div>
+
+          <button
+            onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
+            aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+            className={`live-toggle ${demo ? 'is-demo' : 'is-live'}`}
+          >
+            <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+            <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+            <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
+          </button>
+        </div>
+      </header>
 
       {/* ══════ HERO ══════ */}
       <section className="hero-day pt-7 sm:pt-8 pb-12 sm:pb-14 px-4 relative">
@@ -700,42 +734,25 @@ export default function Home() {
             style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
             Stop chasing clouds. Find sun. ☀️
           </p>
-          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
-            <label className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border bg-white/90 border-slate-200 text-slate-600`}>
-              <LocI c="w-3 h-3" />
-              <select
-                value={selectedCity}
-                onChange={e => selectManualCity(e.target.value)}
-                className={`bg-transparent text-[10px] font-medium focus:outline-none text-slate-700`}
-                aria-label="Select origin city"
-              >
-                {MANUAL_ORIGIN_CITIES.map(city => (
-                  <option key={city.name} value={city.name} className="text-slate-800">
-                    {city.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className={`inline-flex p-1 rounded-full border border-slate-200 bg-slate-50`}>
-              <span className={`px-2 self-center text-[9px] font-semibold uppercase tracking-[1px] text-slate-400`}>Chasing sun</span>
-              <button
-                onClick={() => setTripSpanManual('daytrip')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-              >
-                Today
-              </button>
-              <button
-                onClick={() => setTripSpanManual('plus1day')}
-                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}
-              >
-                Tomorrow
-              </button>
-            </div>
-          </div>
           {data && (
-            <p className={`mt-1 text-[10px] sm:text-[11px] text-slate-500`}>
-              {origin.name} now: {originWeatherText} {Math.round(originTempC)}° · <SunHoursInline minutes={originSunMin} valueClass="font-semibold text-[11px] text-slate-700" unitClass="text-[10px] text-slate-500" /> sun
-            </p>
+            <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-left">
+              <p className="text-[11px] text-slate-600">
+                ☁️ {Math.round(originTempC)}°C · {originWeatherText} · <SunHoursInline minutes={originSunMin} valueClass="text-[12px] font-semibold text-slate-700" unitClass="text-[10px] text-slate-500" /> sun remaining
+              </p>
+              <div className="mt-1">
+                <SunBar
+                  timeline={data.origin_timeline}
+                  demo={demo}
+                  sunWindow={data.sun_window}
+                  dayFocus={dayFocus}
+                  label={origin.name}
+                  forecastSunMin={originSunMin}
+                  showHourLabels={false}
+                  compact
+                  isLoading={loading}
+                />
+              </div>
+            </div>
           )}
 
           {data && topEscape && (
@@ -823,7 +840,7 @@ export default function Home() {
 
       {/* ══════ CONTROLS ══════ */}
       <section ref={controlAnchorRef} className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
-        <div className={`sm:hidden sticky z-30 mb-2 ${isMobileControlSticky ? 'block' : 'hidden'}`} style={{ top: 'calc(max(8px, env(safe-area-inset-top)) + 34px)' }}>
+        <div className={`sm:hidden sticky z-30 mb-2 ${isMobileControlSticky ? 'block' : 'hidden'}`} style={{ top: 'calc(max(8px, env(safe-area-inset-top)) + 48px)' }}>
           <div className={`rounded-xl border px-2.5 py-2 shadow-sm backdrop-blur-sm border-slate-200 bg-white/92`}>
             <div className="flex items-center justify-between gap-2">
               <span className={`text-[10px] font-semibold text-slate-600`}>Travel {formatTravelClock(maxH)} · {sortLabel}</span>
