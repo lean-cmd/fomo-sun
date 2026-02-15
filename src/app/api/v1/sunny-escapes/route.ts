@@ -20,12 +20,36 @@ type ScoredWithTravel = {
 }
 
 const DEMO_TRAIN_FAST_IDS = new Set([
-  'zurich',
-  'bern',
+  'solothurn',
+  'olten',
+  'grenchen',
+  'biel-bienne',
+  'aarau',
+  'baden-limmat-thermal',
+  'brugg-aargau',
+  'zofingen',
+  'sursee',
   'lucerne',
+  'spiez',
   'thun',
   'interlaken',
-  'freiburg-im-breisgau',
+  'zurich',
+  'bern',
+  'rapperswil-lakeside',
+  'walenstadt',
+  'chur-city',
+  'st-moritz',
+])
+
+const DEMO_TRAIN_SLOW_IDS = new Set([
+  'chasseral',
+  'weissenstein',
+  'pilatus',
+  'rigi',
+  'napf',
+  'grand-ballon',
+  'hohneck',
+  'feldberg-schwarzwald',
 ])
 
 const LIVE_RATE_WINDOW_MS = 60_000
@@ -48,7 +72,33 @@ function avg(values: number[]) {
 
 function demoTrainFactor(id: string): number {
   const hash = id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
-  return 0.66 + (hash % 8) * 0.02 // 0.66 - 0.80
+  return 0.62 + (hash % 7) * 0.025 // 0.62 - 0.77
+}
+
+function mapsPlaceLabel(name: string) {
+  const value = name.trim()
+  if (!value) return value
+  const lower = value.toLowerCase()
+  if (lower.includes('switzerland') || lower.includes('germany') || lower.includes('france') || value.includes(',')) {
+    return value
+  }
+  return `${value}, Switzerland`
+}
+
+function buildGoogleMapsDirectionsUrl(mapsName: string, originName?: string) {
+  const p = new URLSearchParams({
+    api: '1',
+    destination: mapsPlaceLabel(mapsName),
+    travelmode: 'driving',
+  })
+  if (originName?.trim()) p.set('origin', mapsPlaceLabel(originName))
+  return `https://www.google.com/maps/dir/?${p.toString()}`
+}
+
+function buildSbbTimetableUrl(sbbName?: string | null, originName = 'Basel') {
+  if (!sbbName) return undefined
+  const p = new URLSearchParams({ from: originName, to: sbbName })
+  return `https://www.sbb.ch/en/timetable.html?${p.toString()}`
 }
 
 function locationKey(lat: number, lon: number) {
@@ -132,6 +182,8 @@ function normalizeQueryCacheKey(input: {
   limit: number
   requestedDemo: boolean
   tripSpan: TripSpan
+  originName: string
+  originKind: 'manual' | 'gps' | 'default'
 }) {
   const latKey = input.lat.toFixed(3)
   const lonKey = input.lon.toFixed(3)
@@ -147,6 +199,8 @@ function normalizeQueryCacheKey(input: {
     `limit=${input.limit}`,
     `demo=${input.requestedDemo ? 1 : 0}`,
     `span=${input.tripSpan}`,
+    `origin=${input.originName.toLowerCase() || '-'}`,
+    `origin_kind=${input.originKind}`,
   ].join('&')
 }
 
@@ -320,6 +374,14 @@ export async function GET(request: NextRequest) {
     ? Math.min(500, Math.max(1, rawLimit))
     : Math.min(10, Math.max(1, rawLimit))
   const tripSpan = normalizeTripSpan(sp.get('trip_span'))
+  const originNameParam = (sp.get('origin_name') || '').trim().slice(0, 80)
+  const originKind = sp.get('origin_kind') === 'manual'
+    ? 'manual'
+    : sp.get('origin_kind') === 'gps'
+      ? 'gps'
+      : 'default'
+  const mapsOriginName = originKind === 'manual' ? originNameParam : ''
+  const sbbOriginName = originNameParam || 'Basel'
 
   const requestedDemo = sp.get('demo') === 'true'
   let liveDebugPath = requestedDemo ? 'demo-requested' : 'live-requested'
@@ -329,7 +391,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, mode, hasGA, types, limit, requestedDemo, tripSpan,
+    lat, lon, maxTravelH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
   })
   const cached = queryResponseCache.get(cacheKey)
   if (cached && cached.expires_at > Date.now()) {
@@ -379,11 +441,19 @@ export async function GET(request: NextRequest) {
     const car = (mode === 'car' || mode === 'both') ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'car') : undefined
     let train = (mode === 'train' || mode === 'both') ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'train') : undefined
 
-    if (demoMode && car && train && DEMO_TRAIN_FAST_IDS.has(dest.id)) {
-      train = {
-        ...train,
-        duration_min: Math.max(28, Math.round(car.duration_min * demoTrainFactor(dest.id))),
-        changes: Math.max(0, Math.min(2, (train.changes ?? 1) - 1)),
+    if (demoMode && car && train) {
+      if (DEMO_TRAIN_FAST_IDS.has(dest.id)) {
+        train = {
+          ...train,
+          duration_min: Math.max(22, Math.round(car.duration_min * demoTrainFactor(dest.id))),
+          changes: Math.max(0, Math.min(1, (train.changes ?? 1) - 1)),
+        }
+      } else if (DEMO_TRAIN_SLOW_IDS.has(dest.id)) {
+        train = {
+          ...train,
+          duration_min: Math.max(car.duration_min + 18, Math.round(car.duration_min * 1.35)),
+          changes: Math.max(1, Math.min(3, (train.changes ?? 1) + 1)),
+        }
       }
     }
 
@@ -658,15 +728,21 @@ export async function GET(request: NextRequest) {
         train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
       },
       plan: r.destination.plan_template.split(' | '),
-      links: { google_maps: r.destination.maps_url, sbb: r.destination.sbb_url, webcam: r.destination.webcam_url },
+      links: {
+        google_maps: buildGoogleMapsDirectionsUrl(r.destination.maps_name, mapsOriginName),
+        sbb: buildSbbTimetableUrl(r.destination.sbb_name, sbbOriginName),
+        webcam: r.destination.webcam_url,
+      },
       sun_timeline: liveTimeline ?? getMockSunTimeline(r.destination, demoMode),
       tomorrow_sun_hours: liveTomorrowSun ?? getMockTomorrowSunHoursForDest(r.destination, demoMode),
     }
   })
 
-  const originName = (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
-    ? 'Basel'
-    : `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+  const originName = originNameParam || (
+    (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
+      ? 'Basel'
+      : `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+  )
 
   const liveMaxSunHoursToday = !demoMode
     ? Math.max(

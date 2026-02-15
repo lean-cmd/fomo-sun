@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DaylightWindow, SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
+import { Car, TrainFront } from 'lucide-react'
 
 // ── Icons ─────────────────────────────────────────────────────────────
-const CarI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" /></svg>
-const TrainI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 17.25h9m-9 0 1.5 3m6-3-1.5 3M6.75 3.75h10.5A1.5 1.5 0 0 1 18.75 5.25v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3v-9a1.5 1.5 0 0 1 1.5-1.5Zm1.5 3h7.5m-7.5 3h.008v.008H8.25V9.75Zm7.5 0h.008v.008H15.75V9.75Z" /></svg>
+const CarI = ({ c = 'w-4 h-4' }: { c?: string }) => <Car className={c} strokeWidth={1.85} />
+const TrainI = ({ c = 'w-4 h-4' }: { c?: string }) => <TrainFront className={c} strokeWidth={1.85} />
 const BothI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
 const FilterI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
 const MapI = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
@@ -116,18 +117,30 @@ function extractTemp(summary?: string) {
 
 type CitySeed = { name: string; lat: number; lon: number }
 
-const SWISS_CITY_FALLBACKS: CitySeed[] = [
+const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
-  { name: 'Zürich', lat: 47.3769, lon: 8.5417 },
+  { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
   { name: 'Bern', lat: 46.948, lon: 7.4474 },
+  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
+  { name: 'Aarau', lat: 47.3925, lon: 8.0442 },
+  { name: 'Olten', lat: 47.3505, lon: 7.9032 },
+  { name: 'Solothurn', lat: 47.2088, lon: 7.537 },
+  { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
+  { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
+  { name: 'Baden', lat: 47.4738, lon: 8.3077 },
+  { name: 'Biel/Bienne', lat: 47.1368, lon: 7.2468 },
+  { name: 'Thun', lat: 46.7579, lon: 7.627 },
+  { name: 'Zug', lat: 47.1662, lon: 8.5155 },
+  { name: 'Schaffhausen', lat: 47.6973, lon: 8.6349 },
+  { name: 'Frauenfeld', lat: 47.5552, lon: 8.8988 },
+]
+
+const SWISS_CITY_FALLBACKS: CitySeed[] = [
+  ...MANUAL_ORIGIN_CITIES,
   { name: 'Geneva', lat: 46.2044, lon: 6.1432 },
   { name: 'Lausanne', lat: 46.5197, lon: 6.6323 },
-  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
   { name: 'Lugano', lat: 46.0037, lon: 8.9511 },
-  { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
-  { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
   { name: 'Fribourg', lat: 46.8065, lon: 7.161 },
-  { name: 'Biel/Bienne', lat: 47.1368, lon: 7.2468 },
   { name: 'Neuchâtel', lat: 46.9896, lon: 6.9293 },
 ]
 
@@ -304,7 +317,9 @@ export default function Home() {
   const [openSetting, setOpenSetting] = useState<string | null>(null)
   const [demo, setDemo] = useState(true)
   const [scorePopup, setScorePopup] = useState<number | null>(null)
-  const [userLoc, setUserLoc] = useState<{ lat: number; lon: number; name: string } | null>(null)
+  const [selectedCity, setSelectedCity] = useState<string>('Basel')
+  const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
+  const [originMode, setOriginMode] = useState<'manual' | 'gps'>('manual')
   const [locating, setLocating] = useState(false)
   const [hasSetOptimal, setHasSetOptimal] = useState(false)
   const [optimalHint, setOptimalHint] = useState(false)
@@ -317,7 +332,11 @@ export default function Home() {
   const requestCtrlRef = useRef<AbortController | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
-  const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
+  const manualOrigin = useMemo(
+    () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
+    [selectedCity]
+  )
+  const origin = originMode === 'gps' && gpsOrigin ? gpsOrigin : manualOrigin
 
   useEffect(() => {
     const t = setTimeout(() => setQueryMaxH(maxH), 260)
@@ -335,6 +354,8 @@ export default function Home() {
         max_travel_h: String(queryMaxH), mode, ga: String(ga), limit: '6', demo: String(demo),
         trip_span: tripSpan,
       })
+      p.set('origin_kind', originMode)
+      p.set('origin_name', origin.name)
       if (types.length) p.set('types', types.join(','))
       const res = await fetch(`/api/v1/sunny-escapes?${p}`, { signal: ctrl.signal })
       const d: SunnyEscapesResponse = await res.json()
@@ -351,7 +372,7 @@ export default function Home() {
     } finally {
       if (requestCtrlRef.current === ctrl) setLoading(false)
     }
-  }, [queryMaxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal, tripSpan])
+  }, [queryMaxH, mode, ga, types, demo, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal, tripSpan])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -394,18 +415,26 @@ export default function Home() {
           const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&count=8&language=en&format=json`)
           const d = await r.json()
           const nearestCity = pickNearestCityName(d) || localFallback
-          setUserLoc({ lat, lon, name: nearestCity })
+          setGpsOrigin({ lat, lon, name: nearestCity })
+          setOriginMode('gps')
         } catch {
-          setUserLoc({
+          setGpsOrigin({
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
             name: fallbackNearestCity(pos.coords.latitude, pos.coords.longitude),
           })
+          setOriginMode('gps')
         }
         setLocating(false); setHasSetOptimal(false); setOptimalH(null)
       },
       () => setLocating(false), { enableHighAccuracy: false, timeout: 8000 }
     )
+  }
+  const selectManualCity = (name: string) => {
+    setSelectedCity(name)
+    setOriginMode('manual')
+    setHasSetOptimal(false)
+    setOptimalH(null)
   }
 
   const toggleType = (t: DestinationType) => setTypes(p => p.includes(t) ? p.filter(x => x !== t) : [...p, t])
@@ -526,9 +555,21 @@ export default function Home() {
             {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border ${night ? 'bg-slate-800/80 border-slate-600 text-slate-200' : 'bg-white/90 border-slate-200 text-slate-600'}`}>
-              <LocI c="w-3 h-3" /> {origin.name}
-            </span>
+            <label className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border ${night ? 'bg-slate-800/80 border-slate-600 text-slate-200' : 'bg-white/90 border-slate-200 text-slate-600'}`}>
+              <LocI c="w-3 h-3" />
+              <select
+                value={selectedCity}
+                onChange={e => selectManualCity(e.target.value)}
+                className={`bg-transparent text-[10px] font-medium focus:outline-none ${night ? 'text-slate-200' : 'text-slate-700'}`}
+                aria-label="Select origin city"
+              >
+                {MANUAL_ORIGIN_CITIES.map(city => (
+                  <option key={city.name} value={city.name} className="text-slate-800">
+                    {city.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               onClick={detectLocation}
               disabled={locating}
@@ -537,12 +578,12 @@ export default function Home() {
               {locating && <span className="loc-pulse relative w-2 h-2 rounded-full bg-amber-500" />}
               <LocI c="w-3 h-3" /> {locating ? 'Locating...' : 'Use my location'}
             </button>
-            {userLoc && (
+            {originMode === 'gps' && (
               <button
-                onClick={() => { setUserLoc(null); setHasSetOptimal(false); setOptimalH(null) }}
+                onClick={() => { setOriginMode('manual'); setHasSetOptimal(false); setOptimalH(null) }}
                 className={`text-[10px] underline-offset-2 hover:underline ${night ? 'text-slate-400' : 'text-slate-500'}`}
               >
-                Reset location
+                Use selected city
               </button>
             )}
           </div>
@@ -883,8 +924,18 @@ export default function Home() {
                         ))}
                       </div>
                       <div className="flex gap-1.5 mt-3">
-                        {e.links.google_maps && <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-700 transition-colors"><MapI /> Navigate</a>}
-                        {e.links.sbb && <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors"><TrainI c="w-3.5 h-3.5" /> SBB</a>}
+                        {mode !== 'train' && e.links.google_maps && (
+                          <a href={e.links.google_maps} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-slate-800 text-white text-[11px] font-semibold hover:bg-slate-700 transition-colors">
+                            <MapI />
+                            Navigate
+                          </a>
+                        )}
+                        {mode !== 'car' && e.links.sbb && (
+                          <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors">
+                            <TrainI c="w-3.5 h-3.5" />
+                            SBB Timetable
+                          </a>
+                        )}
                         {e.links.webcam && <a href={e.links.webcam} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white text-slate-500 border border-slate-200 text-[11px] font-semibold hover:bg-slate-50 transition-colors"><CamI /> Webcam</a>}
                       </div>
                       <a
