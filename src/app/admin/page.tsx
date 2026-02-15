@@ -9,6 +9,7 @@ import { formatSunHours } from '@/lib/format'
 type SortMode = 'score' | 'sun' | 'name' | 'altitude'
 type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
+type DestinationQuality = 'verified' | 'curated' | 'generated'
 
 type Escape = SunnyEscapesResponse['escapes'][number]
 
@@ -69,6 +70,11 @@ export default function AdminDiagnosticsPage() {
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
   const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true })
   const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({})
+  const [activeQualities, setActiveQualities] = useState<Record<DestinationQuality, boolean>>({
+    verified: true,
+    curated: true,
+    generated: true,
+  })
   const [page, setPage] = useState(1)
   const [meta, setMeta] = useState({
     liveSource: '',
@@ -174,6 +180,15 @@ export default function AdminDiagnosticsPage() {
     return out
   }, [rows])
 
+  const byQualityCount = useMemo(() => {
+    const out: Record<DestinationQuality, number> = { verified: 0, curated: 0, generated: 0 }
+    for (const r of rows) {
+      const quality = (r.destination.quality ?? 'generated') as DestinationQuality
+      out[quality] = (out[quality] || 0) + 1
+    }
+    return out
+  }, [rows])
+
   const filteredSorted = useMemo(() => {
     const daySunMin = (r: Escape) => (
       forecastDay === 'today'
@@ -181,9 +196,13 @@ export default function AdminDiagnosticsPage() {
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
     const selectedTypes = Object.entries(activeTypes).filter(([, enabled]) => enabled).map(([type]) => type)
+    const selectedQualities = Object.entries(activeQualities)
+      .filter(([, enabled]) => enabled)
+      .map(([quality]) => quality as DestinationQuality)
 
     const filtered = rows
       .filter(r => activeCountries[r.destination.country] !== false)
+      .filter(r => selectedQualities.includes((r.destination.quality ?? 'generated') as DestinationQuality))
       .filter(r => {
         if (selectedTypes.length === 0) return true
         return r.destination.types.some(t => selectedTypes.includes(t))
@@ -206,7 +225,7 @@ export default function AdminDiagnosticsPage() {
     })
 
     return filtered
-  }, [rows, activeCountries, activeTypes, sortMode, forecastDay, search])
+  }, [rows, activeCountries, activeQualities, activeTypes, sortMode, forecastDay, search])
 
   const pageSize = pageSizeMode === 'all' ? filteredSorted.length : Number(pageSizeMode)
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / Math.max(1, pageSize)))
@@ -218,7 +237,7 @@ export default function AdminDiagnosticsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, forecastDay, sortMode, activeCountries, activeTypes, pageSizeMode])
+  }, [search, forecastDay, sortMode, activeCountries, activeQualities, activeTypes, pageSizeMode])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
@@ -245,6 +264,7 @@ export default function AdminDiagnosticsPage() {
 
   const toggleCountry = (country: string) => setActiveCountries(prev => ({ ...prev, [country]: !prev[country] }))
   const toggleType = (type: string) => setActiveTypes(prev => ({ ...prev, [type]: !prev[type] }))
+  const toggleQuality = (quality: DestinationQuality) => setActiveQualities(prev => ({ ...prev, [quality]: !prev[quality] }))
 
   const toggleCompare = (id: string) => {
     setSelectedCompare(prev => {
@@ -261,10 +281,11 @@ export default function AdminDiagnosticsPage() {
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
 
-    const header = ['name', 'country', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'temp_c', 'condition']
+    const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'temp_c', 'condition']
     const lines = filteredSorted.map(r => [
       r.destination.name,
       r.destination.country,
+      r.destination.quality ?? 'generated',
       r.destination.lat,
       r.destination.lon,
       r.destination.altitude_m,
@@ -387,18 +408,35 @@ export default function AdminDiagnosticsPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3">
-          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Type filters</p>
-          <div className="flex flex-wrap gap-2">
-            {allTypes.map(type => (
-              <button
-                key={type}
-                onClick={() => toggleType(type)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypes[type] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
-              >
-                {type} ({byTypeCount[type] || 0})
-              </button>
-            ))}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3 space-y-3">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Quality filters</p>
+            <div className="flex flex-wrap gap-2">
+              {(['verified', 'curated', 'generated'] as DestinationQuality[]).map(quality => (
+                <button
+                  key={quality}
+                  onClick={() => toggleQuality(quality)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeQualities[quality] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+                >
+                  {quality} ({byQualityCount[quality] || 0})
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Type filters</p>
+            <div className="flex flex-wrap gap-2">
+              {allTypes.map(type => (
+                <button
+                  key={type}
+                  onClick={() => toggleType(type)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypes[type] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+                >
+                  {type} ({byTypeCount[type] || 0})
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -465,6 +503,7 @@ export default function AdminDiagnosticsPage() {
                 <th className="text-left px-3 py-2 font-semibold">Compare</th>
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Country</th>
+                <th className="text-left px-3 py-2 font-semibold">Quality</th>
                 <th className="text-right px-3 py-2 font-semibold">Altitude</th>
                 <th className="text-right px-3 py-2 font-semibold">Sun</th>
                 <th className="text-right px-3 py-2 font-semibold">FOMO</th>
@@ -476,11 +515,11 @@ export default function AdminDiagnosticsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
+                  <td colSpan={10} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
                 </tr>
               ) : filteredSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
+                  <td colSpan={10} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
                 </tr>
               ) : (
                 pagedRows.map((row) => {
@@ -510,6 +549,7 @@ export default function AdminDiagnosticsPage() {
                         </td>
                         <td className="px-3 py-2.5 font-medium text-slate-800">{row.destination.name}</td>
                         <td className="px-3 py-2.5 text-slate-600">{row.destination.country}</td>
+                        <td className="px-3 py-2.5 text-slate-600">{row.destination.quality ?? 'generated'}</td>
                         <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
@@ -522,7 +562,7 @@ export default function AdminDiagnosticsPage() {
 
                       {isExpanded && (
                         <tr className="bg-slate-50/70 border-t border-slate-100">
-                          <td colSpan={9} className="px-3 py-3">
+                          <td colSpan={10} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>

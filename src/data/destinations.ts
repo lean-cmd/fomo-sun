@@ -7,7 +7,7 @@ import { Destination } from '@/lib/types'
  * - maps_name for Google Maps place-based deep links
  * - sbb_name for SBB timetable deep links
  */
-export const destinations: Destination[] = [
+const destinationCatalog: Destination[] = [
   {
     id: 'aarau',
     name: 'Aarau',
@@ -4733,6 +4733,11 @@ export const destinations: Destination[] = [
     sbb_url: 'https://www.sbb.ch/en/timetable.html',
   },
 ]
+
+export const destinations: Destination[] = destinationCatalog.map((destination) => ({
+  quality: destination.quality ?? 'generated',
+  ...destination,
+}))
 
 /** Default fallback origin: Basel */
 export const DEFAULT_ORIGIN = {
