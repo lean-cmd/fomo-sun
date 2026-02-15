@@ -38,13 +38,34 @@ export interface LiveSunTimes {
 
 const BASE = 'https://api.open-meteo.com/v1'
 
+const CURRENT_TTL_MS = 5 * 60 * 1000
+const HOURLY_TTL_MS = 5 * 60 * 1000
+const SUN_TTL_MS = 60 * 60 * 1000
+
+let currentCache = new Map<string, { expires_at: number; data: LiveWeatherResult }>()
+let hourlyCache = new Map<string, {
+  expires_at: number
+  data: { hours: LiveForecastHour[]; total_sunshine_today_min: number; total_sunshine_tomorrow_min: number }
+}>()
+let sunCache = new Map<string, { expires_at: number; data: LiveSunTimes }>()
+
+function cacheKey(lat: number, lon: number) {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}`
+}
+
 /**
  * Get current conditions for a location
  */
 export async function getCurrentWeather(lat: number, lon: number): Promise<LiveWeatherResult> {
+  const key = cacheKey(lat, lon)
+  const now = Date.now()
+  const cached = currentCache.get(key)
+  if (cached && cached.expires_at > now) return cached.data
+
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,cloud_cover,cloud_cover_low,visibility,sunshine_duration,wind_speed_10m&timezone=auto`
 
   const res = await fetch(url, { next: { revalidate: 300 } }) // Cache 5 min
+  if (!res.ok) throw new Error(`Open-Meteo current failed: ${res.status}`)
   const data = await res.json()
   const c = data.current
 
@@ -58,7 +79,7 @@ export async function getCurrentWeather(lat: number, lon: number): Promise<LiveW
   else if (c.cloud_cover > 50) conditions = `Partly cloudy, ${Math.round(c.temperature_2m)}°C`
   else conditions = `Mostly clear, ${Math.round(c.temperature_2m)}°C`
 
-  return {
+  const result = {
     temperature_c: c.temperature_2m,
     cloud_cover_pct: c.cloud_cover,
     low_cloud_cover_pct: cloudLow,
@@ -68,6 +89,8 @@ export async function getCurrentWeather(lat: number, lon: number): Promise<LiveW
     conditions_text: conditions,
     wind_speed_kmh: c.wind_speed_10m ?? 0,
   }
+  currentCache.set(key, { expires_at: now + CURRENT_TTL_MS, data: result })
+  return result
 }
 
 /**
@@ -78,9 +101,15 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<{
   total_sunshine_today_min: number
   total_sunshine_tomorrow_min: number
 }> {
+  const key = cacheKey(lat, lon)
+  const now = Date.now()
+  const cached = hourlyCache.get(key)
+  if (cached && cached.expires_at > now) return cached.data
+
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,cloud_cover,cloud_cover_low,sunshine_duration&forecast_days=2&timezone=auto`
 
   const res = await fetch(url, { next: { revalidate: 300 } })
+  if (!res.ok) throw new Error(`Open-Meteo hourly failed: ${res.status}`)
   const data = await res.json()
   const h = data.hourly
 
@@ -92,25 +121,33 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<{
     temperature_c: h.temperature_2m?.[i] ?? 0,
   }))
 
-  const now = new Date()
-  const todayStr = now.toISOString().slice(0, 10)
-  const tomorrow = new Date(now)
+  const nowDate = new Date()
+  const todayStr = nowDate.toISOString().slice(0, 10)
+  const tomorrow = new Date(nowDate)
   tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowStr = tomorrow.toISOString().slice(0, 10)
 
   const todaySun = hours.filter(h => h.time.startsWith(todayStr)).reduce((s, h) => s + h.sunshine_duration_min, 0)
   const tomorrowSun = hours.filter(h => h.time.startsWith(tomorrowStr)).reduce((s, h) => s + h.sunshine_duration_min, 0)
 
-  return { hours, total_sunshine_today_min: todaySun, total_sunshine_tomorrow_min: tomorrowSun }
+  const result = { hours, total_sunshine_today_min: todaySun, total_sunshine_tomorrow_min: tomorrowSun }
+  hourlyCache.set(key, { expires_at: now + HOURLY_TTL_MS, data: result })
+  return result
 }
 
 /**
  * Get sunrise/sunset times
  */
 export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTimes> {
+  const key = cacheKey(lat, lon)
+  const now = Date.now()
+  const cached = sunCache.get(key)
+  if (cached && cached.expires_at > now) return cached.data
+
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=1&timezone=auto`
 
   const res = await fetch(url, { next: { revalidate: 3600 } })
+  if (!res.ok) throw new Error(`Open-Meteo sun-times failed: ${res.status}`)
   const data = await res.json()
 
   const sunrise = data.daily.sunrise[0]
@@ -118,11 +155,13 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
   const sunsetDate = new Date(sunset)
   const minutesUntil = Math.max(0, Math.round((sunsetDate.getTime() - Date.now()) / 60000))
 
-  return {
+  const result = {
     sunrise: new Date(sunrise).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
     sunset: new Date(sunset).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
     sunset_minutes_until: minutesUntil,
   }
+  sunCache.set(key, { expires_at: now + SUN_TTL_MS, data: result })
+  return result
 }
 
 /**

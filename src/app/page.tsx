@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
 
 // ── Icons ─────────────────────────────────────────────────────────────
@@ -109,19 +109,29 @@ export default function Home() {
   const [optimalHint, setOptimalHint] = useState(false)
   const [optimalH, setOptimalH] = useState<number | null>(null)
   const [showOptimalInfo, setShowOptimalInfo] = useState(false)
+  const [queryMaxH, setQueryMaxH] = useState(maxH)
+  const requestCtrlRef = useRef<AbortController | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
   const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
 
+  useEffect(() => {
+    const t = setTimeout(() => setQueryMaxH(maxH), 260)
+    return () => clearTimeout(t)
+  }, [maxH])
+
   const load = useCallback(async () => {
+    requestCtrlRef.current?.abort()
+    const ctrl = new AbortController()
+    requestCtrlRef.current = ctrl
     setLoading(true)
     try {
       const p = new URLSearchParams({
         lat: String(origin.lat), lon: String(origin.lon),
-        max_travel_h: String(maxH), mode, ga: String(ga), limit: '6', demo: String(demo),
+        max_travel_h: String(queryMaxH), mode, ga: String(ga), limit: '6', demo: String(demo),
       })
       if (types.length) p.set('types', types.join(','))
-      const res = await fetch(`/api/v1/sunny-escapes?${p}`)
+      const res = await fetch(`/api/v1/sunny-escapes?${p}`, { signal: ctrl.signal })
       const d: SunnyEscapesResponse = await res.json()
       setData(d)
       if (!hasSetOptimal && d.optimal_travel_h) {
@@ -131,9 +141,12 @@ export default function Home() {
         setHasSetOptimal(true)
         setOptimalHint(true)
       }
-    } catch (e) { console.error(e) }
-    finally { setLoading(false) }
-  }, [maxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal])
+    } catch (e) {
+      if ((e as Error)?.name !== 'AbortError') console.error(e)
+    } finally {
+      if (requestCtrlRef.current === ctrl) setLoading(false)
+    }
+  }, [queryMaxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -141,6 +154,7 @@ export default function Home() {
     const h = () => setScorePopup(null)
     document.addEventListener('click', h); return () => document.removeEventListener('click', h)
   }, [scorePopup])
+  useEffect(() => () => requestCtrlRef.current?.abort(), [])
   useEffect(() => {
     if (!optimalHint) return
     const t = setTimeout(() => setOptimalHint(false), 3600)
