@@ -280,6 +280,7 @@ export default function Home() {
   const [queryMaxH, setQueryMaxH] = useState(maxH)
   const [sortBy, setSortBy] = useState<SortMode>('best')
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
+  const [tripSpanTouched, setTripSpanTouched] = useState(false)
   const requestCtrlRef = useRef<AbortController | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
@@ -337,6 +338,16 @@ export default function Home() {
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
   }, [showOptimalInfo])
+  useEffect(() => {
+    if (!data || tripSpanTouched) return
+    if (data.sunset.is_past || data.sunset.minutes_until <= 30) {
+      if (tripSpan !== 'plus1day') {
+        setTripSpan('plus1day')
+        setHasSetOptimal(false)
+        setOptimalH(null)
+      }
+    }
+  }, [data, tripSpanTouched, tripSpan])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -433,25 +444,50 @@ export default function Home() {
     return `https://wa.me/?text=${encodeURIComponent(shareText)}`
   }
   const topWhatsAppHref = topEscape ? buildWhatsAppHref(topEscape) : '#'
+  const setTripSpanManual = (next: TripSpan) => {
+    setTripSpan(next)
+    setTripSpanTouched(true)
+    setHasSetOptimal(false)
+    setOptimalH(null)
+  }
 
   return (
     <div className={night ? 'night' : ''}>
+      <div
+        className="fixed right-3 sm:right-4 z-[80] flex flex-col items-end gap-1.5"
+        style={{ top: 'max(10px, env(safe-area-inset-top))' }}
+      >
+        <button
+          onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
+          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+          className={`live-toggle ${demo ? 'is-demo' : 'is-live'} ${night ? 'is-night' : ''}`}
+        >
+          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
+        </button>
+        <div className={`inline-flex p-1 rounded-full border shadow-sm ${night ? 'border-slate-600 bg-slate-800/90' : 'border-slate-200 bg-white/95 backdrop-blur-sm'}`}>
+          <button
+            onClick={() => setTripSpanManual('daytrip')}
+            className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+          >
+            Daytrip
+          </button>
+          <button
+            onClick={() => setTripSpanManual('plus1day')}
+            className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+          >
+            +1 day
+          </button>
+        </div>
+      </div>
+
       {/* ══════ HERO ══════ */}
       <section className={`${night ? 'hero-night' : 'hero-day'} pt-7 sm:pt-8 pb-12 sm:pb-14 px-4 relative`}>
         {!night && <>
           <div className="fog-w1 absolute top-10 left-0 w-full h-8 bg-gradient-to-r from-transparent via-slate-400/[.18] to-transparent rounded-full blur-[18px] pointer-events-none" />
           <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
         </>}
-
-        <button
-          onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
-          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-          className={`live-toggle fixed top-3 right-3 sm:top-4 sm:right-4 z-40 ${demo ? 'is-demo' : 'is-live'} ${night ? 'is-night' : ''}`}
-        >
-          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
-          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
-          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
-        </button>
 
         <div className="relative z-10 max-w-xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-2">
@@ -469,6 +505,27 @@ export default function Home() {
             style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
             {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
           </p>
+          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-2">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border ${night ? 'bg-slate-800/80 border-slate-600 text-slate-200' : 'bg-white/90 border-slate-200 text-slate-600'}`}>
+              <LocI c="w-3 h-3" /> {origin.name}
+            </span>
+            <button
+              onClick={detectLocation}
+              disabled={locating}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border transition-all ${locating ? 'bg-amber-50 border-amber-200 text-amber-500' : night ? 'bg-slate-700/80 border-slate-600 text-slate-300' : 'bg-white/90 border-slate-200 text-slate-600 hover:border-amber-300'}`}
+            >
+              {locating && <span className="loc-pulse relative w-2 h-2 rounded-full bg-amber-500" />}
+              <LocI c="w-3 h-3" /> {locating ? 'Locating...' : 'Use my location'}
+            </button>
+            {userLoc && (
+              <button
+                onClick={() => { setUserLoc(null); setHasSetOptimal(false); setOptimalH(null) }}
+                className={`text-[10px] underline-offset-2 hover:underline ${night ? 'text-slate-400' : 'text-slate-500'}`}
+              >
+                Reset location
+              </button>
+            )}
+          </div>
 
           {/* v15: Trust split cards with FOMO score rings + integrated WhatsApp */}
           {data && topEscape && (
@@ -543,22 +600,7 @@ export default function Home() {
       {/* ══════ CONTROLS ══════ */}
       <section className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
-
-          <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-2 flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-2 text-[13px]">
-              <LocI c="w-[16px] h-[16px] text-amber-500" />
-              <span className={`font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{origin.name}</span>
-              {userLoc && <button onClick={() => { setUserLoc(null); setHasSetOptimal(false) }} className="text-[10px] text-slate-400 hover:text-slate-600">(reset)</button>}
-            </div>
-            <button onClick={detectLocation} disabled={locating}
-              className={`relative flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border transition-all
-                ${locating ? 'bg-amber-50 border-amber-200 text-amber-500' : night ? 'bg-slate-700 border-slate-600 text-slate-300' : 'bg-white border-slate-200 text-slate-500 hover:border-amber-300'}`}>
-              {locating && <span className="loc-pulse relative w-2 h-2 rounded-full bg-amber-500" />}
-              <LocI c="w-3 h-3" /> {locating ? 'Locating...' : 'Use my location'}
-            </button>
-          </div>
-
-          <div className="px-4 sm:px-5 pt-2 pb-3.5 sm:pb-4">
+          <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-3.5 sm:pb-4">
             <div className="flex justify-between items-baseline mb-2">
               <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel time (±30m)</span>
               <span className={`text-[20px] sm:text-[22px] font-bold tabular-nums ${night ? 'text-slate-200' : 'text-slate-700'}`} style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
@@ -601,28 +643,6 @@ export default function Home() {
             )}
             {optimalHint && !night && (
               <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
-            )}
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className={`text-[10px] font-semibold uppercase tracking-[1.1px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>Trip span</span>
-              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
-                <button
-                  onClick={() => { setTripSpan('daytrip'); setHasSetOptimal(false); setOptimalH(null) }}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  Daytrip
-                </button>
-                <button
-                  onClick={() => { setTripSpan('plus1day'); setHasSetOptimal(false); setOptimalH(null) }}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  +1 day
-                </button>
-              </div>
-            </div>
-            {tripSpan === 'plus1day' && (
-              <p className={`mt-1 text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
-                FOMOscore uses today remaining + tomorrow forecast.
-              </p>
             )}
             <div className={`flex justify-between text-[8.5px] sm:text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
               <span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>4h 30m</span>
