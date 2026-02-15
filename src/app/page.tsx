@@ -34,10 +34,16 @@ type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 
 type CitySeed = { name: string; lat: number; lon: number }
 
-const MIN_TRAVEL_H = 1
-const MAX_TRAVEL_H = 3
-const JOYSTICK_CENTER_H = 2
+const MIN_TRAVEL_H = 0
+const MAX_TRAVEL_H = 4.5
 const JOYSTICK_MAX_PX = 42
+
+const TRAVEL_BANDS = [
+  { id: 'quick', label: '0-60min', minH: 0, maxH: 1, maxLabel: '1h' },
+  { id: 'short', label: '1h-2h', minH: 1, maxH: 2, maxLabel: '2h' },
+  { id: 'mid', label: '2h-3h', minH: 2, maxH: 3, maxLabel: '3h' },
+  { id: 'long', label: '3h+', minH: 3, maxH: 4.5, maxLabel: '4h30' },
+] as const
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
@@ -79,10 +85,6 @@ const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR' }
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
-}
-
-function quantizeHour(v: number) {
-  return clamp(Math.round(v * 4) / 4, MIN_TRAVEL_H, MAX_TRAVEL_H)
 }
 
 function normalizeWindow(win?: DaylightWindow): DaylightWindow {
@@ -317,7 +319,8 @@ function getBestTravel(escape: EscapeCard) {
 }
 
 export default function Home() {
-  const [maxH, setMaxH] = useState(2)
+  const [rangeIndex, setRangeIndex] = useState(1)
+  const [previewRangeIndex, setPreviewRangeIndex] = useState<number | null>(null)
   const [joyX, setJoyX] = useState(0)
   const [isJoystickActive, setIsJoystickActive] = useState(false)
   const [joystickNudge, setJoystickNudge] = useState(true)
@@ -343,8 +346,6 @@ export default function Home() {
   const [originMode, setOriginMode] = useState<'manual' | 'gps'>('manual')
   const [locating, setLocating] = useState(false)
 
-  const [queryMaxH, setQueryMaxH] = useState(maxH)
-
   const [expandedScoreDetails, setExpandedScoreDetails] = useState<Record<string, boolean>>({})
 
   const requestCtrlRef = useRef<AbortController | null>(null)
@@ -357,12 +358,17 @@ export default function Home() {
   const joyPrevXRef = useRef(0)
   const joystickPointerRef = useRef<number | null>(null)
   const joystickDirRef = useRef<'left' | 'right' | null>(null)
+  const joyBaseRangeRef = useRef(1)
+  const previewRangeRef = useRef<number | null>(null)
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
     [selectedCity]
   )
   const origin = originMode === 'gps' && gpsOrigin ? gpsOrigin : manualOrigin
+  const effectiveRangeIndex = previewRangeIndex ?? rangeIndex
+  const activeBand = TRAVEL_BANDS[effectiveRangeIndex]
+  const maxH = activeBand.maxH
 
   const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
   const topEscape = data?.escapes?.[0] ?? null
@@ -373,23 +379,30 @@ export default function Home() {
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
 
-  const travelFromJoy = useCallback((nextJoy: number) => {
-    const rawTravel = JOYSTICK_CENTER_H + nextJoy
-    return quantizeHour(clamp(rawTravel, MIN_TRAVEL_H, MAX_TRAVEL_H))
-  }, [])
-
-  const applyJoyPosition = useCallback((nextJoy: number) => {
+  const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
     const clamped = clamp(nextJoy, -1, 1)
     joyPosRef.current = clamped
     setJoyX(clamped)
-    setMaxH(prev => {
-      const nextTravel = travelFromJoy(clamped)
-      return prev === nextTravel ? prev : nextTravel
-    })
     if (Math.abs(clamped) > 0.06) {
       joystickDirRef.current = clamped > 0 ? 'right' : 'left'
     }
-  }, [travelFromJoy])
+    if (!updateRange) return
+
+    const magnitude = Math.abs(clamped)
+    let shift = 0
+    if (magnitude >= 0.72) shift = 2
+    else if (magnitude >= 0.24) shift = 1
+    if (clamped < 0) shift *= -1
+
+    const nextIndex = clamp(joyBaseRangeRef.current + shift, 0, TRAVEL_BANDS.length - 1)
+    const prevIndex = previewRangeRef.current ?? rangeIndex
+    if (nextIndex !== prevIndex) {
+      previewRangeRef.current = nextIndex
+      setPreviewRangeIndex(nextIndex)
+      joystickDirRef.current = nextIndex > prevIndex ? 'right' : 'left'
+      navigator.vibrate?.(4)
+    }
+  }, [rangeIndex])
 
   const stopJoystickAnim = useCallback(() => {
     if (joyAnimRef.current !== null) {
@@ -411,10 +424,10 @@ export default function Home() {
       const a = -spring * x - damping * v
       v += a * dt
       x += v * dt
-      applyJoyPosition(x)
+      applyJoyPosition(x, false)
       if (Math.abs(x) < 0.002 && Math.abs(v) < 0.01) {
         joyVelRef.current = 0
-        applyJoyPosition(0)
+        applyJoyPosition(0, false)
         setIsJoystickActive(false)
         joyAnimRef.current = null
         return
@@ -439,6 +452,8 @@ export default function Home() {
     setJoystickNudge(false)
     setIsJoystickActive(true)
     stopJoystickAnim()
+    joyBaseRangeRef.current = rangeIndex
+    previewRangeRef.current = rangeIndex
     const next = joyFromPointerX(e.clientX)
     joyPrevTsRef.current = performance.now()
     joyPrevXRef.current = next
@@ -465,24 +480,14 @@ export default function Home() {
       // no-op if pointer capture was already released
     }
     joystickPointerRef.current = null
+    const finalIndex = previewRangeRef.current ?? rangeIndex
+    setRangeIndex(finalIndex)
+    previewRangeRef.current = null
+    setPreviewRangeIndex(null)
     startJoystickSpringBack()
   }
 
-  useEffect(() => {
-    const t = setTimeout(() => setQueryMaxH(maxH), 200)
-    return () => clearTimeout(t)
-  }, [maxH])
-
-  const computeTravelWindowH = useCallback((travelH: number) => {
-    if (travelH <= JOYSTICK_CENTER_H) {
-      const ratio = (travelH - MIN_TRAVEL_H) / (JOYSTICK_CENTER_H - MIN_TRAVEL_H)
-      return 0.5 + clamp(ratio, 0, 1) * 0.5
-    }
-    return 1
-  }, [])
-
-  const travelWindowH = useMemo(() => computeTravelWindowH(maxH), [maxH, computeTravelWindowH])
-  const queryTravelWindowH = useMemo(() => computeTravelWindowH(queryMaxH), [queryMaxH, computeTravelWindowH])
+  const rangeLabel = activeBand.label
 
   useEffect(() => {
     requestCtrlRef.current?.abort()
@@ -495,8 +500,9 @@ export default function Home() {
         const p = new URLSearchParams({
           lat: String(origin.lat),
           lon: String(origin.lon),
-          max_travel_h: String(queryMaxH),
-          travel_window_h: String(Number(queryTravelWindowH.toFixed(2))),
+          max_travel_h: String(activeBand.maxH),
+          travel_min_h: String(activeBand.minH),
+          travel_max_h: String(activeBand.maxH),
           mode,
           limit: '15',
           demo: String(demo),
@@ -510,6 +516,7 @@ export default function Home() {
         if (joystickDirRef.current) {
           setHeroFlowDir(joystickDirRef.current)
           setHeroFlowTick(v => v + 1)
+          joystickDirRef.current = null
         }
       } catch (err) {
         if ((err as Error)?.name !== 'AbortError') console.error(err)
@@ -519,7 +526,7 @@ export default function Home() {
     }
 
     run()
-  }, [queryMaxH, queryTravelWindowH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
+  }, [activeBand.maxH, activeBand.minH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
@@ -826,14 +833,12 @@ export default function Home() {
         )}
 
         <section className="fomo-card p-3.5 sm:p-4 mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick</p>
-              <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
-                {formatTravelClock(maxH)} <span className="text-[13px] text-slate-500">±{formatTravelClock(travelWindowH)}</span>
-              </p>
-            </div>
-            <p className="text-[11px] text-slate-500">Flick left or right</p>
+          <div className="text-center mb-2">
+            <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick</p>
+            <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
+              Max travel {activeBand.maxLabel}
+            </p>
+            <p className="text-[11px] text-slate-500">{rangeLabel} window · flick left or right</p>
           </div>
 
           <div className="flex justify-center mt-2"
@@ -859,17 +864,24 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mt-2 text-center text-[11px] text-slate-500">
-            Range now: {formatTravelClock(Math.max(MIN_TRAVEL_H, maxH - travelWindowH))} to {formatTravelClock(Math.min(MAX_TRAVEL_H, maxH + travelWindowH))}
+          <div className="mt-2 grid grid-cols-4 gap-1.5 text-[10px]">
+            {TRAVEL_BANDS.map((band, idx) => {
+              const active = idx === effectiveRangeIndex
+              return (
+                <span
+                  key={band.id}
+                  className={`h-7 rounded-full border inline-flex items-center justify-center ${
+                    active ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold' : 'border-slate-200 bg-white text-slate-500'
+                  }`}
+                  style={{ fontFamily: 'DM Mono, monospace' }}
+                >
+                  {band.label}
+                </span>
+              )
+            })}
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-            <span>1h ±30m</span>
-            <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>2h ±1h</span>
-            <span>3h ±1h</span>
-          </div>
-          <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-400">
-            <span>← closer</span>
-            <span>more options →</span>
+          <div className="mt-1 text-center text-[10px] text-slate-400">
+            Left = tighter range · Right = wider range
           </div>
         </section>
 

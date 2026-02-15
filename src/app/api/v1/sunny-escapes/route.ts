@@ -178,6 +178,8 @@ function normalizeQueryCacheKey(input: {
   lon: number
   maxTravelH: number
   travelWindowH: number
+  travelMinH: number | null
+  travelMaxH: number | null
   mode: TravelMode
   hasGA: boolean
   types: string[]
@@ -191,12 +193,16 @@ function normalizeQueryCacheKey(input: {
   const lonKey = input.lon.toFixed(3)
   const hKey = (Math.round(input.maxTravelH * 4) / 4).toFixed(2)
   const whKey = (Math.round(input.travelWindowH * 4) / 4).toFixed(2)
+  const minKey = input.travelMinH === null ? '-' : (Math.round(input.travelMinH * 4) / 4).toFixed(2)
+  const maxKey = input.travelMaxH === null ? '-' : (Math.round(input.travelMaxH * 4) / 4).toFixed(2)
   const typeKey = [...input.types].sort().join(',')
   return [
     `lat=${latKey}`,
     `lon=${lonKey}`,
     `h=${hKey}`,
     `wh=${whKey}`,
+    `minh=${minKey}`,
+    `maxh=${maxKey}`,
     `mode=${input.mode}`,
     `ga=${input.hasGA ? 1 : 0}`,
     `types=${typeKey || '-'}`,
@@ -383,6 +389,22 @@ export async function GET(request: NextRequest) {
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
   const maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
   const travelWindowH = Math.min(2, Math.max(0.5, parseFloat(sp.get('travel_window_h') || '0.5')))
+  const travelMinParam = sp.get('travel_min_h')
+  const travelMaxParam = sp.get('travel_max_h')
+  const parsedTravelMin = travelMinParam === null ? NaN : parseFloat(travelMinParam)
+  const parsedTravelMax = travelMaxParam === null ? NaN : parseFloat(travelMaxParam)
+  const hasExplicitTravelWindow = Number.isFinite(parsedTravelMin) || Number.isFinite(parsedTravelMax)
+  let travelMinH = hasExplicitTravelWindow
+    ? clamp(Number.isFinite(parsedTravelMin) ? parsedTravelMin : Math.max(0, maxTravelH - travelWindowH), 0, maxSupportedH)
+    : null
+  let travelMaxH = hasExplicitTravelWindow
+    ? clamp(Number.isFinite(parsedTravelMax) ? parsedTravelMax : Math.min(maxSupportedH, maxTravelH + travelWindowH), 0, maxSupportedH)
+    : null
+  if (travelMinH !== null && travelMaxH !== null && travelMinH > travelMaxH) {
+    const tmp = travelMinH
+    travelMinH = travelMaxH
+    travelMaxH = tmp
+  }
   const mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
@@ -437,7 +459,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, travelWindowH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
+    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
   })
   const cached = queryResponseCache.get(cacheKey)
   if (cached && cached.expires_at > Date.now()) {
@@ -654,8 +676,8 @@ export async function GET(request: NextRequest) {
   const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
   const withTravel = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
   const windowHalfMin = Math.round(travelWindowH * 60)
-  const windowMin = Math.max(0, maxTravelMin - windowHalfMin)
-  const windowMax = maxTravelMin + windowHalfMin
+  const windowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
+  const windowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
   const inTravelWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
   const betterThanOrigin = inTravelWindow.filter(r => r.sun_score.sunshine_forecast_min > originSunMin)
 
@@ -888,6 +910,8 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
+    'X-FOMO-Travel-Window-Min': String(windowMin),
+    'X-FOMO-Travel-Window-Max': String(windowMax),
     'X-FOMO-Request-Ms': String(Date.now() - startedAt),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
