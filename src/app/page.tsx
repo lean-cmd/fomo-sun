@@ -108,6 +108,7 @@ export default function Home() {
   const [hasSetOptimal, setHasSetOptimal] = useState(false)
   const [optimalHint, setOptimalHint] = useState(false)
   const [optimalH, setOptimalH] = useState<number | null>(null)
+  const [showOptimalInfo, setShowOptimalInfo] = useState(false)
 
   const night = data ? data.sunset.is_past && !demo : false
   const origin = userLoc || { lat: 47.5596, lon: 7.5886, name: 'Basel' }
@@ -142,9 +143,15 @@ export default function Home() {
   }, [scorePopup])
   useEffect(() => {
     if (!optimalHint) return
-    const t = setTimeout(() => setOptimalHint(false), 2200)
+    const t = setTimeout(() => setOptimalHint(false), 3600)
     return () => clearTimeout(t)
   }, [optimalHint])
+  useEffect(() => {
+    if (!showOptimalInfo) return
+    const h = () => setShowOptimalInfo(false)
+    document.addEventListener('click', h)
+    return () => document.removeEventListener('click', h)
+  }, [showOptimalInfo])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -321,7 +328,28 @@ export default function Home() {
             </div>
             <div className="relative">
               <input type="range" min={1} max={4.5} step={0.25} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
-              {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
+              {data && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Explain optimal marker"
+                    aria-expanded={showOptimalInfo}
+                    className="opt-hit"
+                    style={{ left: `${optPct}%` }}
+                    onMouseEnter={() => setShowOptimalInfo(true)}
+                    onMouseLeave={() => setShowOptimalInfo(false)}
+                    onFocus={() => setShowOptimalInfo(true)}
+                    onBlur={() => setShowOptimalInfo(false)}
+                    onClick={(ev) => { ev.stopPropagation(); setShowOptimalInfo(v => !v) }}
+                  />
+                  <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />
+                  {showOptimalInfo && (
+                    <div className="opt-tip" style={{ left: `${optPct}%` }}>
+                      Optimal = highest net sun after travel in this range.
+                    </div>
+                  )}
+                </>
+              )}
             </div>
             {!night && (
               <div className="mt-1.5 flex items-center justify-between text-[8.5px] sm:text-[9px] text-slate-400">
@@ -457,7 +485,6 @@ export default function Home() {
                         </a>
                       </div>
                     </div>
-                    <ChevD c={`w-3.5 h-3.5 flex-shrink-0 self-center transition-transform ${night ? 'text-slate-600' : 'text-slate-300'} ${openCard === i ? 'rotate-180' : ''}`} />
                   </div>
 
                   {/* v15: timeline bars always visible, improved colors in CSS */}

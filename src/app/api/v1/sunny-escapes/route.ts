@@ -4,6 +4,20 @@ import { computeSunScore, preFilterByDistance, rankDestinations } from '@/lib/sc
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest } from '@/lib/mock-weather'
 import { EscapeResult, SunnyEscapesResponse, TravelMode } from '@/lib/types'
 
+const DEMO_TRAIN_FAST_IDS = new Set([
+  'zurich',
+  'bern',
+  'lucerne',
+  'thun',
+  'interlaken',
+  'freiburg-im-breisgau',
+])
+
+function demoTrainFactor(id: string): number {
+  const hash = id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  return 0.66 + (hash % 8) * 0.02 // 0.66 - 0.80
+}
+
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams
   const maxSupportedH = 4.5
@@ -44,7 +58,17 @@ export async function GET(request: NextRequest) {
   // Add travel
   const withTravel = top.map(c => {
     const car = (mode === 'car' || mode === 'both') ? getMockTravelTime(lat, lon, c.destination.lat, c.destination.lon, 'car') : undefined
-    const train = (mode === 'train' || mode === 'both') ? getMockTravelTime(lat, lon, c.destination.lat, c.destination.lon, 'train') : undefined
+    let train = (mode === 'train' || mode === 'both') ? getMockTravelTime(lat, lon, c.destination.lat, c.destination.lon, 'train') : undefined
+
+    // v19: in demo mode, include realistic rail corridors where train beats car.
+    if (demoMode && car && train && DEMO_TRAIN_FAST_IDS.has(c.destination.id)) {
+      train = {
+        ...train,
+        duration_min: Math.max(28, Math.round(car.duration_min * demoTrainFactor(c.destination.id))),
+        changes: Math.max(0, Math.min(2, (train.changes ?? 1) - 1)),
+      }
+    }
+
     const best = Math.min(car?.duration_min ?? Infinity, train?.duration_min ?? Infinity)
     return { ...c, carTravel: car, trainTravel: train ? { ...train, ga_included: hasGA } : undefined, bestTravelMin: best }
   })

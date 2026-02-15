@@ -69,8 +69,41 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;bord
   text-transform:uppercase;
   letter-spacing:.4px;
 }
-@keyframes optPulse{0%{transform:translateY(0) scale(1);opacity:.9}50%{transform:translateY(-1px) scale(1.08);opacity:1}100%{transform:translateY(0) scale(1);opacity:.9}}
-.opt-pop{animation:optPulse .6s ease-out 2}
+@keyframes optPulse{
+  0%{opacity:.45;border-left-color:rgba(2,132,199,.22)}
+  50%{opacity:1;border-left-color:rgba(2,132,199,.6)}
+  100%{opacity:.65;border-left-color:rgba(2,132,199,.35)}
+}
+.opt-pop{animation:optPulse 1.8s ease-out 1}
+.opt-hit{
+  position:absolute;
+  top:-12px;
+  width:26px;
+  height:28px;
+  transform:translateX(-50%);
+  background:transparent;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+}
+.opt-hit:focus-visible{
+  outline:2px solid rgba(2,132,199,.45);
+  outline-offset:1px;
+}
+.opt-tip{
+  position:absolute;
+  top:-44px;
+  transform:translateX(-50%);
+  background:rgba(15,23,42,.92);
+  color:#f8fafc;
+  border-radius:8px;
+  padding:6px 8px;
+  font-size:10px;
+  line-height:1.2;
+  white-space:nowrap;
+  box-shadow:0 6px 16px rgba(15,23,42,.22);
+  z-index:10;
+}
 
 @keyframes su{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .anim-in{animation:su .35s ease-out forwards;opacity:0}
