@@ -10,6 +10,15 @@ type SortMode = 'score' | 'sun' | 'name' | 'altitude'
 type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
+type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
+
+const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
+  { id: 'mountain', label: '⛰️ Mountain' },
+  { id: 'town', label: '🏘️ Town' },
+  { id: 'ski', label: '🏔️ Ski' },
+  { id: 'thermal', label: '♨️ Thermal' },
+  { id: 'lake', label: '🌊 Lake' },
+]
 
 type Escape = SunnyEscapesResponse['escapes'][number]
 
@@ -63,13 +72,13 @@ export default function AdminDiagnosticsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('score')
-  const [pageSizeMode, setPageSizeMode] = useState<PageSizeMode>('100')
+  const [pageSizeMode, setPageSizeMode] = useState<PageSizeMode>('50')
   const [forecastDay, setForecastDay] = useState<ForecastDay>('today')
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
   const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true })
-  const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({})
+  const [activeTypeChips, setActiveTypeChips] = useState<AdminTypeChip[]>([])
   const [activeQualities, setActiveQualities] = useState<Record<DestinationQuality, boolean>>({
     verified: true,
     curated: true,
@@ -99,7 +108,7 @@ export default function AdminDiagnosticsPage() {
         max_travel_h: '4.5',
         mode: 'both',
         ga: 'false',
-        limit: '500',
+        limit: '5000',
         demo: 'false',
         admin: 'true',
       })
@@ -164,18 +173,15 @@ export default function AdminDiagnosticsPage() {
     return out
   }, [rows])
 
-  const allTypes = useMemo(() => {
-    const out = new Set<string>()
-    for (const r of rows) {
-      for (const t of r.destination.types || []) out.add(t)
-    }
-    return Array.from(out).sort((a, b) => a.localeCompare(b, 'de-CH'))
-  }, [rows])
-
   const byTypeCount = useMemo(() => {
-    const out: Record<string, number> = {}
+    const out: Record<AdminTypeChip, number> = { mountain: 0, town: 0, ski: 0, thermal: 0, lake: 0 }
     for (const r of rows) {
-      for (const t of r.destination.types || []) out[t] = (out[t] || 0) + 1
+      const typeSet = new Set(r.destination.types || [])
+      if (typeSet.has('mountain')) out.mountain += 1
+      if (typeSet.has('town')) out.town += 1
+      if (typeSet.has('thermal')) out.thermal += 1
+      if (typeSet.has('lake')) out.lake += 1
+      if (typeSet.has('mountain') && r.destination.altitude_m >= 1200) out.ski += 1
     }
     return out
   }, [rows])
@@ -195,7 +201,6 @@ export default function AdminDiagnosticsPage() {
         ? r.sun_score.sunshine_forecast_min
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
-    const selectedTypes = Object.entries(activeTypes).filter(([, enabled]) => enabled).map(([type]) => type)
     const selectedQualities = Object.entries(activeQualities)
       .filter(([, enabled]) => enabled)
       .map(([quality]) => quality as DestinationQuality)
@@ -204,8 +209,12 @@ export default function AdminDiagnosticsPage() {
       .filter(r => activeCountries[r.destination.country] !== false)
       .filter(r => selectedQualities.includes((r.destination.quality ?? 'generated') as DestinationQuality))
       .filter(r => {
-        if (selectedTypes.length === 0) return true
-        return r.destination.types.some(t => selectedTypes.includes(t))
+        if (activeTypeChips.length === 0) return true
+        const typeSet = new Set(r.destination.types || [])
+        return activeTypeChips.some((chip) => {
+          if (chip === 'ski') return typeSet.has('mountain') && r.destination.altitude_m >= 1200
+          return typeSet.has(chip)
+        })
       })
       .filter(r => {
         if (!search.trim()) return true
@@ -225,7 +234,7 @@ export default function AdminDiagnosticsPage() {
     })
 
     return filtered
-  }, [rows, activeCountries, activeQualities, activeTypes, sortMode, forecastDay, search])
+  }, [rows, activeCountries, activeQualities, activeTypeChips, sortMode, forecastDay, search])
 
   const pageSize = pageSizeMode === 'all' ? filteredSorted.length : Number(pageSizeMode)
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / Math.max(1, pageSize)))
@@ -237,7 +246,7 @@ export default function AdminDiagnosticsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, forecastDay, sortMode, activeCountries, activeQualities, activeTypes, pageSizeMode])
+  }, [search, forecastDay, sortMode, activeCountries, activeQualities, activeTypeChips, pageSizeMode])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
@@ -263,7 +272,9 @@ export default function AdminDiagnosticsPage() {
   )
 
   const toggleCountry = (country: string) => setActiveCountries(prev => ({ ...prev, [country]: !prev[country] }))
-  const toggleType = (type: string) => setActiveTypes(prev => ({ ...prev, [type]: !prev[type] }))
+  const toggleTypeChip = (chip: AdminTypeChip) => {
+    setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
+  }
   const toggleQuality = (quality: DestinationQuality) => setActiveQualities(prev => ({ ...prev, [quality]: !prev[quality] }))
 
   const toggleCompare = (id: string) => {
@@ -327,6 +338,10 @@ export default function AdminDiagnosticsPage() {
             <Link href="/" className="text-xs text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline">Back to app</Link>
           </div>
         </div>
+
+        <p className="text-xs text-slate-600 mb-3" style={{ fontFamily: 'DM Mono, monospace' }}>
+          Showing {filteredSorted.length} destinations
+        </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
@@ -427,13 +442,13 @@ export default function AdminDiagnosticsPage() {
           <div>
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Type filters</p>
             <div className="flex flex-wrap gap-2">
-              {allTypes.map(type => (
+              {ADMIN_TYPE_CHIPS.map(type => (
                 <button
-                  key={type}
-                  onClick={() => toggleType(type)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypes[type] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+                  key={type.id}
+                  onClick={() => toggleTypeChip(type.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypeChips.includes(type.id) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
                 >
-                  {type} ({byTypeCount[type] || 0})
+                  {type.label} ({byTypeCount[type.id] || 0})
                 </button>
               ))}
             </div>
