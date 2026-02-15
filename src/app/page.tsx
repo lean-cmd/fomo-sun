@@ -10,7 +10,6 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
-  Share2,
   Sun,
   Thermometer,
   TrainFront,
@@ -224,8 +223,8 @@ function ScoreRing({ score, size = 44 }: { score: number; size?: number }) {
         />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-[12px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>{pct}</span>
-        <span className="text-[6px] tracking-[0.16em] text-amber-600 font-semibold">TM</span>
+        <span className="text-[12px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>{pct}%</span>
+        <span className="text-[6px] tracking-[0.16em] text-amber-600 font-semibold">FOMO</span>
       </span>
     </div>
   )
@@ -285,14 +284,15 @@ function SunTimelineBar({
 
 function timelineEmojiPreview(timeline: SunTimeline | undefined, dayFocus: DayFocus) {
   const segments = dayFocus === 'tomorrow' ? timeline?.tomorrow || [] : timeline?.today || []
-  if (!segments.length) return '☁️☁️⛅☀️'
+  if (!segments.length) return '☁️☁️☁️☀️☀️☁️☁️🌙'
   const slotCount = 8
   const slots: string[] = []
   for (const seg of segments) {
-    const icon = seg.condition === 'sun' ? '☀️' : seg.condition === 'partial' ? '⛅' : seg.condition === 'night' ? '🌙' : '☁️'
+    const icon = seg.condition === 'night' ? '🌙' : seg.condition === 'sun' || seg.condition === 'partial' ? '☀️' : '☁️'
     const n = Math.max(1, Math.round((seg.pct / 100) * slotCount))
     for (let i = 0; i < n; i += 1) slots.push(icon)
   }
+  while (slots.length < slotCount) slots.push('☁️')
   return slots.slice(0, slotCount).join('')
 }
 
@@ -300,6 +300,18 @@ function IconForMode({ mode }: { mode: 'car' | 'train' }) {
   return mode === 'car'
     ? <Car className="w-4 h-4" strokeWidth={1.8} />
     : <TrainFront className="w-4 h-4" strokeWidth={1.8} />
+}
+
+function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <circle cx="12" cy="12" r="10" fill="#25D366" />
+      <path
+        fill="#fff"
+        d="M16.6 13.9c-.2-.1-1.2-.6-1.4-.7-.2-.1-.3-.1-.5.1-.1.2-.6.7-.7.8-.1.1-.2.2-.4.1-.2-.1-.9-.3-1.7-1-.6-.5-1-1.1-1.1-1.3-.1-.2 0-.3.1-.4.1-.1.2-.2.3-.4.1-.1.1-.2.2-.3.1-.1 0-.2 0-.3s-.5-1.2-.7-1.6c-.2-.4-.3-.4-.5-.4h-.4c-.1 0-.3 0-.4.2-.1.2-.6.6-.6 1.5 0 .9.6 1.7.7 1.8.1.1 1.3 2 3.2 2.8 1.9.8 1.9.6 2.3.6.4 0 1.2-.5 1.3-1 .2-.5.2-.9.1-1-.1-.1-.2-.1-.4-.2Z"
+      />
+    </svg>
+  )
 }
 
 function getBestTravel(escape: EscapeCard) {
@@ -544,7 +556,6 @@ export default function Home() {
   const topBestTravel = topEscape ? getBestTravel(topEscape) : null
   const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
   const sunGainMin = Math.max(0, topSunMin - originSunMin)
-  const sunGainTag = formatGainTag(sunGainMin, originSunMin, origin.name)
 
   const toggleType = (t: DestinationType) => {
     setTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
@@ -554,22 +565,27 @@ export default function Home() {
 
   const buildWhatsAppHref = (escape: EscapeCard) => {
     const bestTravel = getBestTravel(escape)
-    const travelText = bestTravel ? `${bestTravel.min} min by ${bestTravel.mode}` : 'short drive'
+    const travelText = bestTravel
+      ? `${bestTravel.mode === 'car' ? '🚗' : '🚆'} ${formatTravelClock(bestTravel.min / 60)} from ${origin.name}`
+      : ''
     const destinationSun = formatSunHours(escape.sun_score.sunshine_forecast_min)
     const destinationSky = timelineEmojiPreview(escape.sun_timeline, dayFocus)
+    const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
     const shareText = [
-      `☀️ FOMO Sun escape idea`,
+      `🌤️ FOMO Sun: Escape the fog!`,
       '',
-      `${origin.name} (${originFomoPct}%) → ${escape.destination.name} (${Math.round(escape.sun_score.score * 100)}%)`,
-      `${travelText} · ${destinationSun} sun · ${parseComparisonLine(escape.conditions) || sunGainTag}`,
+      `📍 ${escape.destination.name} (${escape.destination.altitude_m}m, ${escape.destination.region})`,
+      `☀️ ${destinationSun} sun · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
+      travelText,
       '',
-      `${origin.name}: ${timelineOriginPreview}`,
+      `${origin.name}:    ${timelineOriginPreview}`,
       `${escape.destination.name}: ${destinationSky}`,
       '',
-      `Plan: ${escape.plan[0]}`,
-      escape.links.google_maps || '',
+      gainMin > 0
+        ? `🟢 +${formatSunHours(gainMin)} more sun than ${origin.name} ☀️`
+        : `No additional sun vs ${origin.name}`,
       '',
-      `Find your sunny escape: https://fomosun.com`,
+      `→ fomosun.com`,
     ].filter(Boolean).join('\n')
 
     return `https://wa.me/?text=${encodeURIComponent(shareText)}`
@@ -651,12 +667,21 @@ export default function Home() {
                     {topEscape.destination.name}
                   </h1>
                   <p className="text-[11px] text-slate-500 mt-0.5">{topEscape.destination.region} · {FLAG[topEscape.destination.country]}</p>
-                  <p className="mt-1.5 text-[12px] text-slate-700 inline-flex items-center gap-1.5 flex-wrap">
-                    <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
-                    <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
-                    <span className="text-slate-400">·</span>
-                    <span className="text-amber-700 font-semibold">{sunGainTag}</span>
-                  </p>
+                  <div className="mt-1.5">
+                    <p className="text-[18px] leading-none font-semibold text-amber-600 inline-flex items-center gap-1.5">
+                      <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
+                      <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
+                    </p>
+                    {sunGainMin > 0 && (
+                      <p className="mt-1 text-[12px] font-semibold text-emerald-600">+{formatSunHours(sunGainMin)} vs {origin.name}</p>
+                    )}
+                    {topBestTravel && (
+                      <p className="mt-1 text-[12px] text-slate-500 inline-flex items-center gap-1">
+                        <IconForMode mode={topBestTravel.mode} />
+                        {formatTravelClock(topBestTravel.min / 60)}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -664,9 +689,9 @@ export default function Home() {
                 href={buildWhatsAppHref(topEscape)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 h-11 rounded-full border border-slate-200 px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center gap-1.5 h-11 rounded-full border border-emerald-200 bg-emerald-50/60 px-3 text-[11px] font-semibold text-slate-800 hover:bg-emerald-50"
               >
-                <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                <WhatsAppIcon className="w-4 h-4" />
                 Share
               </a>
             </div>
@@ -892,10 +917,10 @@ export default function Home() {
             {resultRows.map((escape, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCard === index
-              const scorePct = Math.round(escape.sun_score.score * 100)
               const comparisonText = parseComparisonLine(escape.conditions)
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
+              const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
 
               return (
                 <article
@@ -919,19 +944,23 @@ export default function Home() {
                           </div>
 
                           <div className="text-right">
-                            <p className="text-[20px] leading-none text-slate-900" style={{ fontFamily: 'DM Mono, monospace' }}>
+                            <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 justify-end font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                              <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                               {formatSunHours(escape.sun_score.sunshine_forecast_min)}
                             </p>
+                            {gainMin > 0 && (
+                              <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</p>
+                            )}
                             {bestTravel && (
                               <p className="mt-1 text-[11px] text-slate-500 inline-flex items-center gap-1 justify-end">
                                 <IconForMode mode={bestTravel.mode} />
-                                {bestTravel.min} min
+                                {formatTravelClock(bestTravel.min / 60)}
                               </p>
                             )}
                           </div>
                         </div>
 
-                        <div className="mt-1.5 text-[11px] text-amber-700 font-semibold">{comparisonText || `${scorePct}% score`}</div>
+                        <div className="mt-1.5 text-[11px] text-emerald-600 font-semibold">{comparisonText || `${formatGainTag(gainMin, originSunMin, origin.name)}`}</div>
                       </div>
                     </div>
 
@@ -1034,9 +1063,9 @@ export default function Home() {
                             href={buildWhatsAppHref(escape)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
+                            className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-emerald-200 bg-emerald-50/60 text-slate-800 text-[11px] font-semibold hover:bg-emerald-50"
                           >
-                            <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            <WhatsAppIcon className="w-4 h-4" />
                             Share via WhatsApp
                           </a>
                         </div>
