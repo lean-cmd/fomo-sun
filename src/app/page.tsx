@@ -42,7 +42,7 @@ const TRAVEL_BANDS = [
   { id: 'quick', label: '0-60min', minH: 0, maxH: 1, maxLabel: '1h' },
   { id: 'short', label: '1h-2h', minH: 1, maxH: 2, maxLabel: '2h' },
   { id: 'mid', label: '2h-3h', minH: 2, maxH: 3, maxLabel: '3h' },
-  { id: 'long', label: '3h+', minH: 3, maxH: 4.5, maxLabel: '4h30' },
+  { id: 'long', label: '3h+', minH: 3, maxH: 4.5, maxLabel: '3hrs+' },
 ] as const
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
@@ -383,15 +383,11 @@ export default function Home() {
     const clamped = clamp(nextJoy, -1, 1)
     joyPosRef.current = clamped
     setJoyX(clamped)
-    if (Math.abs(clamped) > 0.06) {
-      joystickDirRef.current = clamped > 0 ? 'right' : 'left'
-    }
     if (!updateRange) return
 
     const magnitude = Math.abs(clamped)
     let shift = 0
-    if (magnitude >= 0.72) shift = 2
-    else if (magnitude >= 0.24) shift = 1
+    if (magnitude >= 0.26) shift = 1
     if (clamped < 0) shift *= -1
 
     const nextIndex = clamp(joyBaseRangeRef.current + shift, 0, TRAVEL_BANDS.length - 1)
@@ -416,8 +412,8 @@ export default function Home() {
     let x = joyPosRef.current
     let v = joyVelRef.current
     let lastTs = performance.now()
-    const spring = 28
-    const damping = 11
+    const spring = 48
+    const damping = 16
     const step = (ts: number) => {
       const dt = Math.min(0.032, Math.max(0.008, (ts - lastTs) / 1000))
       lastTs = ts
@@ -481,6 +477,9 @@ export default function Home() {
     }
     joystickPointerRef.current = null
     const finalIndex = previewRangeRef.current ?? rangeIndex
+    if (finalIndex !== rangeIndex) {
+      joystickDirRef.current = finalIndex > rangeIndex ? 'right' : 'left'
+    }
     setRangeIndex(finalIndex)
     previewRangeRef.current = null
     setPreviewRangeIndex(null)
@@ -838,7 +837,7 @@ export default function Home() {
             <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
               Max travel {activeBand.maxLabel}
             </p>
-            <p className="text-[11px] text-slate-500">{rangeLabel} window · flick left or right</p>
+            <p className="text-[11px] text-slate-500">{rangeLabel} window · flick to switch</p>
           </div>
 
           <div className="flex justify-center mt-2"
@@ -858,6 +857,7 @@ export default function Home() {
             >
               <div className="fomo-joystick-base" />
               <div className="fomo-joystick-track" />
+              <div className="fomo-joystick-center-stub" />
               <div className="fomo-joystick-stick" style={{ transform: `translateX(${joyX * JOYSTICK_MAX_PX}px)` }}>
                 <div className={`fomo-joystick-knob ${joystickNudge ? 'joystick-knob-nudge' : ''}`} />
               </div>
@@ -879,9 +879,6 @@ export default function Home() {
                 </span>
               )
             })}
-          </div>
-          <div className="mt-1 text-center text-[10px] text-slate-400">
-            Left = tighter range · Right = wider range
           </div>
         </section>
 
@@ -1105,7 +1102,7 @@ export default function Home() {
                 <article
                   key={escape.destination.id}
                   className="fomo-card overflow-hidden"
-                  style={{ animation: `cardIn 180ms ease-out ${Math.min(index * 60, 240)}ms both` }}
+                  style={{ animation: `cardIn 260ms cubic-bezier(0.22, 1, 0.36, 1) ${Math.min(index * 45, 180)}ms both` }}
                 >
                   <div className="px-3.5 pt-3.5 pb-2.5">
                     <div className="flex items-start gap-2">
