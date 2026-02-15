@@ -33,6 +33,7 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;bord
 /* v15: improved timeline bar colors -- more visual contrast & warmth */
 .tl-bar{flex:1;height:14px;border-radius:6px;background:#f1f5f9;display:flex;gap:1px;overflow:hidden;position:relative}
 .tl-sun{background:linear-gradient(180deg,#fbbf24,#f59e0b)}.tl-partial{background:linear-gradient(180deg,#fde68a,#fcd34d)}.tl-cloud{background:#cbd5e1}.tl-night{background:#94a3b8}
+.tl-night-soft{background:#c3ccd8}
 .tl-now{position:absolute;top:-2px;bottom:-2px;width:2px;background:#ef4444;z-index:2;border-radius:1px}
 .tl-now::after{content:'';position:absolute;top:-2px;left:-2px;width:6px;height:6px;background:#ef4444;border-radius:50%}
 

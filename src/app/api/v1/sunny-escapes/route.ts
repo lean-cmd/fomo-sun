@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, detectInversion, preFilterByDistance, rankDestinations } from '@/lib/scoring'
-import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest } from '@/lib/mock-weather'
+import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
-import { EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
+import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
 
 type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
 
@@ -107,8 +107,8 @@ function hourCondition(h: LiveForecastBundle['hours'][number]) {
   return 'cloud'
 }
 
-function mergeSegments(items: Array<{ condition: 'sun' | 'partial' | 'cloud' | 'night'; pct: number }>) {
-  const merged: Array<{ condition: 'sun' | 'partial' | 'cloud' | 'night'; pct: number }> = []
+function mergeSegments(items: Array<{ condition: 'sun' | 'partial' | 'cloud'; pct: number }>) {
+  const merged: Array<{ condition: 'sun' | 'partial' | 'cloud'; pct: number }> = []
   for (const it of items) {
     const prev = merged[merged.length - 1]
     if (prev && prev.condition === it.condition) prev.pct += it.pct
@@ -117,37 +117,38 @@ function mergeSegments(items: Array<{ condition: 'sun' | 'partial' | 'cloud' | '
   return merged
 }
 
-function timelineFromLive(hours: LiveForecastBundle['hours']): SunTimeline {
+function timelineFromLive(
+  hours: LiveForecastBundle['hours'],
+  sunWindow: { today: DaylightWindow; tomorrow: DaylightWindow }
+): SunTimeline {
   const todayStr = new Date().toISOString().slice(0, 10)
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   const tomorrowStr = tomorrow.toISOString().slice(0, 10)
 
-  const toSegments = (day: string) => {
+  const toSegments = (day: string, window: DaylightWindow) => {
     const daytime = hours
       .filter(h => h.time.startsWith(day))
       .filter(h => {
-        const hh = new Date(h.time).getHours()
-        return hh >= 8 && hh < 18
+        const t = new Date(h.time)
+        const hh = t.getHours() + t.getMinutes() / 60
+        return hh >= window.start_hour && hh < window.end_hour
       })
-      .slice(0, 10)
 
     if (daytime.length === 0) {
       return [
-        { condition: 'cloud' as const, pct: 42.5 },
-        { condition: 'partial' as const, pct: 42.5 },
-        { condition: 'night' as const, pct: 15 },
+        { condition: 'cloud' as const, pct: 65 },
+        { condition: 'partial' as const, pct: 35 },
       ]
     }
 
-    const bucketPct = 85 / daytime.length
-    const core = mergeSegments(daytime.map(h => ({ condition: hourCondition(h), pct: bucketPct })))
-    return [...core, { condition: 'night' as const, pct: 15 }]
+    const bucketPct = 100 / daytime.length
+    return mergeSegments(daytime.map(h => ({ condition: hourCondition(h), pct: bucketPct })))
   }
 
   return {
-    today: toSegments(todayStr),
-    tomorrow: toSegments(tomorrowStr),
+    today: toSegments(todayStr, sunWindow.today),
+    tomorrow: toSegments(tomorrowStr, sunWindow.tomorrow),
   }
 }
 
@@ -187,6 +188,7 @@ export async function GET(request: NextRequest) {
   let originSunScore = mockOrigin.sun_score
   let originSunMin = mockOrigin.sunshine_min
   let originTimeline: SunTimeline = getMockOriginTimeline()
+  let sunWindow = { today: getMockDaylightWindow(0), tomorrow: getMockDaylightWindow(1) }
   let sunsetInfo = getMockSunset(demoMode)
   let originTomorrowHours = getMockTomorrowSunHours()
   let weatherFreshness = new Date().toISOString()
@@ -281,7 +283,11 @@ export async function GET(request: NextRequest) {
         getHourlyForecast(lat, lon),
         getSunTimes(lat, lon),
       ])
-      originTimeline = timelineFromLive(originHourly.hours)
+      sunWindow = {
+        today: sunTimes.daylight_window_today,
+        tomorrow: sunTimes.daylight_window_tomorrow,
+      }
+      originTimeline = timelineFromLive(originHourly.hours, sunWindow)
       originTomorrowHours = Math.round((originHourly.total_sunshine_tomorrow_min / 60) * 10) / 10
       sunsetInfo = {
         time: sunTimes.sunset,
@@ -410,7 +416,7 @@ export async function GET(request: NextRequest) {
     const netSun = Math.max(0, Math.min(destSunMin, remainingDayMin - roundTrip))
     const cmp = formatComparison(destSunMin, originSunMin)
 
-    const liveTimeline = !demoMode && full.liveForecast ? timelineFromLive(full.liveForecast.hours) : null
+    const liveTimeline = !demoMode && full.liveForecast ? timelineFromLive(full.liveForecast.hours, sunWindow) : null
     const liveTomorrowSun = !demoMode && full.liveForecast
       ? Math.round((full.liveForecast.total_sunshine_tomorrow_min / 60) * 10) / 10
       : null
@@ -421,6 +427,10 @@ export async function GET(request: NextRequest) {
       sun_score: r.sun_score,
       conditions: `${destSunMin} min sunshine${cmp}`,
       net_sun_min: netSun,
+      weather_now: {
+        summary: full.conditions,
+        temp_c: full.temp_c,
+      },
       travel: {
         car: full.carTravel ? { mode: 'car' as const, duration_min: full.carTravel.duration_min, distance_km: full.carTravel.distance_km } : undefined,
         train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
@@ -462,6 +472,7 @@ export async function GET(request: NextRequest) {
       sunshine_min: originSunMin,
     },
     origin_timeline: originTimeline,
+    sun_window: sunWindow,
     max_sun_hours_today: Math.round(liveMaxSunHoursToday * 10) / 10,
     sunset: sunsetInfo,
     tomorrow_sun_hours: originTomorrowHours,
@@ -471,7 +482,7 @@ export async function GET(request: NextRequest) {
 
   const headers: Record<string, string> = {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    'X-FOMO-Sun-Version': '0.3.0',
+    'X-FOMO-Sun-Version': '0.4.0',
     'X-FOMO-Live-Source': demoMode ? 'mock' : (usedSwissMeteo ? 'meteoswiss+open-meteo' : 'open-meteo'),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason

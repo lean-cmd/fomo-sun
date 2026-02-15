@@ -34,6 +34,8 @@ export interface LiveSunTimes {
   sunrise: string
   sunset: string
   sunset_minutes_until: number
+  daylight_window_today: { start_hour: number; end_hour: number }
+  daylight_window_tomorrow: { start_hour: number; end_hour: number }
 }
 
 const BASE = 'https://api.open-meteo.com/v1'
@@ -51,6 +53,21 @@ let sunCache = new Map<string, { expires_at: number; data: LiveSunTimes }>()
 
 function cacheKey(lat: number, lon: number) {
   return `${lat.toFixed(3)},${lon.toFixed(3)}`
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+function hourFromIso(iso: string): number {
+  const d = new Date(iso)
+  return d.getHours() + d.getMinutes() / 60
+}
+
+function windowFromSunriseSunset(sunriseIso: string, sunsetIso: string) {
+  const start_hour = clamp(Math.floor(hourFromIso(sunriseIso) - 1), 0, 23)
+  const end_hour = clamp(Math.ceil(hourFromIso(sunsetIso) + 1), start_hour + 1, 24)
+  return { start_hour, end_hour }
 }
 
 /**
@@ -144,7 +161,7 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
   const cached = sunCache.get(key)
   if (cached && cached.expires_at > now) return cached.data
 
-  const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=1&timezone=auto`
+  const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=2&timezone=auto`
 
   const res = await fetch(url, { next: { revalidate: 3600 } })
   if (!res.ok) throw new Error(`Open-Meteo sun-times failed: ${res.status}`)
@@ -152,6 +169,8 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
 
   const sunrise = data.daily.sunrise[0]
   const sunset = data.daily.sunset[0]
+  const tomorrowSunrise = data.daily.sunrise?.[1] ?? sunrise
+  const tomorrowSunset = data.daily.sunset?.[1] ?? sunset
   const sunsetDate = new Date(sunset)
   const minutesUntil = Math.max(0, Math.round((sunsetDate.getTime() - Date.now()) / 60000))
 
@@ -159,6 +178,8 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
     sunrise: new Date(sunrise).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
     sunset: new Date(sunset).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }),
     sunset_minutes_until: minutesUntil,
+    daylight_window_today: windowFromSunriseSunset(sunrise, sunset),
+    daylight_window_tomorrow: windowFromSunriseSunset(tomorrowSunrise, tomorrowSunset),
   }
   sunCache.set(key, { expires_at: now + SUN_TTL_MS, data: result })
   return result

@@ -6,6 +6,34 @@ export interface MockWeatherResult {
   temp_c: number; conditions_text: string
 }
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+function dayOfYear(d: Date) {
+  const start = new Date(d.getFullYear(), 0, 0)
+  const diff = d.getTime() - start.getTime()
+  return Math.floor(diff / 86_400_000)
+}
+
+function seasonalSunHours(date: Date) {
+  // Basel-like daylight curve: shorter winter days, longer summer days.
+  const doy = dayOfYear(date)
+  const daylightHours = 12 + 4.4 * Math.sin((2 * Math.PI * (doy - 80)) / 365)
+  const solarNoon = 12.5
+  const sunriseHour = solarNoon - daylightHours / 2
+  const sunsetHour = solarNoon + daylightHours / 2
+  return { sunriseHour, sunsetHour }
+}
+
+function hourToClock(h: number) {
+  const whole = Math.floor(h)
+  const min = Math.round((h - whole) * 60)
+  const hh = String(clamp(whole + Math.floor(min / 60), 0, 23)).padStart(2, '0')
+  const mm = String(min % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
 const DEMO_BUCKET_MIN = 15
 const DEMO_SWISS_ELITE = new Set([
   'lucerne',
@@ -316,11 +344,25 @@ export function getMockTomorrowSunHoursForDest(destination: Destination, demoMod
 
 export function getMockMaxSunHours(): number { return parseFloat((5.5 + (seed = 314, srand()) * 2).toFixed(1)) }
 
+export function getMockDaylightWindow(dayOffset = 0): { start_hour: number; end_hour: number } {
+  const d = new Date()
+  d.setDate(d.getDate() + dayOffset)
+  const { sunriseHour, sunsetHour } = seasonalSunHours(d)
+  const start_hour = clamp(Math.floor(sunriseHour - 1), 0, 23)
+  const end_hour = clamp(Math.ceil(sunsetHour + 1), start_hour + 1, 24)
+  return { start_hour, end_hour }
+}
+
 export function getMockSunset(demoMode: boolean): { time: string; minutes_until: number; is_past: boolean } {
-  if (demoMode) return { time: '17:34', minutes_until: 444, is_past: false }
-  const now = new Date(), ss = new Date(); ss.setHours(17, 34, 0, 0)
+  const now = new Date()
+  const { sunsetHour } = seasonalSunHours(now)
+  const ss = new Date(now)
+  ss.setHours(Math.floor(sunsetHour), Math.round((sunsetHour % 1) * 60), 0, 0)
   const d = Math.round((ss.getTime() - now.getTime()) / 60000)
-  return { time: '17:34', minutes_until: Math.max(0, d), is_past: d <= 0 }
+  if (demoMode) {
+    return { time: hourToClock(sunsetHour), minutes_until: Math.max(0, d), is_past: d <= 0 }
+  }
+  return { time: hourToClock(sunsetHour), minutes_until: Math.max(0, d), is_past: d <= 0 }
 }
 
 export function getMockTomorrowSunHours(): number { return 4.8 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
+import { DaylightWindow, SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
 
 // ── Icons ─────────────────────────────────────────────────────────────
 const CarI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" /></svg>
@@ -26,6 +26,65 @@ function fmtTravelHours(h: number) {
   const mm = Math.round((h - hh) * 60)
   if (mm === 0) return `${hh}h`
   return `${hh}h ${mm}m`
+}
+
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v))
+}
+
+function normalizeWindow(win?: DaylightWindow): DaylightWindow {
+  const start = clamp(Math.round(win?.start_hour ?? 7), 0, 23)
+  const end = clamp(Math.round(win?.end_hour ?? 19), start + 1, 24)
+  return { start_hour: start, end_hour: end }
+}
+
+function compactDaySegments(segments: SunTimeline['today']) {
+  const dayOnly = segments.filter(seg => seg.condition !== 'night')
+  const merged: SunTimeline['today'] = []
+  for (const seg of dayOnly) {
+    const prev = merged[merged.length - 1]
+    if (prev && prev.condition === seg.condition) prev.pct += seg.pct
+    else merged.push({ ...seg })
+  }
+  return merged.length ? merged : [{ condition: 'cloud', pct: 100 }]
+}
+
+function weatherGlyph(summary?: string) {
+  const s = (summary || '').toLowerCase()
+  if (s.includes('fog')) return '🌫️'
+  if (s.includes('overcast') || s.includes('cloudy') || s.includes('cloud')) return '☁️'
+  if (s.includes('partly')) return '⛅'
+  if (s.includes('clear') || s.includes('sunny') || s.includes('sun')) return '☀️'
+  return '⛅'
+}
+
+function weatherLabel(summary?: string) {
+  if (!summary) return ''
+  return summary.replace(/,\s*-?\d+\s*°c/i, '').trim()
+}
+
+function formatGainTag(gainMin: number, originMin: number, originName: string) {
+  if (gainMin <= 0) return ''
+  if (originMin <= 0) return `+${gainMin} min vs ${originName}`
+
+  const gainPct = Math.round((gainMin / originMin) * 100)
+  if (gainPct >= 100) {
+    const ratio = (gainMin + originMin) / originMin
+    const ratioLabel = ratio >= 10 ? `${Math.round(ratio)}x` : `${Math.round(ratio * 10) / 10}x`
+    return `+${gainMin} min (${ratioLabel}) vs ${originName}`
+  }
+  if (gainPct >= 1) return `+${gainMin} min (+${gainPct}%) vs ${originName}`
+  return `+${gainMin} min vs ${originName}`
+}
+
+function buildHourTicks(win?: DaylightWindow) {
+  const { start_hour, end_hour } = normalizeWindow(win)
+  const span = Math.max(1, end_hour - start_hour)
+  const step = Math.max(1, Math.round(span / 5))
+  const ticks: number[] = [start_hour]
+  for (let h = start_hour + step; h < end_hour; h += step) ticks.push(h)
+  if (ticks[ticks.length - 1] !== end_hour) ticks.push(end_hour)
+  return ticks.slice(0, 6)
 }
 
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
@@ -69,24 +128,51 @@ function MiniRing({ score, size = 36, stroke: strokeColor = '#f59e0b' }: { score
 }
 
 // ── Timeline Bar ──────────────────────────────────────────────────────
-function SunBar({ timeline, demo, label }: { timeline: SunTimeline; demo: boolean; label?: string }) {
+function SunBar({
+  timeline,
+  demo,
+  label,
+  sunWindow,
+}: {
+  timeline: SunTimeline
+  demo: boolean
+  label?: string
+  sunWindow?: { today: DaylightWindow; tomorrow: DaylightWindow }
+}) {
   const h = demo ? 10.17 : new Date().getHours() + new Date().getMinutes() / 60
-  const nowPct = Math.max(0, Math.min(85, ((h - 8) / 10) * 85))
+  const nowPct = Math.max(0, Math.min(100, (h / 24) * 100))
   return (
     <div className="space-y-1">
-      {(['today', 'tomorrow'] as const).map(day => (
-        <div key={day} className="flex items-center gap-1.5">
-          <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">
-            {day === 'today' && label ? label : day}
-          </span>
-          <div className="tl-bar">
-            {timeline[day].map((seg, i) => (
-              <div key={i} className={`h-full tl-${seg.condition}`} style={{ width: `${seg.pct}%` }} />
-            ))}
-            {day === 'today' && h >= 8 && h <= 18 && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
+      {(['today', 'tomorrow'] as const).map(day => {
+        const win = normalizeWindow(sunWindow?.[day])
+        const leftNightPct = (win.start_hour / 24) * 100
+        const daylightPct = ((win.end_hour - win.start_hour) / 24) * 100
+        const rightNightPct = Math.max(0, 100 - leftNightPct - daylightPct)
+        const daySegments = compactDaySegments(timeline[day])
+        const dayTotal = Math.max(1, daySegments.reduce((sum, seg) => sum + seg.pct, 0))
+
+        return (
+          <div key={day} className="flex items-center gap-1.5">
+            <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">
+              {day === 'today' && label ? label : day}
+            </span>
+            <div className="tl-bar">
+              {leftNightPct > 0 && <div className="h-full tl-night-soft" style={{ width: `${leftNightPct}%` }} />}
+              <div className="h-full flex gap-[1px]" style={{ width: `${daylightPct}%` }}>
+                {daySegments.map((seg, i) => (
+                  <div
+                    key={i}
+                    className={`h-full tl-${seg.condition}`}
+                    style={{ width: `${(seg.pct / dayTotal) * 100}%` }}
+                  />
+                ))}
+              </div>
+              {rightNightPct > 0 && <div className="h-full tl-night-soft" style={{ width: `${rightNightPct}%` }} />}
+              {day === 'today' && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -194,7 +280,7 @@ export default function Home() {
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
   const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
   const sunGainMin = Math.max(0, topSunMin - originSunMin)
-  const sunGainPct = originSunMin > 0 ? Math.round((sunGainMin / originSunMin) * 100) : 0
+  const sunGainTag = formatGainTag(sunGainMin, originSunMin, origin.name)
   const sunsetLine = data
     ? data.sunset.is_past
       ? `Sunset already passed`
@@ -204,6 +290,7 @@ export default function Home() {
     ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
     : Infinity
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
+  const timelineTicks = buildHourTicks(data?.sun_window?.today)
 
   // v15: WhatsApp share includes fomosun.com link for virality
   const buildWhatsAppHref = (escape: EscapeCard) => {
@@ -278,7 +365,7 @@ export default function Home() {
                 </div>
                 {data.origin_timeline && (
                   <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
-                    <SunBar timeline={data.origin_timeline} demo={demo} />
+                    <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} />
                   </div>
                 )}
               </div>
@@ -296,7 +383,7 @@ export default function Home() {
                     <p className="mt-1">
                       {sunGainMin > 0 ? (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
-                          +{sunGainMin} min ({sunGainPct}%) vs {origin.name}
+                          {sunGainTag}
                         </span>
                       ) : (
                         <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
@@ -471,11 +558,22 @@ export default function Home() {
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[11px]">{FLAG[e.destination.country]}</span>
-                        <span className={`font-semibold text-[13.5px] sm:text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[11px]">{FLAG[e.destination.country]}</span>
+                            <span className={`font-semibold text-[13.5px] sm:text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
+                          </div>
+                          <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
+                        </div>
+                        <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                          <span aria-hidden="true">{weatherGlyph(e.weather_now?.summary)}</span>
+                          <span>{Math.round(e.weather_now?.temp_c ?? 0)}°</span>
+                        </div>
                       </div>
-                      <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
+                      <p className={`text-[10px] sm:text-[10.5px] mt-1 ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                        {weatherGlyph(e.weather_now?.summary)} {weatherLabel(e.weather_now?.summary)}
+                      </p>
                       <p className="text-[10px] sm:text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
                       {night && (
                         <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
@@ -503,9 +601,9 @@ export default function Home() {
 
                   {/* v15: timeline bars always visible, improved colors in CSS */}
                   <div className="px-4 pb-3">
-                    {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} />}
+                    {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} sunWindow={data.sun_window} />}
                     <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">
-                      <span>8</span><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span>
+                      {timelineTicks.map((t, idx) => <span key={idx}>{t}</span>)}
                     </div>
                   </div>
 

@@ -25,11 +25,13 @@ export interface TravelResult {
 
 export interface TimelineSegment { condition: SkyCondition; pct: number }
 export interface SunTimeline { today: TimelineSegment[]; tomorrow: TimelineSegment[] }
+export interface DaylightWindow { start_hour: number; end_hour: number }
 
 export interface EscapeResult {
   rank: number; destination: Destination; sun_score: SunScore
   conditions: string  // human-friendly with comparison
   net_sun_min: number // sunshine minus round-trip travel time
+  weather_now: { summary: string; temp_c: number }
   travel: { car?: TravelResult; train?: TravelResult }
   plan: string[]; links: { google_maps?: string; sbb?: string; webcam?: string }
   sun_timeline: SunTimeline
@@ -47,6 +49,7 @@ export interface SunnyEscapesResponse {
     description: string; sun_score: number; sunshine_min: number
   }
   origin_timeline: SunTimeline // Basel's own sun bar
+  sun_window: { today: DaylightWindow; tomorrow: DaylightWindow }
   max_sun_hours_today: number
   sunset: { time: string; minutes_until: number; is_past: boolean }
   tomorrow_sun_hours: number
