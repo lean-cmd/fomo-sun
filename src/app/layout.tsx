@@ -43,6 +43,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="text-[10px] text-gray-400">
               Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-gray-500">MeteoSwiss</a> (CC BY 4.0)
               {' · '}Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-gray-500">OJP</a>
+              {' · '}<a href="/blog" className="hover:text-gray-500">Blog</a>
+              {' · '}<a href="/about" className="hover:text-gray-500">About</a>
               {' · '}<a href="/api/v1/sunny-escapes" className="hover:text-gray-500">API</a>
               {' · '}<a href="/llms.txt" className="hover:text-gray-500">llms.txt</a>
             </div>
