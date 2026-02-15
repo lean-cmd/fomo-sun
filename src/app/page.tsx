@@ -69,11 +69,50 @@ function extractTemp(summary?: string) {
   return m ? Number(m[1]) : null
 }
 
-function pickNearestCityName(payload: unknown, lat: number, lon: number) {
+type CitySeed = { name: string; lat: number; lon: number }
+
+const SWISS_CITY_FALLBACKS: CitySeed[] = [
+  { name: 'Basel', lat: 47.5596, lon: 7.5886 },
+  { name: 'Zürich', lat: 47.3769, lon: 8.5417 },
+  { name: 'Bern', lat: 46.948, lon: 7.4474 },
+  { name: 'Geneva', lat: 46.2044, lon: 6.1432 },
+  { name: 'Lausanne', lat: 46.5197, lon: 6.6323 },
+  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
+  { name: 'Lugano', lat: 46.0037, lon: 8.9511 },
+  { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
+  { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
+  { name: 'Fribourg', lat: 46.8065, lon: 7.161 },
+  { name: 'Biel/Bienne', lat: 47.1368, lon: 7.2468 },
+  { name: 'Neuchâtel', lat: 46.9896, lon: 6.9293 },
+]
+
+function haversineKm(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const toRad = (v: number) => (v * Math.PI) / 180
+  const R = 6371
+  const dLat = toRad(bLat - aLat)
+  const dLon = toRad(bLon - aLon)
+  const aa = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2
+  return R * (2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa)))
+}
+
+function fallbackNearestCity(lat: number, lon: number) {
+  let best: CitySeed | null = null
+  let bestDist = Infinity
+  for (const city of SWISS_CITY_FALLBACKS) {
+    const d = haversineKm(lat, lon, city.lat, city.lon)
+    if (d < bestDist) {
+      bestDist = d
+      best = city
+    }
+  }
+  return best && bestDist <= 160 ? best.name : `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+}
+
+function pickNearestCityName(payload: unknown) {
   const rows = Array.isArray((payload as { results?: unknown[] })?.results)
     ? ((payload as { results: Array<Record<string, unknown>> }).results || [])
     : []
-  if (rows.length === 0) return `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+  if (rows.length === 0) return null
 
   const sorted = rows
     .map(r => {
@@ -88,7 +127,7 @@ function pickNearestCityName(payload: unknown, lat: number, lon: number) {
       return b.pop - a.pop
     })
 
-  return sorted[0]?.name || `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+  return sorted[0]?.name || null
 }
 
 function formatGainTag(gainMin: number, originMin: number, originName: string) {
@@ -99,7 +138,7 @@ function formatGainTag(gainMin: number, originMin: number, originName: string) {
   if (gainPct >= 100) {
     const ratio = (gainMin + originMin) / originMin
     const ratioRounded = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 10) / 10
-    const ratioLabel = Number.isInteger(ratioRounded) ? `${ratioRounded} X` : `${ratioRounded.toFixed(1)} X`
+    const ratioLabel = Number.isInteger(ratioRounded) ? `${ratioRounded}x` : `${ratioRounded.toFixed(1)}x`
     return `+${gainMin} min · ${ratioLabel} vs ${originName}`
   }
   if (gainPct >= 1) return `+${gainMin} min (+${gainPct}%) vs ${originName}`
@@ -290,15 +329,16 @@ export default function Home() {
         try {
           const lat = pos.coords.latitude
           const lon = pos.coords.longitude
+          const localFallback = fallbackNearestCity(lat, lon)
           const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&count=8&language=en&format=json`)
           const d = await r.json()
-          const nearestCity = pickNearestCityName(d, lat, lon)
+          const nearestCity = pickNearestCityName(d) || localFallback
           setUserLoc({ lat, lon, name: nearestCity })
         } catch {
           setUserLoc({
             lat: pos.coords.latitude,
             lon: pos.coords.longitude,
-            name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}`,
+            name: fallbackNearestCity(pos.coords.latitude, pos.coords.longitude),
           })
         }
         setLocating(false); setHasSetOptimal(false); setOptimalH(null)
@@ -399,15 +439,15 @@ export default function Home() {
                     <MiniRing score={data.origin_conditions.sun_score} size={36} stroke="#94a3b8" />
                     <div className="flex-1 min-w-0">
                       <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
-                      <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{originWeatherText}</p>
                       <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{currentTime} · {sunsetLine}</p>
                       <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
                         Forecast: {origin.name} · {data.origin_conditions.sunshine_min} min sun
                       </p>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 max-w-[146px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
                     <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
+                    <span className="truncate">{originWeatherText || 'Now'}</span>
                     <span>{Math.round(originTempC)}°</span>
                   </div>
                 </div>
@@ -429,9 +469,6 @@ export default function Home() {
                         {topEscape.destination.name}
                       </p>
                       <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-500'}`}>
-                        {weatherGlyph(topEscape.weather_now?.summary)} {topWeatherText}
-                      </p>
                       <p className="mt-1">
                         {sunGainMin > 0 ? (
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
@@ -449,8 +486,9 @@ export default function Home() {
                       </a>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 max-w-[146px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
                     <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
+                    <span className="truncate">{topWeatherText || 'Clear'}</span>
                     <span>{topTempC}°</span>
                   </div>
                 </div>
@@ -623,14 +661,12 @@ export default function Home() {
                           </div>
                           <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                         </div>
-                        <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                        <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border max-w-[150px] ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
                           <span aria-hidden="true">{weatherGlyph(e.weather_now?.summary)}</span>
+                          <span className="truncate">{weatherLabel(e.weather_now?.summary)}</span>
                           <span>{Math.round(e.weather_now?.temp_c ?? 0)}°</span>
                         </div>
                       </div>
-                      <p className={`text-[10px] sm:text-[10.5px] mt-1 ${night ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {weatherGlyph(e.weather_now?.summary)} {weatherLabel(e.weather_now?.summary)}
-                      </p>
                       <p className="text-[10px] sm:text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
                       {night && (
                         <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
