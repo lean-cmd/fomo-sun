@@ -1,0 +1,11 @@
+id,name,region,country,lat,lon,altitude_m,types,plan_template,maps_url,sbb_url,webcam_url,status
+basel,Basel,Basel-Stadt,CH,47.5596,7.5886,260,town|food,"River walk | old town terrace | return",,,,"candidate"
+luzern,Lucerne,Luzern,CH,47.0502,8.3093,436,lake|town|food,"Lakefront walk | old town | sunset drink",,,,"candidate"
+pilatus,Pilatus,Luzern,CH,46.9796,8.2521,2128,mountain|viewpoint|nature,"Cable car up | viewpoint loop | mountain lunch",,,,"candidate"
+mt-rigi,Rigi,Schwyz,CH,47.0565,8.4851,1798,mountain|viewpoint|nature,"Cogwheel train | summit walk | return before dusk",,,,"candidate"
+interlaken,Interlaken,Bernese Oberland,CH,46.6863,7.8632,566,town|lake|nature,"Promenade | lake edge | train back",,,,"candidate"
+thun,Thun,Bern,CH,46.7578,7.6287,560,town|lake|family,"Castle view | lakeside lunch | old town",,,,"candidate"
+st-moritz,St. Moritz,Engadin,CH,46.4908,9.8355,1822,mountain|town|viewpoint,"Engadin panorama | lake walk | alpine dinner",,,,"candidate"
+bern,Bern,Bern,CH,46.9480,7.4474,540,town|food|family,"Old town stroll | market lunch | Aare viewpoint",,,,"candidate"
+zurich,Zürich,Zürich,CH,47.3769,8.5417,408,town|food|lake,"Seepromenade | old town | coffee stop",,,,"candidate"
+chasseral,Chasseral,Jura,CH,47.1320,7.0540,1607,viewpoint|nature|mountain,"Summit viewpoint | short ridge walk | chalet stop",,,,"candidate"

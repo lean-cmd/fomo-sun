@@ -13,6 +13,7 @@ import { Confidence, Destination, SunScore } from './types'
 
 interface WeatherData {
   sunshine_forecast_min: number   // predicted sunshine minutes in next 3h (0-180)
+  sunshine_norm_cap_min?: number  // normalization cap for extended horizons (default 180)
   low_cloud_cover_pct: number     // predicted low cloud cover % (0-100)
   total_cloud_cover_pct: number   // predicted total cloud cover % (0-100)
   is_inversion_likely: boolean    // derived from temperature profile or manual flag
@@ -28,7 +29,8 @@ export function computeSunScore(
   weather: WeatherData
 ): SunScore {
   // Normalize sunshine forecast (0-1)
-  const sunshine_norm = Math.min(weather.sunshine_forecast_min / 180, 1)
+  const sunshineCap = Math.max(60, weather.sunshine_norm_cap_min ?? 180)
+  const sunshine_norm = Math.min(weather.sunshine_forecast_min / sunshineCap, 1)
 
   // Invert low cloud cover (high cloud cover = bad)
   const low_cloud_norm = 1 - (weather.low_cloud_cover_pct / 100)

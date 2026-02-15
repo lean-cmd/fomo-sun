@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { DaylightWindow, SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '@/lib/types'
 
 // ── Icons ─────────────────────────────────────────────────────────────
@@ -50,6 +50,8 @@ function compactDaySegments(segments: SunTimeline['today']) {
 }
 
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
+type SortMode = 'best' | 'fastest' | 'warmest'
+type TripSpan = 'daytrip' | 'plus1day'
 
 function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
@@ -67,14 +69,12 @@ function weatherChipLabel(summary?: string) {
   return 'Cloudy'
 }
 
-function WeatherDot({ summary }: { summary?: string }) {
+function weatherGlyph(summary?: string) {
   const kind = weatherKind(summary)
-  const tone =
-    kind === 'sunny' ? 'bg-amber-400'
-    : kind === 'partly' ? 'bg-sky-400'
-    : kind === 'foggy' ? 'bg-slate-400'
-    : 'bg-slate-500'
-  return <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${tone}`} />
+  if (kind === 'sunny') return '☀️'
+  if (kind === 'partly') return '⛅'
+  if (kind === 'foggy') return '☁️'
+  return '☁️'
 }
 
 function extractTemp(summary?: string) {
@@ -278,6 +278,8 @@ export default function Home() {
   const [optimalH, setOptimalH] = useState<number | null>(null)
   const [showOptimalInfo, setShowOptimalInfo] = useState(false)
   const [queryMaxH, setQueryMaxH] = useState(maxH)
+  const [sortBy, setSortBy] = useState<SortMode>('best')
+  const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const requestCtrlRef = useRef<AbortController | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
@@ -297,6 +299,7 @@ export default function Home() {
       const p = new URLSearchParams({
         lat: String(origin.lat), lon: String(origin.lon),
         max_travel_h: String(queryMaxH), mode, ga: String(ga), limit: '6', demo: String(demo),
+        trip_span: tripSpan,
       })
       if (types.length) p.set('types', types.join(','))
       const res = await fetch(`/api/v1/sunny-escapes?${p}`, { signal: ctrl.signal })
@@ -314,7 +317,7 @@ export default function Home() {
     } finally {
       if (requestCtrlRef.current === ctrl) setLoading(false)
     }
-  }, [queryMaxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal])
+  }, [queryMaxH, mode, ga, types, demo, origin.lat, origin.lon, hasSetOptimal, tripSpan])
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
@@ -387,6 +390,30 @@ export default function Home() {
   const originWeatherText = weatherChipLabel(data?.origin_conditions.description || '')
   const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
   const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
+  const sortedEscapes = useMemo(() => {
+    if (!data?.escapes?.length) return []
+    const list = [...data.escapes]
+    const bestTravelMin = (e: EscapeCard) => Math.min(e.travel.car?.duration_min ?? Infinity, e.travel.train?.duration_min ?? Infinity)
+    if (sortBy === 'fastest') {
+      list.sort((a, b) => {
+        const ta = bestTravelMin(a)
+        const tb = bestTravelMin(b)
+        if (ta !== tb) return ta - tb
+        return b.sun_score.score - a.sun_score.score
+      })
+      return list
+    }
+    if (sortBy === 'warmest') {
+      list.sort((a, b) => {
+        const ta = a.weather_now?.temp_c ?? -99
+        const tb = b.weather_now?.temp_c ?? -99
+        if (tb !== ta) return tb - ta
+        return b.sun_score.score - a.sun_score.score
+      })
+      return list
+    }
+    return list
+  }, [data?.escapes, sortBy])
 
   // v15: WhatsApp share includes fomosun.com link for virality
   const buildWhatsAppHref = (escape: EscapeCard) => {
@@ -459,8 +486,8 @@ export default function Home() {
                       </p>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <WeatherDot summary={data.origin_conditions.description} />
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
                     <span>{originWeatherText || 'Now'}</span>
                     <span>{Math.round(originTempC)}°</span>
                   </div>
@@ -485,7 +512,7 @@ export default function Home() {
                       <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
                       <p className="mt-1">
                         {sunGainMin > 0 ? (
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                          <span className={`text-[8.5px] sm:text-[9px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
                             {sunGainTag}
                           </span>
                         ) : (
@@ -500,8 +527,8 @@ export default function Home() {
                       </a>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <WeatherDot summary={topEscape.weather_now?.summary} />
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
                     <span>{topWeatherText || 'Sunny'}</span>
                     <span>{topTempC}°</span>
                   </div>
@@ -550,7 +577,13 @@ export default function Home() {
                     onMouseLeave={() => setShowOptimalInfo(false)}
                     onFocus={() => setShowOptimalInfo(true)}
                     onBlur={() => setShowOptimalInfo(false)}
-                    onClick={(ev) => { ev.stopPropagation(); setShowOptimalInfo(v => !v) }}
+                    onClick={(ev) => {
+                      ev.stopPropagation()
+                      setMaxH(markerOptH)
+                      setOptimalH(markerOptH)
+                      setHasSetOptimal(true)
+                      setShowOptimalInfo(true)
+                    }}
                   />
                   <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />
                   {showOptimalInfo && (
@@ -568,6 +601,28 @@ export default function Home() {
             )}
             {optimalHint && !night && (
               <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
+            )}
+            <div className="mt-2.5 flex items-center justify-between gap-2">
+              <span className={`text-[10px] font-semibold uppercase tracking-[1.1px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>Trip span</span>
+              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+                <button
+                  onClick={() => { setTripSpan('daytrip'); setHasSetOptimal(false); setOptimalH(null) }}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  Daytrip
+                </button>
+                <button
+                  onClick={() => { setTripSpan('plus1day'); setHasSetOptimal(false); setOptimalH(null) }}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  +1 day
+                </button>
+              </div>
+            </div>
+            {tripSpan === 'plus1day' && (
+              <p className={`mt-1 text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                FOMOscore uses today remaining + tomorrow forecast.
+              </p>
             )}
             <div className={`flex justify-between text-[8.5px] sm:text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
               <span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>4h 30m</span>
@@ -638,11 +693,29 @@ export default function Home() {
               <h2 className={`text-[16px] font-bold ${night ? 'text-white' : 'text-slate-800'}`} style={{ fontFamily: 'Sora', letterSpacing: '-0.3px' }}>
                 {night ? 'Tomorrow\'s sunny escapes' : 'Your sunny escapes'}
               </h2>
-              <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{data.escapes.length} found</span>
+              <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{sortedEscapes.length} found</span>
+            </div>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <span className={`text-[10px] uppercase tracking-[1.1px] font-semibold ${night ? 'text-slate-500' : 'text-slate-500'}`}>Sort by</span>
+              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+                {([
+                  ['best', 'Best now'],
+                  ['fastest', 'Fastest'],
+                  ['warmest', 'Warmest'],
+                ] as [SortMode, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setSortBy(id)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${sortBy === id ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-2">
-              {data.escapes.map((e, i) => {
+              {sortedEscapes.map((e, i) => {
                 const carMin = e.travel.car?.duration_min ?? Infinity
                 const trainMin = e.travel.train?.duration_min ?? Infinity
                 const bestMode: 'car' | 'train' | null =
@@ -675,8 +748,8 @@ export default function Home() {
                           </div>
                           <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                         </div>
-                        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold border ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                          <WeatherDot summary={e.weather_now?.summary} />
+                        <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                          <span aria-hidden="true">{weatherGlyph(e.weather_now?.summary)}</span>
                           <span>{weatherChipLabel(e.weather_now?.summary)}</span>
                           <span>{Math.round(e.weather_now?.temp_c ?? 0)}°</span>
                         </div>

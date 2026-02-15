@@ -7,6 +7,7 @@ import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
 
 type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
+type TripSpan = 'daytrip' | 'plus1day'
 
 type ScoredWithTravel = {
   destination: typeof destinations[number]
@@ -33,6 +34,8 @@ const LIVE_RATE_WINDOW_MS = 60_000
 const LIVE_RATE_MAX_PER_WINDOW = 24
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
+const QUERY_CACHE_TTL_MS = 12_000
+const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -75,6 +78,49 @@ function consumeRateBudget(ip: string): LiveRateState {
     remaining,
     reset_at: rec.reset_at,
   }
+}
+
+function normalizeTripSpan(raw: string | null): TripSpan {
+  return raw === 'plus1day' ? 'plus1day' : 'daytrip'
+}
+
+function remainingTodaySunshineMin(hours: LiveForecastBundle['hours']) {
+  const now = Date.now()
+  const today = new Date().toISOString().slice(0, 10)
+  return Math.round(
+    hours
+      .filter(h => h.time.startsWith(today))
+      .filter(h => new Date(h.time).getTime() >= now)
+      .reduce((sum, h) => sum + h.sunshine_duration_min, 0)
+  )
+}
+
+function normalizeQueryCacheKey(input: {
+  lat: number
+  lon: number
+  maxTravelH: number
+  mode: TravelMode
+  hasGA: boolean
+  types: string[]
+  limit: number
+  requestedDemo: boolean
+  tripSpan: TripSpan
+}) {
+  const latKey = input.lat.toFixed(3)
+  const lonKey = input.lon.toFixed(3)
+  const hKey = (Math.round(input.maxTravelH * 4) / 4).toFixed(2)
+  const typeKey = [...input.types].sort().join(',')
+  return [
+    `lat=${latKey}`,
+    `lon=${lonKey}`,
+    `h=${hKey}`,
+    `mode=${input.mode}`,
+    `ga=${input.hasGA ? 1 : 0}`,
+    `types=${typeKey || '-'}`,
+    `limit=${input.limit}`,
+    `demo=${input.requestedDemo ? 1 : 0}`,
+    `span=${input.tripSpan}`,
+  ].join('&')
 }
 
 function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
@@ -178,8 +224,28 @@ export async function GET(request: NextRequest) {
   const typesParam = sp.get('types')
   const types = typesParam ? typesParam.split(',') : []
   const limit = Math.min(10, Math.max(1, parseInt(sp.get('limit') || '6')))
+  const tripSpan = normalizeTripSpan(sp.get('trip_span'))
 
   const requestedDemo = sp.get('demo') === 'true'
+
+  if (isNaN(lat) || isNaN(lon) || lat < 44 || lat > 50 || lon < 4 || lon > 12) {
+    return NextResponse.json({ error: 'Invalid coordinates.' }, { status: 400 })
+  }
+
+  const cacheKey = normalizeQueryCacheKey({
+    lat, lon, maxTravelH, mode, hasGA, types, limit, requestedDemo, tripSpan,
+  })
+  const cached = queryResponseCache.get(cacheKey)
+  if (cached && cached.expires_at > Date.now()) {
+    return NextResponse.json(cached.response, {
+      headers: {
+        ...cached.headers,
+        'X-FOMO-Response-Cache': 'HIT',
+      },
+    })
+  }
+  if (cached) queryResponseCache.delete(cacheKey)
+
   const ip = clientIp(request)
   const liveRate = requestedDemo
     ? { limited: false, count: 0, remaining: LIVE_RATE_MAX_PER_WINDOW, reset_at: Date.now() + LIVE_RATE_WINDOW_MS }
@@ -187,10 +253,6 @@ export async function GET(request: NextRequest) {
   const liveRateLimited = !requestedDemo && liveRate.limited
   const demoMode = requestedDemo || liveRateLimited
   const liveFallbackReason = liveRateLimited ? 'rate_limited' : ''
-
-  if (isNaN(lat) || isNaN(lon) || lat < 44 || lat > 50 || lon < 4 || lon > 12) {
-    return NextResponse.json({ error: 'Invalid coordinates.' }, { status: 400 })
-  }
 
   const maxTravelMin = maxTravelH * 60
   const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -203,6 +265,9 @@ export async function GET(request: NextRequest) {
   let sunWindow = { today: getMockDaylightWindow(0), tomorrow: getMockDaylightWindow(1) }
   let sunsetInfo = getMockSunset(demoMode)
   let originTomorrowHours = getMockTomorrowSunHours()
+  if (tripSpan === 'plus1day') {
+    originSunMin = Math.round(originSunMin + originTomorrowHours * 60)
+  }
   let weatherFreshness = new Date().toISOString()
   let inversionLikely = true
   let usedSwissMeteo = false
@@ -240,9 +305,17 @@ export async function GET(request: NextRequest) {
   if (demoMode) {
     scored = candidatesWithTravel.map(c => {
       const w = getMockWeather(c.destination, true)
+      const tomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, true) * 60)
+      const effectiveSunMin = tripSpan === 'plus1day'
+        ? clamp(w.sunshine_forecast_min + tomorrowMin, 0, 600)
+        : w.sunshine_forecast_min
       return {
         destination: c.destination,
-        sun_score: computeSunScore(c.destination, w),
+        sun_score: computeSunScore(c.destination, {
+          ...w,
+          sunshine_forecast_min: effectiveSunMin,
+          sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+        }),
         conditions: w.conditions_text,
         temp_c: w.temp_c,
         carTravel: c.carTravel,
@@ -304,6 +377,10 @@ export async function GET(request: NextRequest) {
       }
       originTimeline = timelineFromLive(originHourly.hours, sunWindow)
       originTomorrowHours = Math.round((originHourly.total_sunshine_tomorrow_min / 60) * 10) / 10
+      if (tripSpan === 'plus1day') {
+        const remainingOriginMin = remainingTodaySunshineMin(originHourly.hours)
+        originSunMin = Math.round(remainingOriginMin + originHourly.total_sunshine_tomorrow_min)
+      }
       sunsetInfo = {
         time: sunTimes.sunset,
         minutes_until: sunTimes.sunset_minutes_until,
@@ -318,9 +395,17 @@ export async function GET(request: NextRequest) {
         try {
           const forecast = await getHourlyForecast(c.destination.lat, c.destination.lon)
           const liveWindow = computeLiveWeatherWindow(forecast.hours, inversionLikely)
+          const remainingTodayMin = remainingTodaySunshineMin(forecast.hours)
+          const effectiveSunMin = tripSpan === 'plus1day'
+            ? clamp(remainingTodayMin + forecast.total_sunshine_tomorrow_min, 0, 600)
+            : liveWindow.weatherInput.sunshine_forecast_min
           return {
             destination: c.destination,
-            sun_score: computeSunScore(c.destination, liveWindow.weatherInput),
+            sun_score: computeSunScore(c.destination, {
+              ...liveWindow.weatherInput,
+              sunshine_forecast_min: effectiveSunMin,
+              sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+            }),
             conditions: liveWindow.conditionsText,
             temp_c: liveWindow.tempC,
             carTravel: c.carTravel,
@@ -330,9 +415,17 @@ export async function GET(request: NextRequest) {
           }
         } catch {
           const w = getMockWeather(c.destination, false)
+          const fallbackTomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, false) * 60)
+          const effectiveSunMin = tripSpan === 'plus1day'
+            ? clamp(w.sunshine_forecast_min + fallbackTomorrowMin, 0, 600)
+            : w.sunshine_forecast_min
           return {
             destination: c.destination,
-            sun_score: computeSunScore(c.destination, w),
+            sun_score: computeSunScore(c.destination, {
+              ...w,
+              sunshine_forecast_min: effectiveSunMin,
+              sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+            }),
             conditions: w.conditions_text,
             temp_c: w.temp_c,
             carTravel: c.carTravel,
@@ -480,6 +573,7 @@ export async function GET(request: NextRequest) {
         'FOMO Sun - fomosun.com',
       ],
       demo_mode: demoMode,
+      trip_span: tripSpan,
     },
     origin_conditions: {
       description: originDescription,
@@ -497,8 +591,10 @@ export async function GET(request: NextRequest) {
 
   const headers: Record<string, string> = {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    'X-FOMO-Sun-Version': '0.4.1',
+    'X-FOMO-Sun-Version': '0.5.0',
     'X-FOMO-Live-Source': demoMode ? 'mock' : (usedSwissMeteo ? 'meteoswiss+open-meteo' : 'open-meteo'),
+    'X-FOMO-Trip-Span': tripSpan,
+    'X-FOMO-Response-Cache': 'MISS',
     'X-FOMO-Live-Rate-Limit': `${LIVE_RATE_MAX_PER_WINDOW};w=${Math.round(LIVE_RATE_WINDOW_MS / 1000)}`,
     'X-FOMO-Live-Rate-Remaining': String(liveRate.remaining),
     'X-FOMO-Live-Rate-Count': String(liveRate.count),
@@ -509,6 +605,20 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
+
+  if (!liveFallbackReason) {
+    if (queryResponseCache.size > 600) {
+      const now = Date.now()
+      for (const [k, v] of Array.from(queryResponseCache.entries())) {
+        if (v.expires_at <= now) queryResponseCache.delete(k)
+      }
+    }
+    queryResponseCache.set(cacheKey, {
+      expires_at: Date.now() + QUERY_CACHE_TTL_MS,
+      response,
+      headers,
+    })
+  }
 
   return NextResponse.json(response, { headers })
 }

@@ -1,0 +1,201 @@
+{
+  "generated_at": "2026-02-15T13:24:21.279Z",
+  "target_poi_count": 500,
+  "actual_count": 10,
+  "by_country": {
+    "CH": 10,
+    "DE": 0,
+    "FR": 0
+  },
+  "pois": [
+    {
+      "id": "basel",
+      "name": "Basel",
+      "region": "Basel-Stadt",
+      "country": "CH",
+      "lat": 47.5596,
+      "lon": 7.5886,
+      "altitude_m": 260,
+      "types": [
+        "town",
+        "food"
+      ],
+      "plan_template": "River walk | old town terrace | return",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "luzern",
+      "name": "Lucerne",
+      "region": "Luzern",
+      "country": "CH",
+      "lat": 47.0502,
+      "lon": 8.3093,
+      "altitude_m": 436,
+      "types": [
+        "lake",
+        "town",
+        "food"
+      ],
+      "plan_template": "Lakefront walk | old town | sunset drink",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "pilatus",
+      "name": "Pilatus",
+      "region": "Luzern",
+      "country": "CH",
+      "lat": 46.9796,
+      "lon": 8.2521,
+      "altitude_m": 2128,
+      "types": [
+        "mountain",
+        "viewpoint",
+        "nature"
+      ],
+      "plan_template": "Cable car up | viewpoint loop | mountain lunch",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "mt-rigi",
+      "name": "Rigi",
+      "region": "Schwyz",
+      "country": "CH",
+      "lat": 47.0565,
+      "lon": 8.4851,
+      "altitude_m": 1798,
+      "types": [
+        "mountain",
+        "viewpoint",
+        "nature"
+      ],
+      "plan_template": "Cogwheel train | summit walk | return before dusk",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "interlaken",
+      "name": "Interlaken",
+      "region": "Bernese Oberland",
+      "country": "CH",
+      "lat": 46.6863,
+      "lon": 7.8632,
+      "altitude_m": 566,
+      "types": [
+        "town",
+        "lake",
+        "nature"
+      ],
+      "plan_template": "Promenade | lake edge | train back",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "thun",
+      "name": "Thun",
+      "region": "Bern",
+      "country": "CH",
+      "lat": 46.7578,
+      "lon": 7.6287,
+      "altitude_m": 560,
+      "types": [
+        "town",
+        "lake",
+        "family"
+      ],
+      "plan_template": "Castle view | lakeside lunch | old town",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "st-moritz",
+      "name": "St. Moritz",
+      "region": "Engadin",
+      "country": "CH",
+      "lat": 46.4908,
+      "lon": 9.8355,
+      "altitude_m": 1822,
+      "types": [
+        "mountain",
+        "town",
+        "viewpoint"
+      ],
+      "plan_template": "Engadin panorama | lake walk | alpine dinner",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "bern",
+      "name": "Bern",
+      "region": "Bern",
+      "country": "CH",
+      "lat": 46.948,
+      "lon": 7.4474,
+      "altitude_m": 540,
+      "types": [
+        "town",
+        "food",
+        "family"
+      ],
+      "plan_template": "Old town stroll | market lunch | Aare viewpoint",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "zurich",
+      "name": "Zürich",
+      "region": "Zürich",
+      "country": "CH",
+      "lat": 47.3769,
+      "lon": 8.5417,
+      "altitude_m": 408,
+      "types": [
+        "town",
+        "food",
+        "lake"
+      ],
+      "plan_template": "Seepromenade | old town | coffee stop",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    },
+    {
+      "id": "chasseral",
+      "name": "Chasseral",
+      "region": "Jura",
+      "country": "CH",
+      "lat": 47.132,
+      "lon": 7.054,
+      "altitude_m": 1607,
+      "types": [
+        "viewpoint",
+        "nature",
+        "mountain"
+      ],
+      "plan_template": "Summit viewpoint | short ridge walk | chalet stop",
+      "maps_url": "",
+      "sbb_url": "",
+      "webcam_url": "",
+      "status": "candidate"
+    }
+  ]
+}
