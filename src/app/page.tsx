@@ -12,6 +12,7 @@ const MapI = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill=
 const CamI = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 0 1 5.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 0 0-1.134-.175 2.31 2.31 0 0 1-1.64-1.055l-.822-1.316a2.192 2.192 0 0 0-1.736-1.039 48.774 48.774 0 0 0-5.232 0 2.192 2.192 0 0 0-1.736 1.039l-.821 1.316Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0Z" /></svg>
 const ChevD = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
 const LocI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" /></svg>
+const WaIcon = ({ c = 'w-3 h-3' }: { c?: string }) => <svg className={c} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.612.616l4.573-1.46A11.942 11.942 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.239 0-4.326-.726-6.02-1.956a.5.5 0 00-.417-.07l-3.063.978.998-3.003a.5.5 0 00-.063-.426A9.946 9.946 0 012 12C2 6.486 6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z"/></svg>
 
 const FLAG: Record<string, string> = { CH: '🇨🇭', DE: '🇩🇪', FR: '🇫🇷' }
 const TYPES: { id: DestinationType; label: string }[] = [
@@ -49,6 +50,24 @@ function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; 
   )
 }
 
+// ── Mini Score Ring for hero trust cards ──────────────────────────────
+function MiniRing({ score, size = 36, stroke: strokeColor = '#f59e0b' }: { score: number; size?: number; stroke?: string }) {
+  const pct = Math.round(score * 100), r = (size - 6) / 2, circ = 2 * Math.PI * r
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={3} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={strokeColor} strokeWidth={3}
+          strokeDasharray={circ} strokeDashoffset={circ * (1 - score)} strokeLinecap="round"
+          style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[10px] font-bold text-slate-700" style={{ fontFamily: 'Sora' }}>{pct}</span>
+      </span>
+    </div>
+  )
+}
+
 // ── Timeline Bar ──────────────────────────────────────────────────────
 function SunBar({ timeline, demo, label }: { timeline: SunTimeline; demo: boolean; label?: string }) {
   const h = demo ? 10.17 : new Date().getHours() + new Date().getMinutes() / 60
@@ -62,7 +81,7 @@ function SunBar({ timeline, demo, label }: { timeline: SunTimeline; demo: boolea
           </span>
           <div className="tl-bar">
             {timeline[day].map((seg, i) => (
-              <div key={i} className={`h-full tl-${seg.condition} rounded-[2px]`} style={{ width: `${seg.pct}%` }} />
+              <div key={i} className={`h-full tl-${seg.condition}`} style={{ width: `${seg.pct}%` }} />
             ))}
             {day === 'today' && h >= 8 && h <= 18 && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
           </div>
@@ -104,7 +123,6 @@ export default function Home() {
       const res = await fetch(`/api/v1/sunny-escapes?${p}`)
       const d: SunnyEscapesResponse = await res.json()
       setData(d)
-      // Auto-set slider to optimal on first load
       if (!hasSetOptimal && d.optimal_travel_h) {
         const normalizedOpt = Math.round(Math.min(4.5, Math.max(1, d.optimal_travel_h)) * 4) / 4
         setMaxH(normalizedOpt)
@@ -138,7 +156,7 @@ export default function Home() {
           const d = await r.json()
           setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: d?.results?.[0]?.name || `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` })
         } catch { setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` }) }
-        setLocating(false); setHasSetOptimal(false); setOptimalH(null) // recalculate optimal for new location
+        setLocating(false); setHasSetOptimal(false); setOptimalH(null)
       },
       () => setLocating(false), { enableHighAccuracy: false, timeout: 8000 }
     )
@@ -149,7 +167,7 @@ export default function Home() {
   const filterSummary = types.length === 0 ? 'All types' : types.length <= 2 ? types.map(t => TYPES.find(x => x.id === t)?.label).join(', ') : `${types.length} selected`
   const currentTime = demo ? '10:10' : new Date().toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
   const markerOptH = optimalH ?? data?.optimal_travel_h ?? 2.5
-  const optPct = ((markerOptH - 1) / 3.5) * 100 // position on slider track (1-4.5h range)
+  const optPct = ((markerOptH - 1) / 3.5) * 100
   const topEscape = data?.escapes?.[0] ?? null
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
   const windowMinH = Math.max(0.5, maxH - 0.5)
@@ -158,17 +176,22 @@ export default function Home() {
     ? Math.min(topEscape.travel.car?.duration_min ?? Infinity, topEscape.travel.train?.duration_min ?? Infinity)
     : Infinity
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
+
+  // v15: WhatsApp share includes fomosun.com link for virality
   const buildWhatsAppHref = (escape: EscapeCard) => {
     const bestTravelMin = Math.min(escape.travel.car?.duration_min ?? Infinity, escape.travel.train?.duration_min ?? Infinity)
     const bestTravel = Number.isFinite(bestTravelMin) ? fmtMin(bestTravelMin) : 'n/a'
     const shareText = [
-      'FOMO Sun proposal',
-      `${origin.name} FOMO ${originFomoPct}% -> ${escape.destination.name} FOMO ${Math.round(escape.sun_score.score * 100)}%`,
-      `Travel time: ${bestTravel}`,
-      `Why now: ${escape.conditions}`,
-      `Plan: ${escape.plan[0]} > ${escape.plan[1]}`,
-      escape.links.google_maps || 'https://fomosun.com',
-    ].join('\n')
+      `☀️ FOMO Sun: escape the fog!`,
+      ``,
+      `${origin.name} (${originFomoPct}%) → ${escape.destination.name} (${Math.round(escape.sun_score.score * 100)}%)`,
+      `${bestTravel} away · ${escape.conditions}`,
+      ``,
+      `Plan: ${escape.plan[0]}`,
+      escape.links.google_maps || '',
+      ``,
+      `Find your sunny escape: https://fomosun.com`,
+    ].filter(Boolean).join('\n')
     return `https://wa.me/?text=${encodeURIComponent(shareText)}`
   }
   const topWhatsAppHref = topEscape ? buildWhatsAppHref(topEscape) : '#'
@@ -190,7 +213,6 @@ export default function Home() {
         </button>
 
         <div className="relative z-10 max-w-xl mx-auto text-center">
-          {/* Logo - no emoji, clean */}
           <div className="flex items-center justify-center gap-2 mb-2">
             {night
               ? <div className="moon-anim w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-gradient-to-br from-slate-300 via-slate-200 to-slate-400 flex-shrink-0" />
@@ -202,7 +224,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Tagline with emoji at end */}
           <p className={`text-[14px] sm:text-[15px] italic ${night ? 'text-slate-400' : 'text-slate-500'}`}
             style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
             {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
@@ -225,49 +246,47 @@ export default function Home() {
             </div>
           )}
 
+          {/* v15: Trust split cards with FOMO score rings + integrated WhatsApp */}
           {data && topEscape && (
             <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
-              <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Fog now in {origin.name}</p>
-                <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
-                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>Baseline FOMO {originFomoPct}%</p>
+              {/* Origin / Fog card */}
+              <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
+                <div className="flex items-start gap-2.5">
+                  <MiniRing score={data.origin_conditions.sun_score} size={36} stroke="#94a3b8" />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
+                    <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
+                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                      {data.origin_conditions.sunshine_min} min sun · up to {data.max_sun_hours_today}h above fog
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className={`rounded-xl px-3 py-2 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Best escape now</p>
-                <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
-                  {topEscape.destination.name} · {Math.round(topEscape.sun_score.score * 100)}%
-                </p>
-                <p className={`text-[9.5px] sm:text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                <a
-                  href={topWhatsAppHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`mt-1.5 inline-flex items-center rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
-                >
-                  WhatsApp this plan
-                </a>
+
+              {/* Best escape card */}
+              <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50/80 border border-amber-200/50 backdrop-blur-sm'}`}>
+                <div className="flex items-start gap-2.5">
+                  <MiniRing score={topEscape.sun_score.score} size={36} stroke="#f59e0b" />
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-400/80' : 'text-amber-700/70'}`}>Best escape now</p>
+                    <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
+                      {topEscape.destination.name}
+                    </p>
+                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                    <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
+                      className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white text-emerald-700 shadow-sm hover:shadow'}`}>
+                      <WaIcon c="w-3 h-3" /> Share this escape
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
-          {/* FOMO stat */}
-          {data && (
-            <div className={`mt-3 sm:mt-4 inline-flex items-center gap-2 rounded-xl px-4 sm:px-5 py-2 sm:py-2.5 shadow-sm ${night ? 'bg-white/10' : 'bg-white'}`}>
-              {night ? (
-                <>
-                  <span className="text-[18px] sm:text-xl font-bold text-amber-400" style={{ fontFamily: 'Sora' }}>{data.tomorrow_sun_hours}h</span>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight text-left">of sun forecast<br />tomorrow ☀️</span>
-                </>
-              ) : (
-                <>
-                  <span className="text-[18px] sm:text-xl font-bold text-amber-500" style={{ fontFamily: 'Sora' }}>{data.max_sun_hours_today}h</span>
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 leading-tight text-left">of sun today<br />above the fog</span>
-                </>
-              )}
-            </div>
-          )}
+          {/* v15: Removed standalone "Xh of sun today above the fog" box. */}
+          {/* Info is now folded into the origin trust card above.          */}
 
-          {/* Origin sun bar - shows what you need to escape */}
+          {/* Origin sun bar */}
           {data?.origin_timeline && (
             <div className={`mt-3 sm:mt-4 max-w-[310px] sm:max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
               <div className="flex items-center justify-between mb-1">
@@ -286,7 +305,6 @@ export default function Home() {
       <section className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
 
-          {/* Location */}
           <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-2 flex items-center gap-2">
             <div className="flex-1 flex items-center gap-2 text-[13px]">
               <LocI c="w-[16px] h-[16px] text-amber-500" />
@@ -301,17 +319,13 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Slider with optimal marker */}
           <div className="px-4 sm:px-5 pt-2 pb-3.5 sm:pb-4">
             <div className="flex justify-between items-baseline mb-2">
-              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                Travel time
-              </span>
+              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel time</span>
               <span className="text-[20px] sm:text-[22px] font-bold text-amber-500 tabular-nums" style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>
             </div>
             <div className="relative">
               <input type="range" min={1} max={4.5} step={0.25} value={maxH} onChange={e => setMaxH(parseFloat(e.target.value))} />
-              {/* Optimal marker */}
               {data && <div className={`opt-mark ${optimalHint ? 'opt-pop' : ''}`} style={{ left: `${optPct}%` }} />}
             </div>
             {!night && (
@@ -321,9 +335,7 @@ export default function Home() {
             )}
             {!night && (
               <div className="mt-1.5 flex items-center justify-between text-[8.5px] sm:text-[9px] text-slate-400">
-                <span>Less time</span>
-                <span className="font-medium text-slate-500">Net sun optimized</span>
-                <span>More options</span>
+                <span>Less time</span><span className="font-medium text-slate-500">Net sun optimized</span><span>More options</span>
               </div>
             )}
             {optimalHint && !night && (
@@ -334,7 +346,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Travel mode */}
           <button onClick={() => toggleSetting('mode')} className={`setting-toggle w-full flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
               <CarI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
@@ -363,7 +374,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Filters */}
           <button onClick={() => toggleSetting('filter')} className={`setting-toggle w-full flex items-center justify-between px-4 sm:px-5 py-2.5 sm:py-3 border-t cursor-pointer ${night ? 'border-slate-700' : 'border-slate-100'}`}>
             <div className="flex items-center gap-2">
               <FilterI c={`w-[18px] h-[18px] ${night ? 'text-slate-500' : 'text-slate-400'}`} />
@@ -426,33 +436,27 @@ export default function Home() {
                       </div>
                       <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                       <p className="text-[10px] sm:text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
-                      {!night && e.net_sun_min > 0 && (
-                        <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                          Net sun after travel: {fmtMin(e.net_sun_min)}
-                        </p>
-                      )}
                       {night && (
                         <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
                       )}
-                      <div className="flex gap-2.5 mt-1.5">
-                        {e.travel.car && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
-                        {e.travel.train && <span className={`flex items-start gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400 mt-0.5" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
+                      {/* v15: removed globe/net-sun-min line -- was confusing for users */}
+                      <div className="flex items-center gap-2.5 mt-1.5">
+                        {e.travel.car && <span className={`flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
+                        {e.travel.train && <span className={`flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
                       </div>
-                      <div className="mt-1.5">
-                        <a
-                          href={buildWhatsAppHref(e)}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                      {/* v15: WhatsApp button with icon, visually integrated */}
+                      <div className="mt-2">
+                        <a href={buildWhatsAppHref(e)} target="_blank" rel="noopener noreferrer"
                           onClick={ev => ev.stopPropagation()}
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[9px] font-semibold border ${night ? 'bg-emerald-500/15 border-emerald-400/35 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'}`}
-                        >
-                          Send this via WhatsApp
+                          className={`wa-btn inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}>
+                          <WaIcon c="w-3 h-3" /> Share via WhatsApp
                         </a>
                       </div>
                     </div>
                     <ChevD c={`w-3.5 h-3.5 flex-shrink-0 self-center transition-transform ${night ? 'text-slate-600' : 'text-slate-300'} ${openCard === i ? 'rotate-180' : ''}`} />
                   </div>
 
+                  {/* v15: timeline bars always visible, improved colors in CSS */}
                   <div className="px-4 pb-3">
                     {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} />}
                     <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">

@@ -42,7 +42,6 @@ const DEMO_SWISS_MEDIUM = new Set([
   'leysin',
 ])
 
-// Weather zone overrides for non-altitude-based destinations
 const ZONE: Record<string, { sun_bias: number; cond: string }> = {
   'strasbourg':          { sun_bias: 0.55, cond: 'Partly sunny, 5°C, Alsace plain clearer than Rhine Valley' },
   'colmar':              { sun_bias: 0.65, cond: 'Mostly sunny, 6°C, driest city in France (rain shadow)' },
@@ -57,7 +56,6 @@ const ZONE: Record<string, { sun_bias: number; cond: string }> = {
   'mulhouse':            { sun_bias: 0.15, cond: 'Fog, 3°C, Rhine Valley' },
 }
 
-// Simple seeded random for deterministic per-destination results within a session
 let seed = 42
 function srand() { seed = (seed * 16807 + 0) % 2147483647; return (seed - 1) / 2147483646 }
 function hashSeed(key: string, bucket = 0) {
@@ -69,13 +67,12 @@ function hashSeed(key: string, bucket = 0) {
 function demoBucket() { return Math.floor(Date.now() / (DEMO_BUCKET_MIN * 60 * 1000)) }
 
 export function getMockWeather(destination: Destination, demoMode = false): MockWeatherResult {
-  // Stable for a short time window in demo, deterministic otherwise.
   seed = hashSeed(destination.id, demoMode ? demoBucket() : 0)
 
   if (demoMode) {
     if (destination.id === 'st-moritz') {
-      const sunMin = 179 + Math.round(srand()) // 179-180
-      const lowCloud = Math.round(srand() * 2) // 0-2
+      const sunMin = 179 + Math.round(srand())
+      const lowCloud = Math.round(srand() * 2)
       return {
         sunshine_forecast_min: sunMin,
         low_cloud_cover_pct: lowCloud,
@@ -89,9 +86,8 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
     }
 
     if (destination.country === 'CH' && DEMO_SWISS_ELITE.has(destination.id)) {
-      // Famous Swiss highlights: typically sunny, but not always perfect.
-      const sunMin = 160 + Math.round(srand() * 18) // 160-178
-      const lowCloud = 2 + Math.round(srand() * 12) // 2-14
+      const sunMin = 160 + Math.round(srand() * 18)
+      const lowCloud = 2 + Math.round(srand() * 12)
       return {
         sunshine_forecast_min: sunMin,
         low_cloud_cover_pct: lowCloud,
@@ -105,8 +101,7 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
     }
 
     if (destination.country === 'CH' && DEMO_SWISS_MEDIUM.has(destination.id)) {
-      // Mid-confidence options: usable but with meaningful cloud periods.
-      const sunMin = 75 + Math.round(srand() * 60) // 75-135
+      const sunMin = 75 + Math.round(srand() * 60)
       const lowCloud = 25 + Math.round(srand() * 45)
       return {
         sunshine_forecast_min: sunMin,
@@ -120,9 +115,8 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
       }
     }
 
-    // Make demo feel more realistic: more clouds overall for non-highlight spots.
     if (destination.country !== 'CH') {
-      const sunMin = 8 + Math.round(srand() * 70) // 8-78
+      const sunMin = 8 + Math.round(srand() * 70)
       const lowCloud = 55 + Math.round(srand() * 40)
       return {
         sunshine_forecast_min: sunMin,
@@ -166,10 +160,10 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
   }
 
   const alt = destination.altitude_m
-  const fogCeiling = 800 // fixed for demo consistency
+  const fogCeiling = 800
 
   if (alt > fogCeiling + 200) {
-    const sunMin = 130 + Math.round(srand() * 50) // 130-180: wide variance
+    const sunMin = 130 + Math.round(srand() * 50)
     return {
       sunshine_forecast_min: sunMin, low_cloud_cover_pct: Math.round(srand() * 15),
       total_cloud_cover_pct: Math.round(srand() * 25), is_inversion_likely: true,
@@ -178,7 +172,7 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
       conditions_text: `Clear above fog, ${sunMin} min sunshine`,
     }
   } else if (alt > fogCeiling - 150) {
-    const sunMin = 40 + Math.round(srand() * 100) // 40-140: big spread
+    const sunMin = 40 + Math.round(srand() * 100)
     return {
       sunshine_forecast_min: sunMin, low_cloud_cover_pct: 25 + Math.round(srand() * 50),
       total_cloud_cover_pct: 35 + Math.round(srand() * 35), is_inversion_likely: true,
@@ -187,7 +181,7 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
       conditions_text: `Near fog boundary, ${sunMin} min sunshine`,
     }
   } else {
-    const sunMin = Math.round(srand() * 25) // 0-25: mostly grey
+    const sunMin = Math.round(srand() * 25)
     return {
       sunshine_forecast_min: sunMin, low_cloud_cover_pct: 80 + Math.round(srand() * 20),
       total_cloud_cover_pct: 85 + Math.round(srand() * 15), is_inversion_likely: true,
@@ -198,7 +192,6 @@ export function getMockWeather(destination: Destination, demoMode = false): Mock
   }
 }
 
-/** Basel: mostly fog but 40 min sun window around 10-11 AM */
 export function getMockOriginWeather() {
   return {
     description: 'Fog, 3°C, brief sun 10-11 AM',
@@ -208,14 +201,13 @@ export function getMockOriginWeather() {
   }
 }
 
-/** Origin (Basel) timeline: fog with a 10-11 AM sun break */
 export function getMockOriginTimeline(): SunTimeline {
   return {
     today: [
-      { condition: 'cloud', pct: 17 },  // 8-10: fog
-      { condition: 'partial', pct: 5 },  // 10:00-10:20
-      { condition: 'sun', pct: 7 },      // 10:20-11:00
-      { condition: 'cloud', pct: 56 },   // 11-18: fog returns
+      { condition: 'cloud', pct: 17 },
+      { condition: 'partial', pct: 5 },
+      { condition: 'sun', pct: 7 },
+      { condition: 'cloud', pct: 56 },
       { condition: 'night', pct: 15 },
     ],
     tomorrow: [
@@ -237,17 +229,19 @@ export function getMockTravelTime(
   const a = Math.sin(dLa/2)**2 + Math.cos(oLat*Math.PI/180)*Math.cos(dLat*Math.PI/180)*Math.sin(dLo/2)**2
   const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.3
   if (mode === 'car') return { duration_min: Math.round(km/60*60), distance_km: Math.round(km) }
-  // Seed for consistent changes count
   seed = Math.round(dLat * 1000 + dLon * 100)
   return { duration_min: Math.round(km/55*60*1.4), changes: 1 + Math.round(srand()) }
 }
 
+// v15: More diverse timeline bars with varied cloud burst patterns
+// Each destination gets a unique "weather personality" affecting bar shape
 export function getMockSunTimeline(destination: Destination, demoMode = false): SunTimeline {
   const alt = destination.altitude_m
   const zone = ZONE[destination.id]
   seed = hashSeed(`${destination.id}:timeline`, demoMode ? demoBucket() : 0)
 
-  function genDay(bias: number): TimelineSegment[] {
+  function genDay(bias: number, dayOffset: number): TimelineSegment[] {
+    // Compute sun chance based on destination type
     let sc = zone ? zone.sun_bias + bias : alt > 1000 ? 0.72 + bias : alt > 600 ? 0.38 + bias : 0.12 + bias
     if (demoMode) {
       if (destination.id === 'st-moritz') sc = 0.92 + bias
@@ -256,25 +250,51 @@ export function getMockSunTimeline(destination: Destination, demoMode = false): 
       else if (destination.country === 'CH') sc = 0.36 + bias
       else sc = 0.24 + bias
     }
+
     const segs: TimelineSegment[] = []
     let rem = 85
-    const n = 5 + Math.round(srand() * 2) // 5-7 segments for more visible change
-    const cloudBurstIndex = Math.round(srand() * (n - 1))
-    for (let i = 0; i < n && rem > 5; i++) {
-      const pct = Math.min(rem, 8 + Math.round(srand() * 22))
+
+    // v15: Use destination name hash to vary number of segments (6-9)
+    // and cloud burst positioning for more visual diversity
+    const nameHash = destination.id.length + (destination.id.charCodeAt(0) || 0)
+    const nSegs = 6 + Math.round(srand() * 3) // 6-9 segments
+    const burstCount = 1 + Math.round(srand() * (demoMode ? 1 : 0)) // 1-2 cloud bursts in demo
+    const burstPositions = new Set<number>()
+    for (let b = 0; b < burstCount; b++) {
+      // Spread bursts across the day for visual variety
+      const pos = dayOffset === 0
+        ? Math.round(srand() * (nSegs - 2)) + 1 // mid-day burst for today
+        : Math.round(srand() * (nSegs - 1))       // anywhere for tomorrow
+      burstPositions.add(pos)
+    }
+
+    // v15: Vary segment widths more -- some short, some long
+    for (let i = 0; i < nSegs && rem > 3; i++) {
+      // Alternate between shorter and longer segments for visual rhythm
+      const isLong = (i + nameHash) % 3 === 0
+      const minPct = isLong ? 12 : 5
+      const maxPct = isLong ? 24 : 14
+      const pct = Math.min(rem, minPct + Math.round(srand() * (maxPct - minPct)))
       rem -= pct
+
       let r = srand()
-      if (demoMode && i === cloudBurstIndex) r = 0.95 // explicit cloud period burst
-      segs.push({ condition: r < sc ? 'sun' : r < sc + 0.18 ? 'partial' : 'cloud', pct })
+      // Force cloud at burst positions
+      if (burstPositions.has(i)) r = 0.92 + srand() * 0.08
+      // Force sun at start for high-altitude destinations (morning clearing)
+      if (i === 0 && sc > 0.6 && demoMode) r = srand() * 0.3
+
+      segs.push({
+        condition: r < sc ? 'sun' : r < sc + 0.18 ? 'partial' : 'cloud',
+        pct,
+      })
     }
     if (rem > 0) segs.push({ condition: srand() < sc ? 'sun' : 'partial', pct: rem })
     segs.push({ condition: 'night', pct: 15 })
     return segs
   }
-  return { today: genDay(0), tomorrow: genDay(0.05) }
+  return { today: genDay(0, 0), tomorrow: genDay(0.05, 1) }
 }
 
-/** Per-destination tomorrow sun hours */
 export function getMockTomorrowSunHoursForDest(destination: Destination, demoMode = false): number {
   if (demoMode && destination.id === 'st-moritz') {
     seed = hashSeed(`${destination.id}:tomorrow`, demoBucket())
@@ -303,4 +323,4 @@ export function getMockSunset(demoMode: boolean): { time: string; minutes_until:
   return { time: '17:34', minutes_until: Math.max(0, d), is_past: d <= 0 }
 }
 
-export function getMockTomorrowSunHours(): number { return 4.8 } // fixed for demo
+export function getMockTomorrowSunHours(): number { return 4.8 }
