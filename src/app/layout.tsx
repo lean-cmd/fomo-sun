@@ -12,6 +12,7 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_CH',
     siteName: 'FOMO Sun',
+    images: [{ url: 'https://fomosun.com/api/og/default', width: 1200, height: 630 }],
   },
   icons: { icon: '/favicon.svg' },
   robots: { index: true, follow: true },
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {' · '}Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-gray-500">OJP</a>
               {' · '}<a href="/blog" className="hover:text-gray-500">Blog</a>
               {' · '}<a href="/about" className="hover:text-gray-500">About</a>
+              {' · '}<a href="/admin" className="hover:text-gray-500">Admin</a>
               {' · '}<a href="/api/v1/sunny-escapes" className="hover:text-gray-500">API</a>
               {' · '}<a href="/llms.txt" className="hover:text-gray-500">llms.txt</a>
             </div>

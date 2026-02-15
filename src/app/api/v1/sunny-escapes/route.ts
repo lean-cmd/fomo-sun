@@ -721,6 +721,17 @@ export async function GET(request: NextRequest) {
     const liveTomorrowSun = !demoMode && full.liveForecast
       ? Math.round((full.liveForecast.total_sunshine_tomorrow_min / 60) * 10) / 10
       : null
+    const adminHourly = adminView && full.liveForecast
+      ? full.liveForecast.hours.map(h => ({
+        time: h.time,
+        sunshine_min: h.sunshine_duration_min,
+        cloud_cover_pct: h.cloud_cover_pct,
+        low_cloud_cover_pct: h.low_cloud_cover_pct,
+        temperature_c: h.temperature_c,
+        relative_humidity_pct: h.relative_humidity_pct,
+        wind_speed_kmh: h.wind_speed_kmh,
+      }))
+      : undefined
 
     return {
       rank: i + 1,
@@ -744,6 +755,7 @@ export async function GET(request: NextRequest) {
       },
       sun_timeline: liveTimeline ?? getMockSunTimeline(r.destination, demoMode),
       tomorrow_sun_hours: liveTomorrowSun ?? getMockTomorrowSunHoursForDest(r.destination, demoMode),
+      admin_hourly: adminHourly,
     }
   })
 

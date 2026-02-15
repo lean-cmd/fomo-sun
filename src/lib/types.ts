@@ -43,6 +43,15 @@ export interface EscapeResult {
   plan: string[]; links: { google_maps?: string; sbb?: string; webcam?: string }
   sun_timeline: SunTimeline
   tomorrow_sun_hours: number // per-destination tomorrow forecast
+  admin_hourly?: Array<{
+    time: string
+    sunshine_min: number
+    cloud_cover_pct: number
+    low_cloud_cover_pct: number
+    temperature_c: number
+    relative_humidity_pct: number
+    wind_speed_kmh: number
+  }>
 }
 
 export interface SunnyEscapesResponse {

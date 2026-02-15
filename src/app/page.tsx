@@ -682,6 +682,7 @@ export default function Home() {
     const destinationSky = timelineEmojiPreview(escape.sun_timeline)
     const destinationSun = formatSunHours(escape.sun_score.sunshine_forecast_min)
     const originSun = formatSunHours(originSunMin)
+    const ogUrl = `https://fomosun.com/api/og/${encodeURIComponent(escape.destination.id)}?score=${Math.round(escape.sun_score.score * 100)}&sun=${escape.sun_score.sunshine_forecast_min}&t=${Date.now()}`
     const shareText = [
       `☀️ FOMO Sun: escape the fog!`,
       ``,
@@ -693,6 +694,7 @@ export default function Home() {
       ``,
       `Plan: ${escape.plan[0]}`,
       escape.links.google_maps || '',
+      `Preview image: ${ogUrl}`,
       ``,
       `Find your sunny escape: https://fomosun.com`,
     ].filter(Boolean).join('\n')
