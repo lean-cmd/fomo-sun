@@ -170,6 +170,15 @@ export default function Home() {
   const optPct = ((markerOptH - 1) / 3.5) * 100
   const topEscape = data?.escapes?.[0] ?? null
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
+  const originSunMin = data?.origin_conditions.sunshine_min ?? 0
+  const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
+  const sunGainMin = Math.max(0, topSunMin - originSunMin)
+  const sunGainPct = originSunMin > 0 ? Math.round((sunGainMin / originSunMin) * 100) : 0
+  const sunsetLine = data
+    ? data.sunset.is_past
+      ? `Sunset already passed`
+      : `Sunset ${data.sunset.time} (${fmtMin(data.sunset.minutes_until)})`
+    : ''
   const windowMinH = Math.max(0.5, maxH - 0.5)
   const windowMaxH = maxH + 0.5
   const topTravelMin = topEscape
@@ -229,23 +238,6 @@ export default function Home() {
             {night ? 'Plan tomorrow\'s escape ☀️' : 'Stop chasing clouds. Find sun. ☀️'}
           </p>
 
-          {/* Status pills */}
-          {data && (
-            <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
-              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
-                🕐 {currentTime}
-              </span>
-              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
-                {origin.name}: {data.origin_conditions.description}
-              </span>
-              {!data.sunset.is_past && (
-                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] ${night ? 'bg-white/10 text-slate-400' : 'bg-white/60 backdrop-blur-sm text-slate-500'}`}>
-                  🌅 Sunset {data.sunset.time} ({fmtMin(data.sunset.minutes_until)})
-                </span>
-              )}
-            </div>
-          )}
-
           {/* v15: Trust split cards with FOMO score rings + integrated WhatsApp */}
           {data && topEscape && (
             <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
@@ -256,11 +248,20 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
                     <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
+                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{currentTime} · {sunsetLine}</p>
                     <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                      {data.origin_conditions.sunshine_min} min sun · up to {data.max_sun_hours_today}h above fog
+                      Forecast: {origin.name} · {data.origin_conditions.sunshine_min} min sun · FOMO {originFomoPct}%
+                    </p>
+                    <p className={`text-[8.5px] sm:text-[9px] mt-0.5 ${night ? 'text-slate-600' : 'text-slate-400'}`}>
+                      Up to {data.max_sun_hours_today}h above fog today
                     </p>
                   </div>
                 </div>
+                {data.origin_timeline && (
+                  <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
+                    <SunBar timeline={data.origin_timeline} demo={demo} />
+                  </div>
+                )}
               </div>
 
               {/* Best escape card */}
@@ -273,6 +274,17 @@ export default function Home() {
                       {topEscape.destination.name}
                     </p>
                     <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                    <p className="mt-1">
+                      {sunGainMin > 0 ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                          +{sunGainMin} min ({sunGainPct}%) vs {origin.name}
+                        </span>
+                      ) : (
+                        <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
+                          Best confidence option in this travel window
+                        </span>
+                      )}
+                    </p>
                     <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
                       className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white text-emerald-700 shadow-sm hover:shadow'}`}>
                       <WaIcon c="w-3 h-3" /> Share this escape
@@ -283,21 +295,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* v15: Removed standalone "Xh of sun today above the fog" box. */}
-          {/* Info is now folded into the origin trust card above.          */}
-
-          {/* Origin sun bar */}
-          {data?.origin_timeline && (
-            <div className={`mt-3 sm:mt-4 max-w-[310px] sm:max-w-xs mx-auto rounded-lg px-3 py-2 ${night ? 'bg-white/5' : 'bg-white/50 backdrop-blur-sm'}`}>
-              <div className="flex items-center justify-between mb-1">
-                <span className={`text-[8.5px] sm:text-[9px] font-semibold uppercase tracking-wider ${night ? 'text-slate-500' : 'text-slate-400'}`}>Forecast: {origin.name}</span>
-                <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                  {data.origin_conditions.sunshine_min} min sun · FOMO {Math.round(data.origin_conditions.sun_score * 100)}%
-                </span>
-              </div>
-              <SunBar timeline={data.origin_timeline} demo={demo} />
-            </div>
-          )}
         </div>
       </section>
 
@@ -399,6 +396,7 @@ export default function Home() {
 
       {/* ══════ RESULTS ══════ */}
       <section className="max-w-xl mx-auto px-4 mt-4 sm:mt-5 pb-14 sm:pb-16">
+        <p className={`text-[11px] sm:text-[12px] font-medium mb-2 ${night ? 'text-slate-500' : 'text-slate-500'}`}>Fine tune & discover more escapes</p>
         {loading ? (
           <div className="text-center py-16">
             <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto" />
