@@ -401,6 +401,7 @@ export default function Home() {
   const originWeatherText = weatherChipLabel(data?.origin_conditions.description || '')
   const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
   const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
+  const fallbackNotice = data?._meta?.fallback_notice || ''
   const sortedEscapes = useMemo(() => {
     if (!data?.escapes?.length) return []
     const list = [...data.escapes]
@@ -454,8 +455,8 @@ export default function Home() {
   return (
     <div className={night ? 'night' : ''}>
       <div
-        className="fixed right-3 sm:right-4 z-[80] flex flex-col items-end gap-1.5"
-        style={{ top: 'max(10px, env(safe-area-inset-top))' }}
+        className="fixed right-2.5 sm:right-4 z-[100] flex items-center"
+        style={{ top: 'max(8px, env(safe-area-inset-top))' }}
       >
         <button
           onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
@@ -466,20 +467,6 @@ export default function Home() {
           <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
           <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
         </button>
-        <div className={`inline-flex p-1 rounded-full border shadow-sm ${night ? 'border-slate-600 bg-slate-800/90' : 'border-slate-200 bg-white/95 backdrop-blur-sm'}`}>
-          <button
-            onClick={() => setTripSpanManual('daytrip')}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-          >
-            Daytrip
-          </button>
-          <button
-            onClick={() => setTripSpanManual('plus1day')}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-700 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-          >
-            +1 day
-          </button>
-        </div>
       </div>
 
       {/* ══════ HERO ══════ */}
@@ -599,8 +586,29 @@ export default function Home() {
 
       {/* ══════ CONTROLS ══════ */}
       <section className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
+        {fallbackNotice && (
+          <div className={`mb-2 rounded-xl border px-3 py-2 text-center text-[11px] font-medium ${night ? 'bg-amber-400/10 border-amber-300/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+            {fallbackNotice}
+          </div>
+        )}
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
           <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-3.5 sm:pb-4">
+            <div className="mb-2.5 flex justify-center">
+              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+                <button
+                  onClick={() => setTripSpanManual('daytrip')}
+                  className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  Daytrip
+                </button>
+                <button
+                  onClick={() => setTripSpanManual('plus1day')}
+                  className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  +1 day
+                </button>
+              </div>
+            </div>
             <div className="flex justify-between items-baseline mb-2">
               <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel time (±30m)</span>
               <span className={`text-[20px] sm:text-[22px] font-bold tabular-nums ${night ? 'text-slate-200' : 'text-slate-700'}`} style={{ fontFamily: 'Sora' }}>{fmtTravelHours(maxH)}</span>

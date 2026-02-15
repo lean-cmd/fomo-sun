@@ -485,6 +485,18 @@ export async function GET(request: NextRequest) {
       bestOptH = testH
     }
   }
+  if (demoMode) {
+    const demoMidPool = withTravel
+      .filter(r => r.bestTravelMin >= 90 && r.bestTravelMin <= 240)
+      .sort((a, b) => b.sun_score.score - a.sun_score.score)
+    if (demoMidPool.length > 0) {
+      const target = demoMidPool[0]
+      const targetH = Math.round((target.bestTravelMin / 60) * 4) / 4
+      bestOptH = clamp(targetH, 2, 3.5)
+    } else {
+      bestOptH = clamp(bestOptH, 2, 3.5)
+    }
+  }
 
   function formatComparison(destMin: number, originMin: number): string {
     if (originMin <= 0 || destMin <= originMin) return ''
