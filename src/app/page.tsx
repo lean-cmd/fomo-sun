@@ -63,6 +63,34 @@ function weatherLabel(summary?: string) {
   return summary.replace(/,\s*-?\d+\s*°c/i, '').trim()
 }
 
+function extractTemp(summary?: string) {
+  if (!summary) return null
+  const m = summary.match(/(-?\d+)\s*°c/i)
+  return m ? Number(m[1]) : null
+}
+
+function pickNearestCityName(payload: unknown, lat: number, lon: number) {
+  const rows = Array.isArray((payload as { results?: unknown[] })?.results)
+    ? ((payload as { results: Array<Record<string, unknown>> }).results || [])
+    : []
+  if (rows.length === 0) return `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+
+  const sorted = rows
+    .map(r => {
+      const feature = String(r.feature_code || '')
+      const isCity = feature.startsWith('PPL')
+      const pop = Number(r.population || 0)
+      const name = String(r.name || '')
+      return { isCity, pop, name }
+    })
+    .sort((a, b) => {
+      if (a.isCity !== b.isCity) return a.isCity ? -1 : 1
+      return b.pop - a.pop
+    })
+
+  return sorted[0]?.name || `${lat.toFixed(2)}, ${lon.toFixed(2)}`
+}
+
 function formatGainTag(gainMin: number, originMin: number, originName: string) {
   if (gainMin <= 0) return ''
   if (originMin <= 0) return `+${gainMin} min vs ${originName}`
@@ -70,8 +98,9 @@ function formatGainTag(gainMin: number, originMin: number, originName: string) {
   const gainPct = Math.round((gainMin / originMin) * 100)
   if (gainPct >= 100) {
     const ratio = (gainMin + originMin) / originMin
-    const ratioLabel = ratio >= 10 ? `${Math.round(ratio)}x` : `${Math.round(ratio * 10) / 10}x`
-    return `+${gainMin} min (${ratioLabel}) vs ${originName}`
+    const ratioRounded = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 10) / 10
+    const ratioLabel = Number.isInteger(ratioRounded) ? `${ratioRounded} X` : `${ratioRounded.toFixed(1)} X`
+    return `+${gainMin} min · ${ratioLabel} vs ${originName}`
   }
   if (gainPct >= 1) return `+${gainMin} min (+${gainPct}%) vs ${originName}`
   return `+${gainMin} min vs ${originName}`
@@ -259,10 +288,19 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?latitude=${pos.coords.latitude}&longitude=${pos.coords.longitude}&count=1&language=en&format=json`)
+          const lat = pos.coords.latitude
+          const lon = pos.coords.longitude
+          const r = await fetch(`https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&count=8&language=en&format=json`)
           const d = await r.json()
-          setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: d?.results?.[0]?.name || `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` })
-        } catch { setUserLoc({ lat: pos.coords.latitude, lon: pos.coords.longitude, name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}` }) }
+          const nearestCity = pickNearestCityName(d, lat, lon)
+          setUserLoc({ lat, lon, name: nearestCity })
+        } catch {
+          setUserLoc({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+            name: `${pos.coords.latitude.toFixed(2)}, ${pos.coords.longitude.toFixed(2)}`,
+          })
+        }
         setLocating(false); setHasSetOptimal(false); setOptimalH(null)
       },
       () => setLocating(false), { enableHighAccuracy: false, timeout: 8000 }
@@ -291,6 +329,10 @@ export default function Home() {
     : Infinity
   const topTravelText = Number.isFinite(topTravelMin) ? fmtMin(topTravelMin) : 'n/a'
   const timelineTicks = buildHourTicks(data?.sun_window?.today)
+  const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
+  const originWeatherText = weatherLabel(data?.origin_conditions.description || '')
+  const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
+  const topWeatherText = topEscape ? weatherLabel(topEscape.weather_now?.summary || '') : ''
 
   // v15: WhatsApp share includes fomosun.com link for virality
   const buildWhatsAppHref = (escape: EscapeCard) => {
@@ -320,11 +362,14 @@ export default function Home() {
           <div className="fog-w2 absolute top-[60px] left-[8%] w-4/5 h-6 bg-gradient-to-r from-transparent via-slate-400/[.12] to-transparent rounded-full blur-[14px] pointer-events-none" />
         </>}
 
-        <button onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
-          className={`absolute top-3 right-3 z-20 flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-medium border backdrop-blur-sm transition-all
-            ${demo ? 'bg-amber-500/10 border-amber-400/30 text-amber-600' : night ? 'bg-white/10 border-white/20 text-white/60' : 'bg-white/60 border-slate-200 text-slate-500'}`}>
-          <span className={`w-2 h-2 rounded-full ${demo ? 'bg-amber-500' : 'bg-slate-400'}`} />
-          {demo ? 'Demo' : 'Live'}
+        <button
+          onClick={() => { setDemo(!demo); setHasSetOptimal(false); setOptimalH(null) }}
+          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+          className={`live-toggle absolute top-3 right-3 z-20 ${demo ? 'is-demo' : 'is-live'} ${night ? 'is-night' : ''}`}
+        >
+          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
         </button>
 
         <div className="relative z-10 max-w-xl mx-auto text-center">
@@ -349,18 +394,21 @@ export default function Home() {
             <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
               {/* Origin / Fog card */}
               <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <div className="flex items-start gap-2.5">
-                  <MiniRing score={data.origin_conditions.sun_score} size={36} stroke="#94a3b8" />
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
-                    <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{data.origin_conditions.description}</p>
-                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{currentTime} · {sunsetLine}</p>
-                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                      Forecast: {origin.name} · {data.origin_conditions.sunshine_min} min sun · FOMO {originFomoPct}%
-                    </p>
-                    <p className={`text-[8.5px] sm:text-[9px] mt-0.5 ${night ? 'text-slate-600' : 'text-slate-400'}`}>
-                      Up to {data.max_sun_hours_today}h above fog today
-                    </p>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <MiniRing score={data.origin_conditions.sun_score} size={36} stroke="#94a3b8" />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
+                      <p className={`text-[11px] sm:text-[12px] mt-0.5 font-medium ${night ? 'text-slate-200' : 'text-slate-700'}`}>{originWeatherText}</p>
+                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{currentTime} · {sunsetLine}</p>
+                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
+                        Forecast: {origin.name} · {data.origin_conditions.sunshine_min} min sun
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
+                    <span>{Math.round(originTempC)}°</span>
                   </div>
                 </div>
                 {data.origin_timeline && (
@@ -372,29 +420,38 @@ export default function Home() {
 
               {/* Best escape card */}
               <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50/80 border border-amber-200/50 backdrop-blur-sm'}`}>
-                <div className="flex items-start gap-2.5">
-                  <MiniRing score={topEscape.sun_score.score} size={36} stroke="#f59e0b" />
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-400/80' : 'text-amber-700/70'}`}>Best escape now</p>
-                    <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
-                      {topEscape.destination.name}
-                    </p>
-                    <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                    <p className="mt-1">
-                      {sunGainMin > 0 ? (
-                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
-                          {sunGainTag}
-                        </span>
-                      ) : (
-                        <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
-                          Best confidence option in this travel window
-                        </span>
-                      )}
-                    </p>
-                    <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
-                      className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white text-emerald-700 shadow-sm hover:shadow'}`}>
-                      <WaIcon c="w-3 h-3" /> Share this escape
-                    </a>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <MiniRing score={topEscape.sun_score.score} size={36} stroke="#f59e0b" />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-400/80' : 'text-amber-700/70'}`}>Best escape now</p>
+                      <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
+                        {topEscape.destination.name}
+                      </p>
+                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-500'}`}>
+                        {weatherGlyph(topEscape.weather_now?.summary)} {topWeatherText}
+                      </p>
+                      <p className="mt-1">
+                        {sunGainMin > 0 ? (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[8.5px] sm:text-[9px] font-semibold ${night ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-100'}`}>
+                            {sunGainTag}
+                          </span>
+                        ) : (
+                          <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
+                            Best confidence option in this travel window
+                          </span>
+                        )}
+                      </p>
+                      <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
+                        className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[8.5px] sm:text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30' : 'bg-white text-emerald-700 shadow-sm hover:shadow'}`}>
+                        <WaIcon c="w-3 h-3" /> Share this escape
+                      </a>
+                    </div>
+                  </div>
+                  <div className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                    <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
+                    <span>{topTempC}°</span>
                   </div>
                 </div>
               </div>
