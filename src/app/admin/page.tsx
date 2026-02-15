@@ -6,15 +6,16 @@ import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 
 type SortMode = 'score' | 'sun' | 'name' | 'altitude'
 type LimitMode = '25' | '50' | '100' | 'all'
+type ForecastDay = 'today' | 'tomorrow'
 
 type Escape = SunnyEscapesResponse['escapes'][number]
 
-function MiniTimeline({ timeline }: { timeline: SunTimeline }) {
-  const today = timeline?.today || []
-  const total = Math.max(1, today.reduce((sum, seg) => sum + seg.pct, 0))
+function MiniTimeline({ timeline, day }: { timeline: SunTimeline; day: ForecastDay }) {
+  const segments = day === 'today' ? (timeline?.today || []) : (timeline?.tomorrow || [])
+  const total = Math.max(1, segments.reduce((sum, seg) => sum + seg.pct, 0))
   return (
     <div className="tl-bar min-w-[180px]">
-      {today.map((seg, idx) => {
+      {segments.map((seg, idx) => {
         const c = seg.condition === 'sun'
           ? 'tl-sun'
           : seg.condition === 'partial'
@@ -34,8 +35,10 @@ export default function AdminDiagnosticsPage() {
   const [error, setError] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('score')
   const [limitMode, setLimitMode] = useState<LimitMode>('50')
+  const [forecastDay, setForecastDay] = useState<ForecastDay>('today')
   const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true })
   const [meta, setMeta] = useState({ liveSource: '', debugPath: '', cache: '' })
+  const [originMeta, setOriginMeta] = useState<{ name: string; lat: number; lon: number } | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -58,6 +61,7 @@ export default function AdminDiagnosticsPage() {
         const payload: SunnyEscapesResponse = await res.json()
         if (!mounted) return
         setRows(payload.escapes || [])
+        setOriginMeta(payload._meta?.origin || null)
         setMeta({
           liveSource: res.headers.get('x-fomo-live-source') || '',
           debugPath: res.headers.get('x-fomo-debug-live-path') || '',
@@ -84,8 +88,13 @@ export default function AdminDiagnosticsPage() {
 
   const filteredSorted = useMemo(() => {
     const filtered = rows.filter(r => activeCountries[r.destination.country] !== false)
+    const sunMinutesForDay = (r: Escape) => (
+      forecastDay === 'today'
+        ? r.sun_score.sunshine_forecast_min
+        : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
+    )
     filtered.sort((a, b) => {
-      if (sortMode === 'sun') return b.sun_score.sunshine_forecast_min - a.sun_score.sunshine_forecast_min
+      if (sortMode === 'sun') return sunMinutesForDay(b) - sunMinutesForDay(a)
       if (sortMode === 'name') return a.destination.name.localeCompare(b.destination.name, 'de-CH')
       if (sortMode === 'altitude') return b.destination.altitude_m - a.destination.altitude_m
       return b.sun_score.score - a.sun_score.score
@@ -93,7 +102,7 @@ export default function AdminDiagnosticsPage() {
 
     if (limitMode === 'all') return filtered
     return filtered.slice(0, Number(limitMode))
-  }, [rows, activeCountries, sortMode, limitMode])
+  }, [rows, activeCountries, sortMode, limitMode, forecastDay])
 
   const toggleCountry = (country: string) => {
     setActiveCountries(prev => ({ ...prev, [country]: !prev[country] }))
@@ -148,8 +157,30 @@ export default function AdminDiagnosticsPage() {
         <div className="text-xs text-slate-500 mb-2">
           Source: <strong>{meta.liveSource || 'unknown'}</strong> · Debug path: <strong>{meta.debugPath || 'unknown'}</strong> · Cache: <strong>{meta.cache || 'unknown'}</strong>
         </div>
+        <div className="text-xs text-slate-500 mb-3">
+          Current location: <strong>{originMeta?.name || 'Basel'}</strong>
+          {' '}({(originMeta?.lat ?? 47.5596).toFixed(2)}, {(originMeta?.lon ?? 7.5886).toFixed(2)})
+        </div>
 
         {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">{error}</div>}
+
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-medium">Data:</span>
+          <div className="inline-flex p-1 rounded-full border border-slate-200 bg-white">
+            <button
+              onClick={() => setForecastDay('today')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition ${forecastDay === 'today' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setForecastDay('tomorrow')}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition ${forecastDay === 'tomorrow' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}
+            >
+              Tomorrow
+            </button>
+          </div>
+        </div>
 
         <div className="rounded-xl border border-slate-200 bg-white overflow-auto">
           <table className="w-full min-w-[1080px] text-xs">
@@ -158,11 +189,11 @@ export default function AdminDiagnosticsPage() {
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Country</th>
                 <th className="text-right px-3 py-2 font-semibold">Altitude</th>
-                <th className="text-right px-3 py-2 font-semibold">Sun min</th>
+                <th className="text-right px-3 py-2 font-semibold">{forecastDay === 'today' ? 'Sun min (today)' : 'Sun min (tomorrow)'}</th>
                 <th className="text-right px-3 py-2 font-semibold">FOMO</th>
                 <th className="text-right px-3 py-2 font-semibold">Temp</th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
-                <th className="text-left px-3 py-2 font-semibold">Timeline</th>
+                <th className="text-left px-3 py-2 font-semibold">{forecastDay === 'today' ? 'Timeline (today)' : 'Timeline (tomorrow)'}</th>
               </tr>
             </thead>
             <tbody>
@@ -176,17 +207,26 @@ export default function AdminDiagnosticsPage() {
                 </tr>
               ) : (
                 filteredSorted.map((r) => (
-                  <tr key={r.destination.id} className="border-t border-slate-100 hover:bg-slate-50/60">
+                  <tr
+                    key={r.destination.id}
+                    className="border-t border-slate-100 hover:bg-slate-50/60 cursor-pointer"
+                    onClick={() => {
+                      const href = r.links.google_maps || r.links.sbb
+                      if (href) window.open(href, '_blank', 'noopener,noreferrer')
+                    }}
+                  >
                     <td className="px-3 py-2.5 font-medium text-slate-800">{r.destination.name}</td>
                     <td className="px-3 py-2.5 text-slate-600">{r.destination.country}</td>
                     <td className="px-3 py-2.5 text-right text-slate-600">{r.destination.altitude_m.toLocaleString()} m</td>
-                    <td className="px-3 py-2.5 text-right text-slate-700">{r.sun_score.sunshine_forecast_min}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-700">
+                      {forecastDay === 'today' ? r.sun_score.sunshine_forecast_min : Math.round((r.tomorrow_sun_hours || 0) * 60)}
+                    </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-amber-700">{Math.round(r.sun_score.score * 100)}%</td>
                     <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(r.weather_now?.temp_c ?? 0)}°C</td>
                     <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={r.weather_now?.summary || r.conditions}>
                       {r.weather_now?.summary || r.conditions}
                     </td>
-                    <td className="px-3 py-2.5"><MiniTimeline timeline={r.sun_timeline} /></td>
+                    <td className="px-3 py-2.5"><MiniTimeline timeline={r.sun_timeline} day={forecastDay} /></td>
                   </tr>
                 ))
               )}

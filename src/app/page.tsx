@@ -222,14 +222,21 @@ function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; 
     <button onClick={e => { e.stopPropagation(); onTap?.() }} aria-label={`FOMOscore ${pct}%`}
       className="relative flex-shrink-0 cursor-pointer" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={4} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f59e0b" strokeWidth={4}
+        <defs>
+          <linearGradient id="fomoRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#fbbf24" />
+            <stop offset="55%" stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#f97316" />
+          </linearGradient>
+        </defs>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="url(#fomoRingGrad)" strokeWidth={4}
           strokeDasharray={circ} strokeDashoffset={circ * (1 - score)} strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+          style={{ transition: 'stroke-dashoffset 0.6s ease', filter: 'drop-shadow(0 0 3px rgba(251, 191, 36, 0.45))' }} />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
         <span className="text-[13px] font-bold text-slate-800" style={{ fontFamily: 'Sora' }}>{pct}</span>
-        <span className="text-[6px] font-bold text-amber-500 uppercase tracking-wider mt-[1px]">fomo</span>
+        <span className="text-[6px] font-bold text-amber-500 uppercase tracking-wider mt-[1px]">fomo™</span>
       </span>
     </button>
   )
@@ -247,7 +254,7 @@ function MiniRing({ score, size = 36, stroke: strokeColor = '#f59e0b' }: { score
           style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
       </svg>
       <span className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] font-bold text-slate-700" style={{ fontFamily: 'Sora' }}>{pct}</span>
+        <span className="text-[10px] font-bold text-slate-700" style={{ fontFamily: 'Sora' }}>{pct}<sup className="text-[7px]">™</sup></span>
       </span>
     </div>
   )
@@ -313,7 +320,7 @@ export default function Home() {
   const [types, setTypes] = useState<DestinationType[]>([])
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  const [openCard, setOpenCard] = useState<number | null>(null)
+  const [openCard, setOpenCard] = useState<number | null>(0)
   const [openSetting, setOpenSetting] = useState<string | null>(null)
   const [demo, setDemo] = useState(true)
   const [scorePopup, setScorePopup] = useState<number | null>(null)
@@ -351,7 +358,7 @@ export default function Home() {
     try {
       const p = new URLSearchParams({
         lat: String(origin.lat), lon: String(origin.lon),
-        max_travel_h: String(queryMaxH), mode, ga: String(ga), limit: '6', demo: String(demo),
+        max_travel_h: String(queryMaxH), mode, ga: String(ga), limit: '5', demo: String(demo),
         trip_span: tripSpan,
       })
       p.set('origin_kind', originMode)
@@ -392,6 +399,13 @@ export default function Home() {
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
   }, [showOptimalInfo])
+  useEffect(() => {
+    if (!data?.escapes?.length) {
+      setOpenCard(null)
+      return
+    }
+    setOpenCard(0)
+  }, [data?.escapes])
   useEffect(() => {
     if (!data || tripSpanTouched) return
     if (data.sunset.is_past || data.sunset.minutes_until <= 30) {
@@ -590,9 +604,6 @@ export default function Home() {
 
           {data && topEscape && (
             <div className={`mt-3 sm:mt-4 rounded-2xl border text-left ${night ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200/80 bg-white/80 backdrop-blur-sm'}`}>
-              <p className={`px-3.5 sm:px-4 pt-2.5 text-[9px] font-semibold uppercase tracking-[1.3px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
-                Decision now
-              </p>
               <div className="grid grid-cols-1 sm:grid-cols-[0.95fr_1.35fr]">
                 <div className={`order-2 sm:order-1 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-r ${night ? 'border-slate-700' : 'border-slate-200/80'}`}>
                   <div className="flex items-start justify-between gap-2">
@@ -629,14 +640,15 @@ export default function Home() {
                           {topEscape.destination.name}
                         </p>
                         <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-300' : 'text-slate-600'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                        <p className="mt-1">
+                        <p className="mt-1 flex items-center gap-1.5">
+                          <span className="text-[11px]" aria-hidden="true">☀️</span>
                           {sunGainMin > 0 ? (
                             <span className={`text-[10px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                              {sunGainTag}
+                              {topSunMin} min sun · {sunGainTag}
                             </span>
                           ) : (
                             <span className={`text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
-                              Best confidence option in this travel window
+                              {topSunMin} min sun forecast in this travel window
                             </span>
                           )}
                         </p>
@@ -674,27 +686,27 @@ export default function Home() {
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
           <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-3.5 sm:pb-4">
             <div className="mb-2.5 flex justify-center">
+              <span className={`mr-2 self-center text-[10px] font-semibold uppercase tracking-[1.1px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Chasing sun</span>
               <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
                 <button
                   onClick={() => setTripSpanManual('daytrip')}
                   className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
                 >
-                  Daytrip
+                  Today
                 </button>
                 <button
                   onClick={() => setTripSpanManual('plus1day')}
                   className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
                 >
-                  +1 day
+                  Tomorrow
                 </button>
               </div>
             </div>
             <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Prioritize</span>
               <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
                 {([
-                  ['best', 'Best now'],
                   ['fastest', 'Fastest'],
+                  ['best', 'Best now'],
                   ['warmest', 'Warmest'],
                 ] as [SortMode, string][]).map(([id, label]) => (
                   <button
@@ -962,7 +974,7 @@ export default function Home() {
       </section>
       <footer className={`px-4 pb-6 text-center ${night ? 'text-slate-500' : 'text-slate-400'}`}>
         <a href="/admin" className="text-[11px] underline-offset-2 hover:underline">
-          Diagnostics
+          Admin
         </a>
       </footer>
     </div>

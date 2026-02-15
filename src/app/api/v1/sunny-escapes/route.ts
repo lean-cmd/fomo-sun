@@ -590,19 +590,20 @@ export async function GET(request: NextRequest) {
   // Keep a much broader candidate set in demo so slider materially changes outcomes.
   const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
   const withTravel = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
+  const windowMin = Math.max(30, maxTravelMin - 30)
+  const windowMax = maxTravelMin + 30
+  const inTravelWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
 
   // Default ranking path
   let pickedRanked = rankDestinations(
-    withTravel
-      .filter(r => r.bestTravelMin <= maxTravelMin)
+    inTravelWindow
       .map(r => ({ destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin })),
     maxTravelMin
   )
 
   // Live mode: rank primarily by sun quality, with a lighter travel-time tie-breaker.
   if (!demoMode) {
-    const rankedLive = withTravel
-      .filter(r => r.bestTravelMin <= maxTravelMin)
+    const rankedLive = inTravelWindow
       .map(r => {
         const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
         const combined = r.sun_score.score * 0.88 + travelConvenience * 0.12
@@ -623,14 +624,7 @@ export async function GET(request: NextRequest) {
 
   // Demo mode uses slider-centered window sorting for material list changes.
   if (demoMode) {
-    const windowMin = Math.max(30, maxTravelMin - 30)
-    const windowMax = maxTravelMin + 30
-
-    const inWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
-    const fallbackWindow = withTravel.filter(r => r.bestTravelMin <= windowMax)
-    const demoPool = (inWindow.length >= Math.max(4, limit)) ? inWindow : fallbackWindow
-
-    const sortedByScore = demoPool
+    const sortedByScore = inTravelWindow
       .map(r => ({
         destination: r.destination,
         sun_score: r.sun_score,
@@ -692,12 +686,14 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const comparisonOriginLabel = originNameParam || 'selected location'
+
   function formatComparison(destMin: number, originMin: number): string {
     if (originMin <= 0 || destMin <= originMin) return ''
     const ratio = destMin / originMin
-    if (ratio >= 2) return ` | ${ratio.toFixed(0)}x more sun than here`
+    if (ratio >= 2) return ` | ${ratio.toFixed(0)}x more sun than ${comparisonOriginLabel}`
     const pctMore = Math.round((ratio - 1) * 100)
-    if (pctMore >= 10) return ` | +${pctMore}% more sun than here`
+    if (pctMore >= 10) return ` | +${pctMore}% more sun than ${comparisonOriginLabel}`
     return ''
   }
 
