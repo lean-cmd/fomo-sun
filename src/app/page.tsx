@@ -157,31 +157,17 @@ function weatherLabel(summary?: string) {
   return 'Cloudy'
 }
 
+function weatherEmoji(summary?: string) {
+  const kind = weatherKind(summary)
+  if (kind === 'sunny' || kind === 'partly') return '☀️'
+  if (kind === 'foggy') return '☁️'
+  return '☁️'
+}
+
 function extractTemp(summary?: string) {
   if (!summary) return null
   const m = summary.match(/(-?\d+)\s*°c/i)
   return m ? Number(m[1]) : null
-}
-
-function formatGainTag(gainMin: number, originMin: number, originName: string) {
-  if (gainMin <= 0) return `vs ${originName}`
-  const gainLabel = formatSunHours(gainMin)
-  if (originMin <= 0) return `+${gainLabel} vs ${originName}`
-
-  const gainPct = Math.round((gainMin / originMin) * 100)
-  if (gainPct >= 100) {
-    const ratio = (gainMin + originMin) / originMin
-    const ratioRounded = ratio >= 10 ? Math.round(ratio) : Math.round(ratio * 10) / 10
-    const ratioLabel = Number.isInteger(ratioRounded) ? `${ratioRounded}x` : `${ratioRounded.toFixed(1)}x`
-    return `+${gainLabel} · ${ratioLabel} vs ${originName}`
-  }
-  return `+${gainLabel} (+${gainPct}%) vs ${originName}`
-}
-
-function parseComparisonLine(text: string) {
-  const parts = text.split('|').map(x => x.trim())
-  if (parts.length < 2) return ''
-  return parts[1]
 }
 
 function ringTier(score: number) {
@@ -344,6 +330,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [demo, setDemo] = useState(true)
   const [openCard, setOpenCard] = useState<number | null>(0)
+  const [openFastest, setOpenFastest] = useState(false)
   const [openSetting, setOpenSetting] = useState<'mode' | 'filters' | null>(null)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
@@ -363,6 +350,7 @@ export default function Home() {
 
   const requestCtrlRef = useRef<AbortController | null>(null)
   const snapPulseRef = useRef<number | null>(null)
+  const resultsRef = useRef<HTMLElement | null>(null)
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -374,6 +362,8 @@ export default function Home() {
   const topEscape = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
+  const fastestTravel = fastestEscape ? getBestTravel(fastestEscape) : null
+  const fastestGainMin = fastestEscape ? Math.max(0, fastestEscape.sun_score.sunshine_forecast_min - originSunMin) : 0
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
 
@@ -561,6 +551,13 @@ export default function Home() {
     setTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
   }
 
+  const jumpToBestDetails = () => {
+    setOpenCard(0)
+    requestAnimationFrame(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }
+
   const timelineOriginPreview = timelineEmojiPreview(data?.origin_timeline, dayFocus)
 
   const buildWhatsAppHref = (escape: EscapeCard) => {
@@ -696,39 +693,50 @@ export default function Home() {
               </a>
             </div>
 
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2">
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-2">
+              <div className="flex items-center justify-between text-[11px] text-slate-600">
+                <span className="font-medium">{origin.name}</span>
+                <span className="inline-flex items-center gap-1">
+                  <span>{timelineOriginPreview}</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(originSunMin)}</span>
+                </span>
+              </div>
+              <SunTimelineBar
+                timeline={data?.origin_timeline || topEscape.sun_timeline}
+                dayFocus={dayFocus}
+                sunWindow={data?.sun_window}
+                showNowMarker
+                compact
+              />
+
+              {sunGainMin > 0 && (
+                <p className="text-center text-[11px] font-semibold text-emerald-600">☀️ +{formatSunHours(sunGainMin)} more sun than {origin.name}</p>
+              )}
+
+              <div className="flex items-center justify-between text-[11px] text-slate-700">
+                <span className="font-semibold">{topEscape.destination.name}</span>
+                <span className="inline-flex items-center gap-1">
+                  <span>{timelineEmojiPreview(topEscape.sun_timeline, dayFocus)}</span>
+                  <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
+                </span>
+              </div>
               <SunTimelineBar
                 timeline={topEscape.sun_timeline}
                 dayFocus={dayFocus}
                 sunWindow={data?.sun_window}
-                showNowMarker
                 travelMin={topBestTravel?.min}
+                compact
               />
             </div>
 
-            <div className="mt-3 flex flex-wrap gap-2">
-              {topEscape.links.google_maps && (
-                <a
-                  href={topEscape.links.google_maps}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"
-                >
-                  <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
-                  Navigate
-                </a>
-              )}
-              {topEscape.links.sbb && (
-                <a
-                  href={topEscape.links.sbb}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
-                >
-                  <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                  SBB timetable
-                </a>
-              )}
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={jumpToBestDetails}
+                className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Plan this trip ↓
+              </button>
             </div>
           </section>
         )}
@@ -878,27 +886,103 @@ export default function Home() {
         </section>
 
         {fastestEscape && (
-          <section className="rounded-2xl border border-slate-200 border-l-[3px] border-l-amber-400 bg-white shadow-sm p-3.5 mb-3">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">Fastest escape</p>
-            <div className="mt-1.5 flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[15px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
-                  {fastestEscape.destination.name}
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {(() => {
-                    const travel = getBestTravel(fastestEscape)
-                    const gain = Math.max(0, fastestEscape.sun_score.sunshine_forecast_min - originSunMin)
-                    return `${travel ? `${travel.min} min by ${travel.mode}` : 'short hop'} · ${formatSunHours(fastestEscape.sun_score.sunshine_forecast_min)} sun · +${formatSunHours(gain)} vs ${origin.name}`
-                  })()}
-                </p>
+          <article className="rounded-2xl border border-slate-200 border-l-[3px] border-l-amber-400 bg-white shadow-sm overflow-hidden mb-3">
+            <button
+              type="button"
+              onClick={() => setOpenFastest(v => !v)}
+              className="w-full text-left px-3.5 pt-3.5 pb-2.5"
+            >
+              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">⚡ Fastest escape</p>
+              <div className="mt-1.5 flex items-start gap-3">
+                <ScoreRing score={fastestEscape.sun_score.score} size={40} />
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-[15px] font-semibold text-slate-900 truncate">{fastestEscape.destination.name}</h3>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{fastestEscape.destination.region} · {fastestEscape.destination.altitude_m.toLocaleString()}m · {FLAG[fastestEscape.destination.country]}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 justify-end font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                        <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
+                        {formatSunHours(fastestEscape.sun_score.sunshine_forecast_min)}
+                      </p>
+                      {fastestGainMin > 0 && (
+                        <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(fastestGainMin)} vs {origin.name}</p>
+                      )}
+                      {fastestTravel && (
+                        <p className="mt-1 text-[11px] text-slate-500 inline-flex items-center gap-1 justify-end">
+                          <IconForMode mode={fastestTravel.mode} />
+                          {formatTravelClock(fastestTravel.min / 60)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
+                    <span>{Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°</span>
+                    <span>{weatherEmoji(fastestEscape.weather_now?.summary)}</span>
+                    <span>{weatherLabel(fastestEscape.weather_now?.summary)}</span>
+                  </div>
+                </div>
               </div>
-              <ScoreRing score={fastestEscape.sun_score.score} size={36} />
+            </button>
+
+            <div className={`grid transition-all duration-200 ease-out ${openFastest ? 'grid-rows-[1fr] border-t border-slate-200' : 'grid-rows-[0fr]'}`}>
+              <div className="overflow-hidden">
+                <div className="px-3.5 py-3 space-y-3">
+                  {fastestEscape.plan.length > 0 && (
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Trip plan</p>
+                      <div className="space-y-1">
+                        {fastestEscape.plan.map((step, idx) => (
+                          <p key={idx} className="text-[12px] text-slate-700 leading-snug">{step.replace(/[📍🥾🍽️💡]/g, '').trim()}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {fastestEscape.links.google_maps && (
+                      <a
+                        href={fastestEscape.links.google_maps}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"
+                      >
+                        <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
+                        Navigate
+                      </a>
+                    )}
+                    {fastestEscape.links.sbb && (
+                      <a
+                        href={fastestEscape.links.sbb}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
+                      >
+                        <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                        SBB timetable
+                      </a>
+                    )}
+                    <a
+                      href={buildWhatsAppHref(fastestEscape)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-emerald-200 bg-emerald-50/60 text-slate-800 text-[11px] font-semibold hover:bg-emerald-50"
+                    >
+                      <WhatsAppIcon className="w-4 h-4" />
+                      Share via WhatsApp
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
-          </section>
+          </article>
         )}
 
-        <section>
+        <section ref={resultsRef}>
           <div className="flex items-baseline justify-between mb-2.5">
             <h2 className="text-[16px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
               Sunny escapes
@@ -917,7 +1001,6 @@ export default function Home() {
             {resultRows.map((escape, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCard === index
-              const comparisonText = parseComparisonLine(escape.conditions)
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
               const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
@@ -960,18 +1043,27 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="mt-1.5 text-[11px] text-emerald-600 font-semibold">{comparisonText || `${formatGainTag(gainMin, originSunMin, origin.name)}`}</div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
+                          <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                            <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
+                            {formatSunHours(escape.sun_score.sunshine_forecast_min)}
+                          </span>
+                          {gainMin > 0 && (
+                            <span className="text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</span>
+                          )}
+                          {bestTravel && (
+                            <span className="inline-flex items-center gap-1 text-slate-500">
+                              <IconForMode mode={bestTravel.mode} />
+                              {formatTravelClock(bestTravel.min / 60)}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center gap-1 text-slate-500">
+                            <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
+                            <span>{weatherEmoji(escape.weather_now?.summary)}</span>
+                            <span>{weatherLabel(escape.weather_now?.summary)}</span>
+                          </span>
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="mt-2.5">
-                      <SunTimelineBar
-                        timeline={escape.sun_timeline}
-                        dayFocus={dayFocus}
-                        sunWindow={data?.sun_window}
-                        showNowMarker={false}
-                        compact
-                      />
                     </div>
                   </button>
 
