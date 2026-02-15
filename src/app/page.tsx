@@ -10,6 +10,7 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
+  SlidersHorizontal,
   Sun,
   Thermometer,
   TrainFront,
@@ -319,8 +320,8 @@ export default function Home() {
   const [showSliderValue, setShowSliderValue] = useState(false)
 
   const [mode, setMode] = useState<TravelMode>('both')
-  const [ga, setGA] = useState(false)
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
+  const [showResultFilters, setShowResultFilters] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
 
@@ -340,9 +341,6 @@ export default function Home() {
   const [optimalHint, setOptimalHint] = useState(false)
   const [showOptimalInfo, setShowOptimalInfo] = useState(false)
   const [queryMaxH, setQueryMaxH] = useState(maxH)
-
-  const [sentenceIdx, setSentenceIdx] = useState(0)
-  const [sentenceVisible, setSentenceVisible] = useState(true)
 
   const [expandedScoreDetails, setExpandedScoreDetails] = useState<Record<string, boolean>>({})
 
@@ -401,7 +399,6 @@ export default function Home() {
           lon: String(origin.lon),
           max_travel_h: String(queryMaxH),
           mode,
-          ga: String(ga),
           limit: '5',
           demo: String(demo),
           trip_span: tripSpan,
@@ -428,7 +425,7 @@ export default function Home() {
     }
 
     run()
-  }, [queryMaxH, mode, ga, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal])
+  }, [queryMaxH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
@@ -476,18 +473,6 @@ export default function Home() {
       best_score_pct: Math.round(topEscape.sun_score.score * 100),
     })
   }, [data, topEscape, origin.name, originTempC, originFomoPct])
-
-  useEffect(() => {
-    if (originSentences.length <= 1) return
-    const timer = window.setInterval(() => {
-      setSentenceVisible(false)
-      window.setTimeout(() => {
-        setSentenceIdx(prev => (prev + 1) % originSentences.length)
-        setSentenceVisible(true)
-      }, 400)
-    }, 6000)
-    return () => window.clearInterval(timer)
-  }, [originSentences.length])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -644,32 +629,10 @@ export default function Home() {
       </header>
 
       <main className="max-w-xl mx-auto px-3 pb-16">
-        <section className="py-2 -mx-3 px-3 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-2 min-w-max">
-            {TYPE_FILTER_CHIPS.map(chip => {
-              const active = activeTypeChips.includes(chip.id)
-              return (
-                <button
-                  key={chip.id}
-                  type="button"
-                  onClick={() => toggleTypeChip(chip.id)}
-                  className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${
-                    active
-                      ? 'bg-amber-100 border-amber-300 text-amber-800'
-                      : 'bg-white border-slate-200 text-slate-600'
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              )
-            })}
-          </div>
-        </section>
-
         <section className="h-12 flex flex-col justify-center text-center">
-          <p className={`text-[13px] text-slate-700 transition-opacity duration-[400ms] ${sentenceVisible ? 'opacity-100' : 'opacity-0'}`}>
+          <p className="text-[13px] text-slate-700">
             <span className="text-slate-500">☀️ FOMO Sun | </span>
-            {originSentences[sentenceIdx] || `Forecast in ${origin.name}: ${originTempC}° · ${weatherLabel(data?.origin_conditions.description)}`}
+            {originSentences[0] || `Forecast in ${origin.name}: ${originTempC}° · ${weatherLabel(data?.origin_conditions.description)}`}
           </p>
           <p className="text-[10px] text-slate-400 inline-flex items-center justify-center gap-1 mt-0.5">
             <Info className="w-3 h-3" strokeWidth={1.8} /> Based on live forecast
@@ -695,14 +658,14 @@ export default function Home() {
                     {topEscape.destination.name}
                   </h1>
                   <p className="text-[11px] text-slate-500 mt-0.5">{topEscape.destination.region} · {FLAG[topEscape.destination.country]}</p>
+                  {sunGainMin > 0 && (
+                    <p className="text-[12px] font-semibold text-emerald-600 mt-1">☀️ +{formatSunHours(sunGainMin)} more sun than {origin.name}</p>
+                  )}
                   <div className="mt-1.5">
                     <p className="text-[18px] leading-none font-semibold text-amber-600 inline-flex items-center gap-1.5">
                       <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                       <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
                     </p>
-                    {sunGainMin > 0 && (
-                      <p className="mt-1 text-[12px] font-semibold text-emerald-600">+{formatSunHours(sunGainMin)} vs {origin.name}</p>
-                    )}
                     {topBestTravel && (
                       <p className="mt-1 text-[12px] text-slate-500 inline-flex items-center gap-1">
                         <IconForMode mode={topBestTravel.mode} />
@@ -739,10 +702,6 @@ export default function Home() {
                 showNowMarker
                 compact
               />
-
-              {sunGainMin > 0 && (
-                <p className="text-center text-[11px] font-semibold text-emerald-600">☀️ +{formatSunHours(sunGainMin)} more sun than {origin.name}</p>
-              )}
 
               <div className="flex items-center justify-between text-[11px] text-slate-700">
                 <span className="font-semibold">{topEscape.destination.name}</span>
@@ -879,17 +838,6 @@ export default function Home() {
                     </button>
                   ))}
                 </div>
-                {(mode === 'train' || mode === 'both') && (
-                  <label className="mt-2 inline-flex items-center gap-2 text-[11px] text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={ga}
-                      onChange={e => setGA(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded border-slate-300 accent-amber-500"
-                    />
-                    I have a GA travelcard
-                  </label>
-                )}
               </div>
             )}
 
@@ -903,39 +851,41 @@ export default function Home() {
               onClick={() => setOpenFastest(v => !v)}
               className="w-full text-left px-3.5 pt-3.5 pb-2.5"
             >
-              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">⚡ Fastest escape</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">⚡ Fastest escape</p>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openFastest ? 'rotate-180' : ''}`} />
+              </div>
               <div className="mt-1.5 flex items-start gap-3">
                 <ScoreRing score={fastestEscape.sun_score.score} size={40} />
 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="text-[15px] font-semibold text-slate-900 truncate">{fastestEscape.destination.name}</h3>
                       <p className="text-[11px] text-slate-500 mt-0.5">{fastestEscape.destination.region} · {fastestEscape.destination.altitude_m.toLocaleString()}m · {FLAG[fastestEscape.destination.country]}</p>
+                      <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
+                        <span>{Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°</span>
+                        <span>{weatherEmoji(fastestEscape.weather_now?.summary)}</span>
+                        <span>{weatherLabel(fastestEscape.weather_now?.summary)}</span>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 justify-end font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                    <div className="shrink-0 flex items-end gap-2 text-right">
+                      <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
                         <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                         {formatSunHours(fastestEscape.sun_score.sunshine_forecast_min)}
                       </p>
-                      {fastestGainMin > 0 && (
-                        <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(fastestGainMin)} vs {origin.name}</p>
-                      )}
                       {fastestTravel && (
-                        <p className="mt-1 text-[11px] text-slate-500 inline-flex items-center gap-1 justify-end">
+                        <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
                           <IconForMode mode={fastestTravel.mode} />
                           {formatTravelClock(fastestTravel.min / 60)}
                         </p>
                       )}
                     </div>
                   </div>
-
-                  <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
-                    <span>{Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°</span>
-                    <span>{weatherEmoji(fastestEscape.weather_now?.summary)}</span>
-                    <span>{weatherLabel(fastestEscape.weather_now?.summary)}</span>
-                  </div>
+                  {fastestGainMin > 0 && (
+                    <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(fastestGainMin)} vs {origin.name}</p>
+                  )}
                 </div>
               </div>
             </button>
@@ -943,6 +893,41 @@ export default function Home() {
             <div className={`grid transition-all duration-200 ease-out ${openFastest ? 'grid-rows-[1fr] border-t border-slate-200' : 'grid-rows-[0fr]'}`}>
               <div className="overflow-hidden">
                 <div className="px-3.5 py-3 space-y-3">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Detailed weather</p>
+                    <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+                      <span className="inline-flex items-center gap-1">
+                        <Thermometer className="w-3.5 h-3.5" strokeWidth={1.8} />
+                        {Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°C
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Cloud className="w-3.5 h-3.5" strokeWidth={1.8} />
+                        {fastestEscape.conditions}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
+                        {fastestEscape.sun_score.low_cloud_cover_pct}% low cloud
+                      </span>
+                    </div>
+                  </div>
+
+                  {fastestEscape.travel.train && (
+                    <div className="rounded-xl border border-slate-200 bg-white p-2.5">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Live train info</p>
+                      <div className="flex flex-wrap gap-2 text-[11px] text-slate-700">
+                        <span className="inline-flex items-center gap-1">
+                          <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                          {formatTravelClock(fastestEscape.travel.train.duration_min / 60)}
+                        </span>
+                        {typeof fastestEscape.travel.train.changes === 'number' && (
+                          <span className="text-slate-500">
+                            {fastestEscape.travel.train.changes} change{fastestEscape.travel.train.changes === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {fastestEscape.plan.length > 0 && (
                     <div>
                       <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Trip plan</p>
@@ -998,8 +983,48 @@ export default function Home() {
             <h2 className="text-[16px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
               Sunny escapes
             </h2>
-            <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{filteredRows.length}</span>
+            <div className="inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowResultFilters(v => !v)}
+                className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
+                  showResultFilters || activeTypeChips.length > 0
+                    ? 'bg-amber-100 border-amber-300 text-amber-800'
+                    : 'bg-white border-slate-200 text-slate-600'
+                }`}
+                aria-expanded={showResultFilters}
+                aria-controls="result-filter-chips"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
+                Filter
+              </button>
+              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{filteredRows.length}</span>
+            </div>
           </div>
+
+          {showResultFilters && (
+            <section id="result-filter-chips" className="mb-2.5 -mx-3 px-3 overflow-x-auto no-scrollbar">
+              <div className="flex items-center gap-2 min-w-max">
+                {TYPE_FILTER_CHIPS.map(chip => {
+                  const active = activeTypeChips.includes(chip.id)
+                  return (
+                    <button
+                      key={chip.id}
+                      type="button"
+                      onClick={() => toggleTypeChip(chip.id)}
+                      className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${
+                        active
+                          ? 'bg-amber-100 border-amber-300 text-amber-800'
+                          : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </section>
+          )}
 
           {filteredRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
@@ -1031,48 +1056,35 @@ export default function Home() {
                       <ScoreRing score={escape.sun_score.score} size={40} />
 
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
                             <p className="text-[11px] text-slate-500 mt-0.5">{escape.destination.region} · {escape.destination.altitude_m.toLocaleString()}m · {FLAG[escape.destination.country]}</p>
+                            <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
+                              <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
+                              <span>{weatherEmoji(escape.weather_now?.summary)}</span>
+                              <span>{weatherLabel(escape.weather_now?.summary)}</span>
+                            </div>
                           </div>
 
-                          <div className="text-right">
-                            <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 justify-end font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                              <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                              {formatSunHours(escape.sun_score.sunshine_forecast_min)}
-                            </p>
+                          <div className="shrink-0 text-right">
+                            <div className="inline-flex items-end gap-2">
+                              <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
+                                {formatSunHours(escape.sun_score.sunshine_forecast_min)}
+                              </p>
+                              {bestTravel && (
+                                <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                  <IconForMode mode={bestTravel.mode} />
+                                  {formatTravelClock(bestTravel.min / 60)}
+                                </p>
+                              )}
+                              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                            </div>
                             {gainMin > 0 && (
                               <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</p>
                             )}
-                            {bestTravel && (
-                              <p className="mt-1 text-[11px] text-slate-500 inline-flex items-center gap-1 justify-end">
-                                <IconForMode mode={bestTravel.mode} />
-                                {formatTravelClock(bestTravel.min / 60)}
-                              </p>
-                            )}
                           </div>
-                        </div>
-
-                        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px]">
-                          <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
-                            <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
-                            {formatSunHours(escape.sun_score.sunshine_forecast_min)}
-                          </span>
-                          {gainMin > 0 && (
-                            <span className="text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</span>
-                          )}
-                          {bestTravel && (
-                            <span className="inline-flex items-center gap-1 text-slate-500">
-                              <IconForMode mode={bestTravel.mode} />
-                              {formatTravelClock(bestTravel.min / 60)}
-                            </span>
-                          )}
-                          <span className="inline-flex items-center gap-1 text-slate-500">
-                            <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
-                            <span>{weatherEmoji(escape.weather_now?.summary)}</span>
-                            <span>{weatherLabel(escape.weather_now?.summary)}</span>
-                          </span>
                         </div>
                       </div>
                     </div>
@@ -1081,20 +1093,44 @@ export default function Home() {
                   <div className={`grid transition-all duration-200 ease-out ${isOpen ? 'grid-rows-[1fr] border-t border-slate-200' : 'grid-rows-[0fr]'}`}>
                     <div className="overflow-hidden">
                       <div className="px-3.5 py-3 space-y-3">
-                        <div className="flex items-center gap-3 text-[11px] text-slate-600 flex-wrap">
-                          <span className="inline-flex items-center gap-1">
-                            <Thermometer className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            {Math.round(escape.weather_now?.temp_c ?? 0)}°C
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Cloud className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            {weatherLabel(escape.weather_now?.summary)}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <Mountain className="w-3.5 h-3.5" strokeWidth={1.8} />
-                            {escape.destination.altitude_m.toLocaleString()}m
-                          </span>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Detailed weather</p>
+                          <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
+                            <span className="inline-flex items-center gap-1">
+                              <Thermometer className="w-3.5 h-3.5" strokeWidth={1.8} />
+                              {Math.round(escape.weather_now?.temp_c ?? 0)}°C
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Cloud className="w-3.5 h-3.5" strokeWidth={1.8} />
+                              {escape.conditions}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
+                              {escape.sun_score.low_cloud_cover_pct}% low cloud
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Mountain className="w-3.5 h-3.5" strokeWidth={1.8} />
+                              {escape.destination.altitude_m.toLocaleString()}m
+                            </span>
+                          </div>
                         </div>
+
+                        {escape.travel.train && (
+                          <div className="rounded-xl border border-slate-200 bg-white p-2.5">
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Live train info</p>
+                            <div className="flex flex-wrap gap-2 text-[11px] text-slate-700">
+                              <span className="inline-flex items-center gap-1">
+                                <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                                {formatTravelClock(escape.travel.train.duration_min / 60)}
+                              </span>
+                              {typeof escape.travel.train.changes === 'number' && (
+                                <span className="text-slate-500">
+                                  {escape.travel.train.changes} change{escape.travel.train.changes === 1 ? '' : 's'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
 
                         {escape.plan.length > 0 && (
                           <div>
