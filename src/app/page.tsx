@@ -84,7 +84,7 @@ function compressSegments(
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
 type SortMode = 'best' | 'fastest' | 'warmest'
 type TripSpan = 'daytrip' | 'plus1day'
-type DensityMode = 'compact' | 'expanded'
+type DayFocus = 'today' | 'tomorrow'
 
 function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
@@ -120,6 +120,7 @@ type CitySeed = { name: string; lat: number; lon: number }
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
+  { name: 'Binningen', lat: 47.5327, lon: 7.5692 },
   { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
   { name: 'Bern', lat: 46.948, lon: 7.4474 },
   { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
@@ -217,10 +218,23 @@ function buildHourTicks(win?: DaylightWindow) {
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
 
 function ringTier(score: number) {
-  if (score >= 0.9) return { id: 'elite', colors: ['#22c55e', '#16a34a', '#15803d'], label: 'Elite' }
-  if (score >= 0.75) return { id: 'strong', colors: ['#fbbf24', '#f59e0b', '#f97316'], label: 'Strong' }
-  if (score >= 0.55) return { id: 'promising', colors: ['#38bdf8', '#0ea5e9', '#0284c7'], label: 'Promising' }
-  return { id: 'low', colors: ['#94a3b8', '#64748b', '#475569'], label: 'Low' }
+  if (score >= 0.9) return { id: 'elite', colors: ['#fbbf24', '#f59e0b', '#ef4444'], label: 'Elite' }
+  if (score >= 0.75) return { id: 'strong', colors: ['#f59e0b', '#f97316', '#ef4444'], label: 'Strong' }
+  if (score >= 0.55) return { id: 'promising', colors: ['#fb923c', '#f97316', '#dc2626'], label: 'Promising' }
+  return { id: 'low', colors: ['#fdba74', '#fb923c', '#ea580c'], label: 'Low' }
+}
+
+function parseSunConditions(conditions: string) {
+  const [sunPartRaw, cmpRaw] = conditions.split('|').map(p => p.trim())
+  const sunMatch = sunPartRaw.match(/(\d+)\s*min/i)
+  const sunMin = sunMatch ? Number(sunMatch[1]) : null
+  const comparison = cmpRaw
+    ? cmpRaw
+      .replace('more sun than', 'vs')
+      .replace(/\s+/g, ' ')
+      .trim()
+    : ''
+  return { sunMin, comparison }
 }
 
 // ── FOMOscore Ring ────────────────────────────────────────────────────
@@ -270,17 +284,20 @@ function SunBar({
   demo,
   label,
   sunWindow,
+  dayFocus,
 }: {
   timeline: SunTimeline
   demo: boolean
   label?: string
   sunWindow?: { today: DaylightWindow; tomorrow: DaylightWindow }
+  dayFocus?: DayFocus
 }) {
   const h = demo ? 10.17 : new Date().getHours() + new Date().getMinutes() / 60
   const nowPct = Math.max(0, Math.min(100, (h / 24) * 100))
+  const daysToRender = dayFocus ? [dayFocus] as const : (['today', 'tomorrow'] as const)
   return (
     <div className="space-y-1">
-      {(['today', 'tomorrow'] as const).map(day => {
+      {daysToRender.map(day => {
         const win = normalizeWindow(sunWindow?.[day])
         const leftNightPct = (win.start_hour / 24) * 100
         const daylightPct = ((win.end_hour - win.start_hour) / 24) * 100
@@ -292,7 +309,7 @@ function SunBar({
 
         return (
           <div key={day} className="flex items-center gap-1.5">
-            <span className="text-[9px] text-slate-400 w-[44px] text-right flex-shrink-0 font-medium capitalize">
+            <span className="text-[9px] text-slate-400 w-[54px] text-right flex-shrink-0 font-medium capitalize">
               {day === 'today' && label ? label : day}
             </span>
             <div className="tl-bar">
@@ -339,10 +356,10 @@ export default function Home() {
   const [queryMaxH, setQueryMaxH] = useState(maxH)
   const [sortBy, setSortBy] = useState<SortMode>('best')
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
-  const [density, setDensity] = useState<DensityMode>('expanded')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
   const [scorePulse, setScorePulse] = useState(false)
   const [isMobileControlSticky, setIsMobileControlSticky] = useState(false)
+  const [showTopWhyInfo, setShowTopWhyInfo] = useState(false)
   const requestCtrlRef = useRef<AbortController | null>(null)
   const controlAnchorRef = useRef<HTMLElement | null>(null)
 
@@ -412,6 +429,12 @@ export default function Home() {
     document.addEventListener('click', h)
     return () => document.removeEventListener('click', h)
   }, [showOptimalInfo])
+  useEffect(() => {
+    if (!showTopWhyInfo) return
+    const h = () => setShowTopWhyInfo(false)
+    document.addEventListener('click', h)
+    return () => document.removeEventListener('click', h)
+  }, [showTopWhyInfo])
   useEffect(() => {
     if (!data?.escapes?.length) {
       setOpenCard(null)
@@ -501,6 +524,8 @@ export default function Home() {
   const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
   const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
   const fallbackNotice = data?._meta?.fallback_notice || ''
+  const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
+  const bestEscapeLabel = dayFocus === 'tomorrow' ? 'Best escape tomorrow' : 'Best escape today'
   const sortLabel = sortBy === 'best' ? 'Best now' : sortBy === 'fastest' ? 'Fastest' : 'Warmest'
   const sortedEscapes = useMemo(() => {
     if (!data?.escapes?.length) return []
@@ -648,7 +673,7 @@ export default function Home() {
                   </div>
                   {data.origin_timeline && (
                     <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
-                      <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} />
+                      <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} />
                     </div>
                   )}
                 </div>
@@ -658,7 +683,7 @@ export default function Home() {
                     <div className="flex items-start gap-2.5 min-w-0">
                       <ScoreRing score={topEscape.sun_score.score} size={38} compact />
                       <div className="flex-1 min-w-0">
-                        <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-300/90' : 'text-amber-700/80'}`}>Best escape now</p>
+                        <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-300/90' : 'text-amber-700/80'}`}>{bestEscapeLabel}</p>
                         <p className={`text-[13px] sm:text-[14px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-900'}`}>
                           {topEscape.destination.name}
                         </p>
@@ -675,9 +700,24 @@ export default function Home() {
                             </span>
                           )}
                         </p>
-                        <p className={`text-[9px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Why #1: highest FOMO score in your ±30m travel window.
-                        </p>
+                        <div className="relative mt-0.5">
+                          <button
+                            type="button"
+                            onMouseEnter={() => setShowTopWhyInfo(true)}
+                            onMouseLeave={() => setShowTopWhyInfo(false)}
+                            onFocus={() => setShowTopWhyInfo(true)}
+                            onBlur={() => setShowTopWhyInfo(false)}
+                            onClick={(ev) => { ev.stopPropagation(); setShowTopWhyInfo(v => !v) }}
+                            className={`text-[9px] underline-offset-2 hover:underline ${night ? 'text-slate-400' : 'text-slate-500'}`}
+                          >
+                            Why this option
+                          </button>
+                          {showTopWhyInfo && (
+                            <div className={`absolute z-10 mt-1 w-[220px] rounded-lg border px-2.5 py-2 text-[10px] leading-snug shadow-lg ${night ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-200 text-slate-600'}`}>
+                              Highest FOMO score inside your selected travel window (±30m), balancing sunshine and realistic travel time.
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
@@ -694,6 +734,11 @@ export default function Home() {
                   >
                     <WaIcon c="w-3.5 h-3.5" /> Share this escape
                   </a>
+                  {topEscape.sun_timeline && (
+                    <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
+                      <SunBar timeline={topEscape.sun_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} />
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -748,20 +793,6 @@ export default function Home() {
                     {label}
                   </button>
                 ))}
-              </div>
-              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
-                <button
-                  onClick={() => setDensity('compact')}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${density === 'compact' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  Compact
-                </button>
-                <button
-                  onClick={() => setDensity('expanded')}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${density === 'expanded' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  Expanded
-                </button>
               </div>
             </div>
             <div className="flex justify-between items-baseline mb-2">
@@ -889,6 +920,7 @@ export default function Home() {
               {sortedEscapes.map((e, i) => {
                 const carMin = e.travel.car?.duration_min ?? Infinity
                 const trainMin = e.travel.train?.duration_min ?? Infinity
+                const conditionsMeta = parseSunConditions(e.conditions)
                 const bestMode: 'car' | 'train' | null =
                   carMin <= trainMin
                     ? Number.isFinite(carMin) ? 'car' : Number.isFinite(trainMin) ? 'train' : null
@@ -897,9 +929,9 @@ export default function Home() {
 
                 return (
                 <div key={e.destination.id}
-                  className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${density === 'compact' ? 'escape-compact' : ''} ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
+                  className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
                   onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
-                  <div className={`${density === 'compact' ? 'p-2.5 sm:p-3' : 'p-3 sm:p-4'} flex gap-2.5 sm:gap-3 items-start`}>
+                  <div className="p-3 sm:p-4 flex gap-2.5 sm:gap-3 items-start">
                     <div className="score-wrap" onClick={ev => ev.stopPropagation()}>
                       <ScoreRing
                         score={e.sun_score.score}
@@ -944,25 +976,28 @@ export default function Home() {
                         )}
                         <span className={`inline-flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
                           <span aria-hidden="true">☀️</span>
-                          <strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.sun_score.sunshine_forecast_min} min</strong>
+                          <strong className={night ? 'text-slate-300' : 'text-slate-700'}>{conditionsMeta.sunMin ?? e.sun_score.sunshine_forecast_min} min</strong>
+                          {conditionsMeta.comparison && (
+                            <span className={`font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                              {conditionsMeta.comparison}
+                            </span>
+                          )}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* v15: timeline bars always visible, improved colors in CSS */}
-                  {density === 'expanded' && (
-                    <div className="px-4 pb-3">
-                      {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} sunWindow={data.sun_window} />}
-                      <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">
-                        {timelineTicks.map((t, idx) => <span key={idx}>{t}</span>)}
-                      </div>
+                  <div className="px-4 pb-3">
+                    {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} sunWindow={data.sun_window} dayFocus={dayFocus} />}
+                    <div className="flex justify-between text-[8px] text-slate-300 pl-[60px] mt-0.5">
+                      {timelineTicks.map((t, idx) => <span key={idx}>{t}</span>)}
                     </div>
-                  )}
+                  </div>
 
                   {openCard === i && (
                     <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] ${night ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
-                      <p className={`text-[11px] mb-2 leading-snug ${night ? 'text-slate-300' : 'text-slate-600'}`}>☀️ {e.conditions}</p>
+                      <p className={`text-[11px] mb-2 leading-snug ${night ? 'text-slate-300' : 'text-slate-600'}`}>Forecast: {e.weather_now?.summary || 'Mixed conditions'}</p>
                       <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel options</p>
                       <div className="flex items-center flex-wrap gap-2 mb-3">
                         {e.travel.car && (
