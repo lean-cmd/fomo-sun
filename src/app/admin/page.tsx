@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
+import { formatSunHours } from '@/lib/format'
 
 type SortMode = 'score' | 'sun' | 'name' | 'altitude'
 type LimitMode = '25' | '50' | '100' | 'all'
@@ -21,7 +22,7 @@ function MiniTimeline({ timeline, day }: { timeline: SunTimeline; day: ForecastD
           : seg.condition === 'partial'
             ? 'tl-partial'
             : seg.condition === 'night'
-              ? 'tl-night-soft'
+              ? 'tl-night'
               : 'tl-cloud'
         return <div key={idx} className={c} style={{ width: `${(seg.pct / total) * 100}%` }} />
       })}
@@ -189,7 +190,7 @@ export default function AdminDiagnosticsPage() {
                 <th className="text-left px-3 py-2 font-semibold">Name</th>
                 <th className="text-left px-3 py-2 font-semibold">Country</th>
                 <th className="text-right px-3 py-2 font-semibold">Altitude</th>
-                <th className="text-right px-3 py-2 font-semibold">{forecastDay === 'today' ? 'Sun min (today)' : 'Sun min (tomorrow)'}</th>
+                <th className="text-right px-3 py-2 font-semibold">{forecastDay === 'today' ? 'Sun (today)' : 'Sun (tomorrow)'}</th>
                 <th className="text-right px-3 py-2 font-semibold">FOMO</th>
                 <th className="text-right px-3 py-2 font-semibold">Temp</th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
@@ -219,7 +220,7 @@ export default function AdminDiagnosticsPage() {
                     <td className="px-3 py-2.5 text-slate-600">{r.destination.country}</td>
                     <td className="px-3 py-2.5 text-right text-slate-600">{r.destination.altitude_m.toLocaleString()} m</td>
                     <td className="px-3 py-2.5 text-right text-slate-700">
-                      {forecastDay === 'today' ? r.sun_score.sunshine_forecast_min : Math.round((r.tomorrow_sun_hours || 0) * 60)}
+                      {formatSunHours(forecastDay === 'today' ? r.sun_score.sunshine_forecast_min : Math.round((r.tomorrow_sun_hours || 0) * 60))}
                     </td>
                     <td className="px-3 py-2.5 text-right font-semibold text-amber-700">{Math.round(r.sun_score.score * 100)}%</td>
                     <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(r.weather_now?.temp_c ?? 0)}°C</td>
