@@ -7,7 +7,7 @@ import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 import { formatSunHours } from '@/lib/format'
 
 type SortMode = 'score' | 'sun' | 'name' | 'altitude'
-type LimitMode = '25' | '50' | '100' | 'all'
+type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 
 type Escape = SunnyEscapesResponse['escapes'][number]
@@ -62,12 +62,14 @@ export default function AdminDiagnosticsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('score')
-  const [limitMode, setLimitMode] = useState<LimitMode>('50')
+  const [pageSizeMode, setPageSizeMode] = useState<PageSizeMode>('100')
   const [forecastDay, setForecastDay] = useState<ForecastDay>('today')
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
   const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true })
+  const [activeTypes, setActiveTypes] = useState<Record<string, boolean>>({})
+  const [page, setPage] = useState(1)
   const [meta, setMeta] = useState({
     liveSource: '',
     debugPath: '',
@@ -156,15 +158,36 @@ export default function AdminDiagnosticsPage() {
     return out
   }, [rows])
 
+  const allTypes = useMemo(() => {
+    const out = new Set<string>()
+    for (const r of rows) {
+      for (const t of r.destination.types || []) out.add(t)
+    }
+    return Array.from(out).sort((a, b) => a.localeCompare(b, 'de-CH'))
+  }, [rows])
+
+  const byTypeCount = useMemo(() => {
+    const out: Record<string, number> = {}
+    for (const r of rows) {
+      for (const t of r.destination.types || []) out[t] = (out[t] || 0) + 1
+    }
+    return out
+  }, [rows])
+
   const filteredSorted = useMemo(() => {
     const daySunMin = (r: Escape) => (
       forecastDay === 'today'
         ? r.sun_score.sunshine_forecast_min
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
+    const selectedTypes = Object.entries(activeTypes).filter(([, enabled]) => enabled).map(([type]) => type)
 
     const filtered = rows
       .filter(r => activeCountries[r.destination.country] !== false)
+      .filter(r => {
+        if (selectedTypes.length === 0) return true
+        return r.destination.types.some(t => selectedTypes.includes(t))
+      })
       .filter(r => {
         if (!search.trim()) return true
         const q = search.trim().toLowerCase()
@@ -182,9 +205,24 @@ export default function AdminDiagnosticsPage() {
       return b.sun_score.score - a.sun_score.score
     })
 
-    if (limitMode === 'all') return filtered
-    return filtered.slice(0, Number(limitMode))
-  }, [rows, activeCountries, sortMode, limitMode, forecastDay, search])
+    return filtered
+  }, [rows, activeCountries, activeTypes, sortMode, forecastDay, search])
+
+  const pageSize = pageSizeMode === 'all' ? filteredSorted.length : Number(pageSizeMode)
+  const totalPages = Math.max(1, Math.ceil(filteredSorted.length / Math.max(1, pageSize)))
+  const pagedRows = useMemo(() => {
+    if (pageSizeMode === 'all') return filteredSorted
+    const start = (page - 1) * pageSize
+    return filteredSorted.slice(start, start + pageSize)
+  }, [filteredSorted, page, pageSize, pageSizeMode])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search, forecastDay, sortMode, activeCountries, activeTypes, pageSizeMode])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   const stats = useMemo(() => {
     const list = filteredSorted
@@ -206,6 +244,7 @@ export default function AdminDiagnosticsPage() {
   )
 
   const toggleCountry = (country: string) => setActiveCountries(prev => ({ ...prev, [country]: !prev[country] }))
+  const toggleType = (type: string) => setActiveTypes(prev => ({ ...prev, [type]: !prev[type] }))
 
   const toggleCompare = (id: string) => {
     setSelectedCompare(prev => {
@@ -319,12 +358,12 @@ export default function AdminDiagnosticsPage() {
           </label>
 
           <label className="flex items-center gap-2 text-xs text-slate-600">
-            Limit
-            <select value={limitMode} onChange={e => setLimitMode(e.target.value as LimitMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
-              <option value="25">25</option>
+            Page size
+            <select value={pageSizeMode} onChange={e => setPageSizeMode(e.target.value as PageSizeMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
               <option value="50">50</option>
               <option value="100">100</option>
-              <option value="all">All</option>
+              <option value="200">200</option>
+              <option value="all">All rows</option>
             </select>
           </label>
 
@@ -345,6 +384,21 @@ export default function AdminDiagnosticsPage() {
           <div className="inline-flex p-1 rounded-full border border-slate-200 bg-white">
             <button onClick={() => setForecastDay('today')} className={`px-3 py-1 rounded-full text-xs font-semibold ${forecastDay === 'today' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}>Today</button>
             <button onClick={() => setForecastDay('tomorrow')} className={`px-3 py-1 rounded-full text-xs font-semibold ${forecastDay === 'tomorrow' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}>Tomorrow</button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3">
+          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Type filters</p>
+          <div className="flex flex-wrap gap-2">
+            {allTypes.map(type => (
+              <button
+                key={type}
+                onClick={() => toggleType(type)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypes[type] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+              >
+                {type} ({byTypeCount[type] || 0})
+              </button>
+            ))}
           </div>
         </div>
 
@@ -429,7 +483,7 @@ export default function AdminDiagnosticsPage() {
                   <td colSpan={9} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
                 </tr>
               ) : (
-                filteredSorted.map((row) => {
+                pagedRows.map((row) => {
                   const isExpanded = expandedId === row.destination.id
                   const daySunMin = forecastDay === 'today' ? row.sun_score.sunshine_forecast_min : Math.round((row.tomorrow_sun_hours || 0) * 60)
                   const dayPrefix = forecastDay === 'today'
@@ -504,6 +558,34 @@ export default function AdminDiagnosticsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
+          <span>
+            Showing {filteredSorted.length === 0 ? 0 : (pageSizeMode === 'all' ? filteredSorted.length : ((page - 1) * pageSize + 1))}-
+            {pageSizeMode === 'all' ? filteredSorted.length : Math.min(page * pageSize, filteredSorted.length)} of {filteredSorted.length} destinations
+          </span>
+          {pageSizeMode !== 'all' && (
+            <div className="inline-flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-2.5 py-1 rounded-md border border-slate-200 bg-white disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <span style={{ fontFamily: 'DM Mono, monospace' }}>
+                {page}/{totalPages}
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="px-2.5 py-1 rounded-md border border-slate-200 bg-white disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </main>
