@@ -4,6 +4,7 @@ import { computeSunScore, detectInversion, preFilterByDistance, rankDestinations
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
+import { addRequestLog } from '@/lib/request-log'
 
 type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
 type TripSpan = 'daytrip' | 'plus1day'
@@ -372,11 +373,12 @@ function originSunScoreFromCurrent(input: {
 }
 
 export async function GET(request: NextRequest) {
+  const startedAt = Date.now()
   const sp = request.nextUrl.searchParams
   const maxSupportedH = 4.5
   const lat = parseFloat(sp.get('lat') || String(DEFAULT_ORIGIN.lat))
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
-  const maxTravelH = Math.min(maxSupportedH, Math.max(1, parseFloat(sp.get('max_travel_h') || '2.5')))
+  const maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
   const mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
@@ -399,7 +401,34 @@ export async function GET(request: NextRequest) {
   const requestedDemo = sp.get('demo') === 'true'
   let liveDebugPath = requestedDemo ? 'demo-requested' : 'live-requested'
 
+  const logRequest = (input: {
+    status: number
+    liveSource: 'open-meteo' | 'mock'
+    livePath: string
+    fallback?: string
+    cacheHit: boolean
+  }) => {
+    addRequestLog({
+      id: `log_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      at: new Date().toISOString(),
+      path: request.nextUrl.pathname,
+      query: request.nextUrl.search,
+      duration_ms: Date.now() - startedAt,
+      status: input.status,
+      live_source: input.liveSource,
+      live_path: input.livePath,
+      fallback: input.fallback,
+      cache_hit: input.cacheHit,
+    })
+  }
+
   if (isNaN(lat) || isNaN(lon) || lat < 44 || lat > 50 || lon < 4 || lon > 12) {
+    logRequest({
+      status: 400,
+      liveSource: requestedDemo ? 'mock' : 'open-meteo',
+      livePath: 'invalid-coordinates',
+      cacheHit: false,
+    })
     return NextResponse.json({ error: 'Invalid coordinates.' }, { status: 400 })
   }
 
@@ -408,10 +437,21 @@ export async function GET(request: NextRequest) {
   })
   const cached = queryResponseCache.get(cacheKey)
   if (cached && cached.expires_at > Date.now()) {
+    const cachedSource = cached.headers['X-FOMO-Live-Source'] === 'open-meteo' ? 'open-meteo' : 'mock'
+    const cachedPath = cached.headers['X-FOMO-Debug-Live-Path'] || `${liveDebugPath}-cache-hit`
+    const cachedFallback = cached.headers['X-FOMO-Live-Fallback']
+    logRequest({
+      status: 200,
+      liveSource: cachedSource,
+      livePath: `${cachedPath}-cache-hit`,
+      fallback: cachedFallback || undefined,
+      cacheHit: true,
+    })
     return NextResponse.json(cached.response, {
       headers: {
         ...cached.headers,
         'X-FOMO-Response-Cache': 'HIT',
+        'X-FOMO-Request-Ms': String(Date.now() - startedAt),
       },
     })
   }
@@ -445,7 +485,7 @@ export async function GET(request: NextRequest) {
   let inversionLikely = true
 
   // Pre-filter by rough distance and user filters
-  let candidates = preFilterByDistance(lat, lon, destinations, maxTravelH)
+  let candidates = preFilterByDistance(lat, lon, destinations, maxSupportedH)
   if (types.length > 0) candidates = candidates.filter(d => d.types.some(t => types.includes(t)))
   const prefilterCandidateCount = candidates.length
   let livePoolCount = 0
@@ -490,12 +530,15 @@ export async function GET(request: NextRequest) {
       const effectiveSunMin = tripSpan === 'plus1day'
         ? clamp(w.sunshine_forecast_min + tomorrowMin, 0, 600)
         : w.sunshine_forecast_min
+      const gainVsOrigin = Math.max(0, effectiveSunMin - originSunMin)
       return {
         destination: c.destination,
         sun_score: computeSunScore(c.destination, {
           ...w,
           sunshine_forecast_min: effectiveSunMin,
           sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+          gain_vs_origin_min: gainVsOrigin,
+          gain_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
         }),
         conditions: w.conditions_text,
         temp_c: w.temp_c,
@@ -556,6 +599,7 @@ export async function GET(request: NextRequest) {
         const effectiveSunMin = tripSpan === 'plus1day'
           ? clamp(remainingTodayMin + live.total_sunshine_tomorrow_min, 0, 600)
           : liveWindow.weatherInput.sunshine_forecast_min
+        const gainVsOrigin = Math.max(0, effectiveSunMin - originSunMin)
 
         return {
           destination: c.destination,
@@ -563,6 +607,8 @@ export async function GET(request: NextRequest) {
             ...liveWindow.weatherInput,
             sunshine_forecast_min: effectiveSunMin,
             sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+            gain_vs_origin_min: gainVsOrigin,
+            gain_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
           }),
           conditions: liveWindow.conditionsText,
           temp_c: Math.round(live.current.temperature_c),
@@ -669,9 +715,9 @@ export async function GET(request: NextRequest) {
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
   const remainingDayMin = sunsetInfo.minutes_until
-  let bestOptH = 1.5
+  let bestOptH = 2
   let bestNetSun = 0
-  for (let testH = 1; testH <= maxSupportedH; testH += 0.25) {
+  for (let testH = 0.5; testH <= maxSupportedH; testH += 0.25) {
     const testMin = testH * 60
     const bucket = withTravel.filter(r => r.bestTravelMin <= testMin && r.bestTravelMin > (testH - 0.5) * 60)
     if (bucket.length === 0) continue
@@ -710,9 +756,11 @@ export async function GET(request: NextRequest) {
     return ''
   }
 
-  const escapes: EscapeResult[] = pickedRanked.slice(0, limit).map((r, i) => {
-    const full = withTravel.find(w => w.destination.id === r.destination.id)!
-    const destSunMin = r.sun_score.sunshine_forecast_min
+  const toEscapeResult = (
+    full: ScoredWithTravel,
+    rank: number
+  ): EscapeResult => {
+    const destSunMin = full.sun_score.sunshine_forecast_min
     const roundTrip = full.bestTravelMin * 2
     const netSun = Math.max(0, Math.min(destSunMin, remainingDayMin - roundTrip))
     const cmp = formatComparison(destSunMin, originSunMin)
@@ -734,9 +782,9 @@ export async function GET(request: NextRequest) {
       : undefined
 
     return {
-      rank: i + 1,
-      destination: r.destination,
-      sun_score: r.sun_score,
+      rank,
+      destination: full.destination,
+      sun_score: full.sun_score,
       conditions: `${destSunMin} min sunshine${cmp}`,
       net_sun_min: netSun,
       weather_now: {
@@ -747,17 +795,34 @@ export async function GET(request: NextRequest) {
         car: full.carTravel ? { mode: 'car' as const, duration_min: full.carTravel.duration_min, distance_km: full.carTravel.distance_km } : undefined,
         train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
       },
-      plan: buildTripPlan(r.destination),
+      plan: buildTripPlan(full.destination),
       links: {
-        google_maps: buildGoogleMapsDirectionsUrl(r.destination.maps_name, mapsOriginName),
-        sbb: buildSbbTimetableUrl(r.destination.sbb_name, sbbOriginName),
-        webcam: r.destination.webcam_url,
+        google_maps: buildGoogleMapsDirectionsUrl(full.destination.maps_name, mapsOriginName),
+        sbb: buildSbbTimetableUrl(full.destination.sbb_name, sbbOriginName),
+        webcam: full.destination.webcam_url,
       },
-      sun_timeline: liveTimeline ?? getMockSunTimeline(r.destination, demoMode),
-      tomorrow_sun_hours: liveTomorrowSun ?? getMockTomorrowSunHoursForDest(r.destination, demoMode),
+      sun_timeline: liveTimeline ?? getMockSunTimeline(full.destination, demoMode),
+      tomorrow_sun_hours: liveTomorrowSun ?? getMockTomorrowSunHoursForDest(full.destination, demoMode),
       admin_hourly: adminHourly,
     }
+  }
+
+  const escapes: EscapeResult[] = pickedRanked.slice(0, limit).map((r, i) => {
+    const full = withTravel.find(w => w.destination.id === r.destination.id)!
+    return toEscapeResult(full, i + 1)
   })
+
+  const fastestCandidate = withTravel
+    .filter(r => Number.isFinite(r.bestTravelMin))
+    .filter(r => r.bestTravelMin <= 75)
+    .filter(r => r.sun_score.sunshine_forecast_min - originSunMin >= 60)
+    .sort((a, b) => {
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      if (a.bestTravelMin !== b.bestTravelMin) return a.bestTravelMin - b.bestTravelMin
+      return b.destination.altitude_m - a.destination.altitude_m
+    })[0]
+
+  const fastestEscape = fastestCandidate ? toEscapeResult(fastestCandidate, 0) : undefined
 
   const originName = originNameParam || (
     (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
@@ -798,6 +863,7 @@ export async function GET(request: NextRequest) {
     sunset: sunsetInfo,
     tomorrow_sun_hours: originTomorrowHours,
     optimal_travel_h: bestOptH,
+    fastest_escape: fastestEscape,
     escapes,
   }
 
@@ -816,6 +882,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
+    'X-FOMO-Request-Ms': String(Date.now() - startedAt),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
   if (fallbackNotice) headers['X-FOMO-Fallback-Notice'] = fallbackNotice
@@ -833,6 +900,14 @@ export async function GET(request: NextRequest) {
       headers,
     })
   }
+
+  logRequest({
+    status: 200,
+    liveSource: demoMode ? 'mock' : 'open-meteo',
+    livePath: liveDebugPath,
+    fallback: liveFallbackReason || undefined,
+    cacheHit: false,
+  })
 
   return NextResponse.json(response, { headers })
 }

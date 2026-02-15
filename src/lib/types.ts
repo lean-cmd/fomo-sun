@@ -19,10 +19,18 @@ export type TravelMode = 'car' | 'train' | 'both'
 export type Confidence = 'high' | 'medium' | 'low' | 'uncertain'
 export type SkyCondition = 'sun' | 'partial' | 'cloud' | 'night'
 
+export interface ScoreBreakdown {
+  sunshine_pct: number
+  cloud_pct: number
+  altitude_bonus_pct: number
+  gain_pct: number
+}
+
 export interface SunScore {
   score: number; confidence: Confidence
   sunshine_forecast_min: number; low_cloud_cover_pct: number
   altitude_bonus: number; data_freshness: string
+  score_breakdown: ScoreBreakdown
 }
 
 export interface TravelResult {
@@ -72,6 +80,7 @@ export interface SunnyEscapesResponse {
   sunset: { time: string; minutes_until: number; is_past: boolean }
   tomorrow_sun_hours: number
   optimal_travel_h: number // best net-sun travel radius
+  fastest_escape?: EscapeResult
   escapes: EscapeResult[]
 }
 

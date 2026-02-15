@@ -16,6 +16,8 @@ interface WeatherData {
   sunshine_norm_cap_min?: number  // normalization cap for extended horizons (default 180)
   low_cloud_cover_pct: number     // predicted low cloud cover % (0-100)
   total_cloud_cover_pct: number   // predicted total cloud cover % (0-100)
+  gain_vs_origin_min?: number     // additional sunshine vs origin in same horizon
+  gain_norm_cap_min?: number      // normalization cap for gain ratio (default sunshine cap)
   is_inversion_likely: boolean    // derived from temperature profile or manual flag
   ground_truth_available: boolean // do we have a nearby station observation?
   ground_truth_sunny?: boolean    // if available, is the station showing sun?
@@ -51,6 +53,9 @@ export function computeSunScore(
     0.1 * altitude_bonus
   ))
 
+  const gainCap = Math.max(60, weather.gain_norm_cap_min ?? sunshineCap)
+  const gain_norm = Math.min(Math.max((weather.gain_vs_origin_min ?? 0) / gainCap, 0), 1)
+
   // Determine confidence
   const confidence = determineConfidence(score, weather)
 
@@ -60,6 +65,12 @@ export function computeSunScore(
     sunshine_forecast_min: weather.sunshine_forecast_min,
     low_cloud_cover_pct: weather.low_cloud_cover_pct,
     altitude_bonus,
+    score_breakdown: {
+      sunshine_pct: Math.round(sunshine_norm * 100),
+      cloud_pct: Math.round(low_cloud_norm * 100),
+      altitude_bonus_pct: Math.round(altitude_bonus * 100),
+      gain_pct: Math.round(gain_norm * 100),
+    },
     data_freshness: new Date().toISOString(),
   }
 }
