@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, detectInversion, preFilterByDistance, rankDestinations } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
-import { getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
-import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
+import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
 
 type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
@@ -29,7 +28,6 @@ const DEMO_TRAIN_FAST_IDS = new Set([
   'freiburg-im-breisgau',
 ])
 
-const LIVE_DEST_WEATHER_LIMIT = 8
 const LIVE_RATE_WINDOW_MS = 60_000
 const LIVE_RATE_MAX_PER_WINDOW = 24
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
@@ -49,6 +47,10 @@ function avg(values: number[]) {
 function demoTrainFactor(id: string): number {
   const hash = id.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
   return 0.66 + (hash % 8) * 0.02 // 0.66 - 0.80
+}
+
+function locationKey(lat: number, lon: number) {
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`
 }
 
 function clientIp(request: NextRequest): string {
@@ -135,11 +137,13 @@ function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionL
   const lowCloud = Math.round(avg(window.map(h => h.low_cloud_cover_pct)))
   const totalCloud = Math.round(avg(window.map(h => h.cloud_cover_pct)))
   const temp = Math.round(avg(window.map(h => h.temperature_c)))
+  const humidity = Math.round(avg(window.map(h => h.relative_humidity_pct)))
+  const wind = Math.round(avg(window.map(h => h.wind_speed_kmh)))
 
   let conditionsText = ''
   if (sunshineMin >= 90 && lowCloud < 35) conditionsText = `Mostly sunny, ${temp}°C`
   else if (sunshineMin >= 45) conditionsText = `Partly sunny, ${temp}°C`
-  else if (lowCloud > 80) conditionsText = `Fog/low cloud likely, ${temp}°C`
+  else if (lowCloud > 80 || (humidity > 88 && wind < 10)) conditionsText = `Fog/low cloud likely, ${temp}°C`
   else conditionsText = `Cloudy, ${temp}°C`
 
   return {
@@ -251,8 +255,9 @@ export async function GET(request: NextRequest) {
     ? { limited: false, count: 0, remaining: LIVE_RATE_MAX_PER_WINDOW, reset_at: Date.now() + LIVE_RATE_WINDOW_MS }
     : consumeRateBudget(ip)
   const liveRateLimited = !requestedDemo && liveRate.limited
-  const demoMode = requestedDemo || liveRateLimited
-  const liveFallbackReason = liveRateLimited ? 'rate_limited' : ''
+  let demoMode = requestedDemo || liveRateLimited
+  let liveFallbackReason = liveRateLimited ? 'rate_limited' : ''
+  let fallbackNotice = ''
 
   const maxTravelMin = maxTravelH * 60
   const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -270,8 +275,6 @@ export async function GET(request: NextRequest) {
   }
   let weatherFreshness = new Date().toISOString()
   let inversionLikely = true
-  let usedSwissMeteo = false
-  let originLabelOverride: string | null = null
 
   // Pre-filter by rough distance and user filters
   let candidates = preFilterByDistance(lat, lon, destinations, maxTravelH)
@@ -301,9 +304,8 @@ export async function GET(request: NextRequest) {
   })
 
   let scored: ScoredWithTravel[] = []
-
-  if (demoMode) {
-    scored = candidatesWithTravel.map(c => {
+  const buildDemoScored = () => {
+    return candidatesWithTravel.map(c => {
       const w = getMockWeather(c.destination, true)
       const tomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, true) * 60)
       const effectiveSunMin = tripSpan === 'plus1day'
@@ -323,54 +325,31 @@ export async function GET(request: NextRequest) {
         bestTravelMin: c.bestTravelMin,
       }
     })
+  }
+
+  if (demoMode) {
+    scored = buildDemoScored()
   } else {
-    // Live mode: guard upstream usage by evaluating only the closest/relevant pool.
-    const liveWindowMax = maxTravelMin + 30
-    const livePool = candidatesWithTravel
-      .filter(c => c.bestTravelMin <= liveWindowMax)
-      .sort((a, b) => {
-        const da = Math.abs(a.bestTravelMin - maxTravelMin)
-        const db = Math.abs(b.bestTravelMin - maxTravelMin)
-        if (da !== db) return da - db
-        return b.destination.altitude_m - a.destination.altitude_m
-      })
-      .slice(0, LIVE_DEST_WEATHER_LIMIT)
-    livePoolCount = livePool.length
-
-    const swissOrigin = await getSwissMeteoOriginSnapshot(lat, lon)
-    if (swissOrigin) {
-      usedSwissMeteo = true
-      originDescription = swissOrigin.description
-      originSunScore = swissOrigin.sun_score
-      originSunMin = swissOrigin.sunshine_min
-      originLabelOverride = swissOrigin.station_name
-      weatherFreshness = swissOrigin.observed_at || weatherFreshness
-      inversionLikely = detectInversion({
-        temp_c: swissOrigin.temp_c,
-        humidity_pct: swissOrigin.humidity_pct,
-        wind_speed_kmh: swissOrigin.wind_kmh,
-      })
-    } else {
-      try {
-        const originCurrent = await getCurrentWeather(lat, lon)
-        originDescription = originCurrent.conditions_text
-        originSunMin = originCurrent.sunshine_duration_min
-        originSunScore = originSunScoreFromCurrent(originSunMin, originCurrent.low_cloud_cover_pct)
-        inversionLikely = detectInversion({
-          visibility_m: originCurrent.visibility_m,
-          temp_c: originCurrent.temperature_c,
-          wind_speed_kmh: originCurrent.wind_speed_kmh,
-        })
-      } catch {
-        // keep mock origin fallback
-      }
-    }
-
     try {
-      const [originHourly, sunTimes] = await Promise.all([
+      livePoolCount = candidatesWithTravel.length
+      const [originCurrent, originHourly, sunTimes, destinationWeather] = await Promise.all([
+        getCurrentWeather(lat, lon),
         getHourlyForecast(lat, lon),
         getSunTimes(lat, lon),
+        batchGetWeather(candidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon }))),
       ])
+      weatherFreshness = new Date().toISOString()
+
+      originDescription = originCurrent.conditions_text
+      originSunMin = originCurrent.sunshine_duration_min
+      originSunScore = originSunScoreFromCurrent(originSunMin, originCurrent.low_cloud_cover_pct)
+      inversionLikely = detectInversion({
+        visibility_m: originCurrent.visibility_m,
+        humidity_pct: originCurrent.relative_humidity_pct,
+        temp_c: originCurrent.temperature_c,
+        wind_speed_kmh: originCurrent.wind_speed_kmh,
+      })
+
       sunWindow = {
         today: sunTimes.daylight_window_today,
         tomorrow: sunTimes.daylight_window_tomorrow,
@@ -386,59 +365,58 @@ export async function GET(request: NextRequest) {
         minutes_until: sunTimes.sunset_minutes_until,
         is_past: sunTimes.sunset_minutes_until <= 0,
       }
-    } catch {
-      // keep mock timeline/sunset fallback
-    }
+      const weatherByKey = new Map(destinationWeather.map(w => [locationKey(w.lat, w.lon), w]))
+      scored = candidatesWithTravel.map(c => {
+        const live = weatherByKey.get(locationKey(c.destination.lat, c.destination.lon))
+        if (!live) {
+          throw new Error(`Missing live weather for ${c.destination.id}`)
+        }
 
-    scored = await Promise.all(
-      livePool.map(async c => {
-        try {
-          const forecast = await getHourlyForecast(c.destination.lat, c.destination.lon)
-          const liveWindow = computeLiveWeatherWindow(forecast.hours, inversionLikely)
-          const remainingTodayMin = remainingTodaySunshineMin(forecast.hours)
-          const effectiveSunMin = tripSpan === 'plus1day'
-            ? clamp(remainingTodayMin + forecast.total_sunshine_tomorrow_min, 0, 600)
-            : liveWindow.weatherInput.sunshine_forecast_min
-          return {
-            destination: c.destination,
-            sun_score: computeSunScore(c.destination, {
-              ...liveWindow.weatherInput,
-              sunshine_forecast_min: effectiveSunMin,
-              sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
-            }),
-            conditions: liveWindow.conditionsText,
-            temp_c: liveWindow.tempC,
-            carTravel: c.carTravel,
-            trainTravel: c.trainTravel,
-            bestTravelMin: c.bestTravelMin,
-            liveForecast: forecast,
-          }
-        } catch {
-          const w = getMockWeather(c.destination, false)
-          const fallbackTomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, false) * 60)
-          const effectiveSunMin = tripSpan === 'plus1day'
-            ? clamp(w.sunshine_forecast_min + fallbackTomorrowMin, 0, 600)
-            : w.sunshine_forecast_min
-          return {
-            destination: c.destination,
-            sun_score: computeSunScore(c.destination, {
-              ...w,
-              sunshine_forecast_min: effectiveSunMin,
-              sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
-            }),
-            conditions: w.conditions_text,
-            temp_c: w.temp_c,
-            carTravel: c.carTravel,
-            trainTravel: c.trainTravel,
-            bestTravelMin: c.bestTravelMin,
-          }
+        const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely)
+        const remainingTodayMin = remainingTodaySunshineMin(live.hours)
+        const effectiveSunMin = tripSpan === 'plus1day'
+          ? clamp(remainingTodayMin + live.total_sunshine_tomorrow_min, 0, 600)
+          : liveWindow.weatherInput.sunshine_forecast_min
+
+        return {
+          destination: c.destination,
+          sun_score: computeSunScore(c.destination, {
+            ...liveWindow.weatherInput,
+            sunshine_forecast_min: effectiveSunMin,
+            sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+          }),
+          conditions: liveWindow.conditionsText,
+          temp_c: Math.round(live.current.temperature_c),
+          carTravel: c.carTravel,
+          trainTravel: c.trainTravel,
+          bestTravelMin: c.bestTravelMin,
+          liveForecast: {
+            hours: live.hours,
+            total_sunshine_today_min: live.total_sunshine_today_min,
+            total_sunshine_tomorrow_min: live.total_sunshine_tomorrow_min,
+          },
         }
       })
-    )
+    } catch {
+      demoMode = true
+      liveFallbackReason = 'cached_forecast'
+      fallbackNotice = 'Using cached forecast'
+      originDescription = `${fallbackNotice} · ${mockOrigin.description}`
+      originSunScore = mockOrigin.sun_score
+      originSunMin = mockOrigin.sunshine_min
+      originTimeline = getMockOriginTimeline()
+      sunWindow = { today: getMockDaylightWindow(0), tomorrow: getMockDaylightWindow(1) }
+      sunsetInfo = getMockSunset(true)
+      originTomorrowHours = getMockTomorrowSunHours()
+      if (tripSpan === 'plus1day') {
+        originSunMin = Math.round(originSunMin + originTomorrowHours * 60)
+      }
+      scored = buildDemoScored()
+    }
   }
 
   // Keep a much broader candidate set in demo so slider materially changes outcomes.
-  const topLimit = demoMode ? 48 : LIVE_DEST_WEATHER_LIMIT
+  const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
   const withTravel = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
 
   // Default ranking path
@@ -550,8 +528,9 @@ export async function GET(request: NextRequest) {
     }
   })
 
-  const originName = originLabelOverride
-    || ((Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1) ? 'Basel' : `${lat.toFixed(2)}, ${lon.toFixed(2)}`)
+  const originName = (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
+    ? 'Basel'
+    : `${lat.toFixed(2)}, ${lon.toFixed(2)}`
 
   const liveMaxSunHoursToday = !demoMode
     ? Math.max(
@@ -567,13 +546,13 @@ export async function GET(request: NextRequest) {
       generated_at: new Date().toISOString(),
       weather_data_freshness: weatherFreshness,
       attribution: [
-        'Weather: MeteoSwiss (CC BY 4.0)',
-        'Weather fallback: Open-Meteo',
+        'Weather: Open-Meteo',
         'Routing: Open Journey Planner',
         'FOMO Sun - fomosun.com',
       ],
       demo_mode: demoMode,
       trip_span: tripSpan,
+      fallback_notice: fallbackNotice || undefined,
     },
     origin_conditions: {
       description: originDescription,
@@ -591,8 +570,8 @@ export async function GET(request: NextRequest) {
 
   const headers: Record<string, string> = {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    'X-FOMO-Sun-Version': '0.5.0',
-    'X-FOMO-Live-Source': demoMode ? 'mock' : (usedSwissMeteo ? 'meteoswiss+open-meteo' : 'open-meteo'),
+    'X-FOMO-Sun-Version': '0.6.0',
+    'X-FOMO-Live-Source': demoMode ? 'mock' : 'open-meteo',
     'X-FOMO-Trip-Span': tripSpan,
     'X-FOMO-Response-Cache': 'MISS',
     'X-FOMO-Live-Rate-Limit': `${LIVE_RATE_MAX_PER_WINDOW};w=${Math.round(LIVE_RATE_WINDOW_MS / 1000)}`,
@@ -605,6 +584,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
+  if (fallbackNotice) headers['X-FOMO-Fallback-Notice'] = fallbackNotice
 
   if (!liveFallbackReason) {
     if (queryResponseCache.size > 600) {

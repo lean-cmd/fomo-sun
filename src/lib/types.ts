@@ -45,6 +45,7 @@ export interface SunnyEscapesResponse {
     generated_at: string; weather_data_freshness: string
     attribution: string[]; demo_mode: boolean
     trip_span?: 'daytrip' | 'plus1day'
+    fallback_notice?: string
   }
   origin_conditions: {
     description: string; sun_score: number; sunshine_min: number
