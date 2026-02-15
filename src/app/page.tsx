@@ -84,6 +84,7 @@ function compressSegments(
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
 type SortMode = 'best' | 'fastest' | 'warmest'
 type TripSpan = 'daytrip' | 'plus1day'
+type DensityMode = 'compact' | 'expanded'
 
 function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
@@ -215,48 +216,51 @@ function buildHourTicks(win?: DaylightWindow) {
 
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
 
+function ringTier(score: number) {
+  if (score >= 0.9) return { id: 'elite', colors: ['#22c55e', '#16a34a', '#15803d'], label: 'Elite' }
+  if (score >= 0.75) return { id: 'strong', colors: ['#fbbf24', '#f59e0b', '#f97316'], label: 'Strong' }
+  if (score >= 0.55) return { id: 'promising', colors: ['#38bdf8', '#0ea5e9', '#0284c7'], label: 'Promising' }
+  return { id: 'low', colors: ['#94a3b8', '#64748b', '#475569'], label: 'Low' }
+}
+
 // ── FOMOscore Ring ────────────────────────────────────────────────────
-function ScoreRing({ score, size = 48, onTap }: { score: number; size?: number; onTap?: () => void }) {
+function ScoreRing({
+  score,
+  size = 48,
+  onTap,
+  pulse = false,
+  compact = false,
+}: {
+  score: number
+  size?: number
+  onTap?: () => void
+  pulse?: boolean
+  compact?: boolean
+}) {
   const pct = Math.round(score * 100), r = (size - 8) / 2, circ = 2 * Math.PI * r
+  const tier = ringTier(score)
+  const gradId = `fomoRingGrad-${tier.id}`
   return (
     <button onClick={e => { e.stopPropagation(); onTap?.() }} aria-label={`FOMOscore ${pct}%`}
-      className="relative flex-shrink-0 cursor-pointer" style={{ width: size, height: size }}>
+      className={`relative flex-shrink-0 ${onTap ? 'cursor-pointer' : 'cursor-default'} ${pulse ? 'score-pulse' : ''}`} style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <defs>
-          <linearGradient id="fomoRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#fbbf24" />
-            <stop offset="55%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#f97316" />
+          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor={tier.colors[0]} />
+            <stop offset="55%" stopColor={tier.colors[1]} />
+            <stop offset="100%" stopColor={tier.colors[2]} />
           </linearGradient>
         </defs>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="url(#fomoRingGrad)" strokeWidth={4}
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={`url(#${gradId})`} strokeWidth={4}
           strokeDasharray={circ} strokeDashoffset={circ * (1 - score)} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 0.6s ease', filter: 'drop-shadow(0 0 3px rgba(251, 191, 36, 0.45))' }} />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-[13px] font-bold text-slate-800" style={{ fontFamily: 'Sora' }}>{pct}</span>
-        <span className="text-[6px] font-bold text-amber-500 uppercase tracking-wider mt-[1px]">fomo™</span>
+        <span className={`${compact ? 'text-[11px]' : 'text-[13px]'} font-bold text-slate-800`} style={{ fontFamily: 'Sora' }}>{pct}</span>
+        <span className={`${compact ? 'text-[5px]' : 'text-[6px]'} font-bold text-amber-500 uppercase tracking-wider mt-[1px]`}>fomo™</span>
       </span>
     </button>
-  )
-}
-
-// ── Mini Score Ring for hero trust cards ──────────────────────────────
-function MiniRing({ score, size = 36, stroke: strokeColor = '#f59e0b' }: { score: number; size?: number; stroke?: string }) {
-  const pct = Math.round(score * 100), r = (size - 6) / 2, circ = 2 * Math.PI * r
-  return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={3} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={strokeColor} strokeWidth={3}
-          strokeDasharray={circ} strokeDashoffset={circ * (1 - score)} strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] font-bold text-slate-700" style={{ fontFamily: 'Sora' }}>{pct}<sup className="text-[7px]">™</sup></span>
-      </span>
-    </div>
   )
 }
 
@@ -335,8 +339,12 @@ export default function Home() {
   const [queryMaxH, setQueryMaxH] = useState(maxH)
   const [sortBy, setSortBy] = useState<SortMode>('best')
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
+  const [density, setDensity] = useState<DensityMode>('expanded')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
+  const [scorePulse, setScorePulse] = useState(false)
+  const [isMobileControlSticky, setIsMobileControlSticky] = useState(false)
   const requestCtrlRef = useRef<AbortController | null>(null)
+  const controlAnchorRef = useRef<HTMLElement | null>(null)
 
   const night = data ? data.sunset.is_past && !demo : false
   const manualOrigin = useMemo(
@@ -349,6 +357,11 @@ export default function Home() {
     const t = setTimeout(() => setQueryMaxH(maxH), 260)
     return () => clearTimeout(t)
   }, [maxH])
+  useEffect(() => {
+    setScorePulse(true)
+    const t = setTimeout(() => setScorePulse(false), 420)
+    return () => clearTimeout(t)
+  }, [queryMaxH])
 
   const load = useCallback(async () => {
     requestCtrlRef.current?.abort()
@@ -408,7 +421,8 @@ export default function Home() {
   }, [data?.escapes])
   useEffect(() => {
     if (!data || tripSpanTouched) return
-    if (data.sunset.is_past || data.sunset.minutes_until <= 30) {
+    const hour = new Date().getHours()
+    if (hour >= 17 || data.sunset.is_past || data.sunset.minutes_until <= 30) {
       if (tripSpan !== 'plus1day') {
         setTripSpan('plus1day')
         setHasSetOptimal(false)
@@ -416,6 +430,15 @@ export default function Home() {
       }
     }
   }, [data, tripSpanTouched, tripSpan])
+  useEffect(() => {
+    const onScroll = () => {
+      const anchorTop = controlAnchorRef.current?.getBoundingClientRect().top ?? 9999
+      setIsMobileControlSticky(anchorTop < 52)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -478,6 +501,7 @@ export default function Home() {
   const topTempC = topEscape ? Math.round(topEscape.weather_now?.temp_c ?? extractTemp(topEscape.weather_now?.summary || '') ?? 0) : 0
   const topWeatherText = topEscape ? weatherChipLabel(topEscape.weather_now?.summary || '') : ''
   const fallbackNotice = data?._meta?.fallback_notice || ''
+  const sortLabel = sortBy === 'best' ? 'Best now' : sortBy === 'fastest' ? 'Fastest' : 'Warmest'
   const sortedEscapes = useMemo(() => {
     if (!data?.escapes?.length) return []
     const list = [...data.escapes]
@@ -584,31 +608,30 @@ export default function Home() {
                 ))}
               </select>
             </label>
-            <button
-              onClick={detectLocation}
-              disabled={locating}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border transition-all ${locating ? 'bg-amber-50 border-amber-200 text-amber-500' : night ? 'bg-slate-700/80 border-slate-600 text-slate-300' : 'bg-white/90 border-slate-200 text-slate-600 hover:border-amber-300'}`}
-            >
-              {locating && <span className="loc-pulse relative w-2 h-2 rounded-full bg-amber-500" />}
-              <LocI c="w-3 h-3" /> {locating ? 'Locating...' : 'Use my location'}
-            </button>
-            {originMode === 'gps' && (
+            <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+              <span className={`px-2 self-center text-[9px] font-semibold uppercase tracking-[1px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Chasing sun</span>
               <button
-                onClick={() => { setOriginMode('manual'); setHasSetOptimal(false); setOptimalH(null) }}
-                className={`text-[10px] underline-offset-2 hover:underline ${night ? 'text-slate-400' : 'text-slate-500'}`}
+                onClick={() => setTripSpanManual('daytrip')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
               >
-                Use selected city
+                Today
               </button>
-            )}
+              <button
+                onClick={() => setTripSpanManual('plus1day')}
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+              >
+                Tomorrow
+              </button>
+            </div>
           </div>
 
           {data && topEscape && (
             <div className={`mt-3 sm:mt-4 rounded-2xl border text-left ${night ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200/80 bg-white/80 backdrop-blur-sm'}`}>
-              <div className="grid grid-cols-1 sm:grid-cols-[0.95fr_1.35fr]">
+              <div className="grid grid-cols-1 sm:grid-cols-[0.78fr_1.45fr]">
                 <div className={`order-2 sm:order-1 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-r ${night ? 'border-slate-700' : 'border-slate-200/80'}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5 min-w-0">
-                      <MiniRing score={data.origin_conditions.sun_score} size={34} stroke="#94a3b8" />
+                      <ScoreRing score={data.origin_conditions.sun_score} size={34} compact />
                       <div className="flex-1 min-w-0">
                         <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
                         <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{currentTime} · {sunsetLine}</p>
@@ -630,10 +653,10 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className={`order-1 sm:order-2 px-3.5 sm:px-4 py-3 ${night ? 'bg-amber-500/10' : 'bg-amber-50/70'}`}>
+                <div className={`order-1 sm:order-2 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-l ${night ? 'bg-amber-500/12 border-amber-300/20' : 'bg-amber-50/90 border-amber-200/70'}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-2.5 min-w-0">
-                      <MiniRing score={topEscape.sun_score.score} size={38} stroke="#f59e0b" />
+                      <ScoreRing score={topEscape.sun_score.score} size={38} compact />
                       <div className="flex-1 min-w-0">
                         <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-300/90' : 'text-amber-700/80'}`}>Best escape now</p>
                         <p className={`text-[13px] sm:text-[14px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-900'}`}>
@@ -651,6 +674,9 @@ export default function Home() {
                               {topSunMin} min sun forecast in this travel window
                             </span>
                           )}
+                        </p>
+                        <p className={`text-[9px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                          Why #1: highest FOMO score in your ±30m travel window.
                         </p>
                       </div>
                     </div>
@@ -677,7 +703,29 @@ export default function Home() {
       </section>
 
       {/* ══════ CONTROLS ══════ */}
-      <section className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
+      <section ref={controlAnchorRef} className="max-w-xl mx-auto px-4 -mt-6 sm:-mt-7 relative z-20">
+        <div className={`sm:hidden sticky z-30 mb-2 ${isMobileControlSticky ? 'block' : 'hidden'}`} style={{ top: 'calc(max(8px, env(safe-area-inset-top)) + 34px)' }}>
+          <div className={`rounded-xl border px-2.5 py-2 shadow-sm backdrop-blur-sm ${night ? 'border-slate-600 bg-slate-900/90' : 'border-slate-200 bg-white/92'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-[10px] font-semibold ${night ? 'text-slate-300' : 'text-slate-600'}`}>Travel {fmtTravelHours(maxH)} · {sortLabel}</span>
+              <div className={`inline-flex p-0.5 rounded-full border ${night ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                {([
+                  ['fastest', 'F'],
+                  ['best', 'B'],
+                  ['warmest', 'W'],
+                ] as [SortMode, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setSortBy(id)}
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${sortBy === id ? (night ? 'bg-slate-700 text-white' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
         {fallbackNotice && (
           <div className={`mb-2 rounded-xl border px-3 py-2 text-center text-[11px] font-medium ${night ? 'bg-amber-400/10 border-amber-300/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
             {fallbackNotice}
@@ -685,23 +733,6 @@ export default function Home() {
         )}
         <div className={`rounded-2xl shadow-lg border overflow-visible ${night ? 'bg-slate-800 border-slate-700 shadow-black/20' : 'bg-white border-slate-100 shadow-slate-200/50'}`}>
           <div className="px-4 sm:px-5 pt-3.5 sm:pt-4 pb-3.5 sm:pb-4">
-            <div className="mb-2.5 flex justify-center">
-              <span className={`mr-2 self-center text-[10px] font-semibold uppercase tracking-[1.1px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Chasing sun</span>
-              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
-                <button
-                  onClick={() => setTripSpanManual('daytrip')}
-                  className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'daytrip' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  Today
-                </button>
-                <button
-                  onClick={() => setTripSpanManual('plus1day')}
-                  className={`px-3 py-1 rounded-full text-[10px] font-semibold transition-all ${tripSpan === 'plus1day' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                >
-                  Tomorrow
-                </button>
-              </div>
-            </div>
             <div className="mb-2.5 flex items-center justify-between gap-2">
               <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
                 {([
@@ -717,6 +748,20 @@ export default function Home() {
                     {label}
                   </button>
                 ))}
+              </div>
+              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+                <button
+                  onClick={() => setDensity('compact')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${density === 'compact' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  Compact
+                </button>
+                <button
+                  onClick={() => setDensity('expanded')}
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${density === 'expanded' ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                >
+                  Expanded
+                </button>
               </div>
             </div>
             <div className="flex justify-between items-baseline mb-2">
@@ -762,6 +807,7 @@ export default function Home() {
             {optimalHint && !night && (
               <p className="mt-1 text-[10px] text-sky-600 font-medium">Auto-jumped to optimal net-sun range</p>
             )}
+            <p className={`mt-1 text-[9.5px] font-medium ${night ? 'text-slate-500' : 'text-slate-400'}`}>Sorting stays on <span className="text-slate-600">{sortLabel}</span> while you adjust travel time.</p>
             <div className={`flex justify-between text-[8.5px] sm:text-[9px] mt-1 px-0.5 ${night ? 'text-slate-600' : 'text-slate-300'}`}>
               <span>1h</span><span>2h</span><span>3h</span><span>4h</span><span>4h 30m</span>
             </div>
@@ -851,14 +897,19 @@ export default function Home() {
 
                 return (
                 <div key={e.destination.id}
-                  className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
+                  className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${density === 'compact' ? 'escape-compact' : ''} ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
                   onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
-                  <div className="p-3 sm:p-4 flex gap-2.5 sm:gap-3 items-start">
+                  <div className={`${density === 'compact' ? 'p-2.5 sm:p-3' : 'p-3 sm:p-4'} flex gap-2.5 sm:gap-3 items-start`}>
                     <div className="score-wrap" onClick={ev => ev.stopPropagation()}>
-                      <ScoreRing score={e.sun_score.score} onTap={() => setScorePopup(scorePopup === i ? null : i)} />
+                      <ScoreRing
+                        score={e.sun_score.score}
+                        onTap={() => setScorePopup(scorePopup === i ? null : i)}
+                        pulse={scorePulse}
+                      />
                       {scorePopup === i && (
                         <div className="score-popup">
                           <p className="text-[11px] font-semibold text-amber-500">{Math.round(e.sun_score.score * 100)}% FOMOscore</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">Tier: {ringTier(e.sun_score.score).label}</p>
                           <p className="text-[10px] text-slate-500 mt-0.5">Clear-sky daylight expected.</p>
                         </div>
                       )}
@@ -891,17 +942,23 @@ export default function Home() {
                             <span className="text-slate-400">by {bestMode}</span>
                           </span>
                         )}
+                        <span className={`inline-flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                          <span aria-hidden="true">☀️</span>
+                          <strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.sun_score.sunshine_forecast_min} min</strong>
+                        </span>
                       </div>
                     </div>
                   </div>
 
                   {/* v15: timeline bars always visible, improved colors in CSS */}
-                  <div className="px-4 pb-3">
-                    {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} sunWindow={data.sun_window} />}
-                    <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">
-                      {timelineTicks.map((t, idx) => <span key={idx}>{t}</span>)}
+                  {density === 'expanded' && (
+                    <div className="px-4 pb-3">
+                      {e.sun_timeline && <SunBar timeline={e.sun_timeline} demo={demo} sunWindow={data.sun_window} />}
+                      <div className="flex justify-between text-[8px] text-slate-300 pl-[50px] mt-0.5">
+                        {timelineTicks.map((t, idx) => <span key={idx}>{t}</span>)}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {openCard === i && (
                     <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] ${night ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
@@ -973,9 +1030,27 @@ export default function Home() {
         )}
       </section>
       <footer className={`px-4 pb-6 text-center ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-        <a href="/admin" className="text-[11px] underline-offset-2 hover:underline">
-          Admin
-        </a>
+        <div className="flex items-center justify-center gap-3 text-[11px]">
+          <button
+            onClick={detectLocation}
+            disabled={locating}
+            className={`underline-offset-2 hover:underline ${locating ? 'opacity-70' : ''}`}
+          >
+            {locating ? 'Locating...' : 'Use my location'}
+          </button>
+          {originMode === 'gps' && (
+            <button
+              onClick={() => { setOriginMode('manual'); setHasSetOptimal(false); setOptimalH(null) }}
+              className="underline-offset-2 hover:underline"
+            >
+              Use selected city
+            </button>
+          )}
+          <span className="opacity-40">•</span>
+          <a href="/admin" className="underline-offset-2 hover:underline">
+            Admin
+          </a>
+        </div>
       </footer>
     </div>
   )
