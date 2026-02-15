@@ -38,8 +38,10 @@ function normalizeWindow(win?: DaylightWindow): DaylightWindow {
   return { start_hour: start, end_hour: end }
 }
 
-function compactDaySegments(segments: SunTimeline['today']) {
-  const dayOnly = segments.filter(seg => seg.condition !== 'night')
+function compactDaySegments(segments: SunTimeline['today']): SunTimeline['today'] {
+  const dayOnly = segments.filter(
+    (seg): seg is { condition: 'sun' | 'partial' | 'cloud'; pct: number } => seg.condition !== 'night'
+  )
   const merged: SunTimeline['today'] = []
   for (const seg of dayOnly) {
     const prev = merged[merged.length - 1]
@@ -47,6 +49,35 @@ function compactDaySegments(segments: SunTimeline['today']) {
     else merged.push({ ...seg })
   }
   return merged.length ? merged : [{ condition: 'cloud', pct: 100 }]
+}
+
+function compressSegments(
+  segments: SunTimeline['today'],
+  maxSegments = 6
+): SunTimeline['today'] {
+  if (segments.length <= maxSegments) return segments
+
+  const out: SunTimeline['today'] = []
+  const bucketSize = segments.length / maxSegments
+  for (let i = 0; i < maxSegments; i++) {
+    const start = Math.floor(i * bucketSize)
+    const end = Math.min(segments.length, Math.floor((i + 1) * bucketSize) || segments.length)
+    const bucket = segments.slice(start, end)
+    if (!bucket.length) continue
+
+    const sums: Record<'sun' | 'partial' | 'cloud', number> = { sun: 0, partial: 0, cloud: 0 }
+    let pct = 0
+    for (const seg of bucket) {
+      pct += seg.pct
+      if (seg.condition === 'sun' || seg.condition === 'partial' || seg.condition === 'cloud') {
+        sums[seg.condition] += seg.pct
+      }
+    }
+    const condition = (Object.entries(sums).sort((a, b) => b[1] - a[1])[0]?.[0] || 'cloud') as 'sun' | 'partial' | 'cloud'
+    out.push({ condition, pct })
+  }
+
+  return out.length ? out : segments
 }
 
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
@@ -230,7 +261,7 @@ function SunBar({
         const leftNightPct = (win.start_hour / 24) * 100
         const daylightPct = ((win.end_hour - win.start_hour) / 24) * 100
         const rightNightPct = Math.max(0, 100 - leftNightPct - daylightPct)
-        const daySegments = compactDaySegments(timeline[day])
+        const daySegments = compressSegments(compactDaySegments(timeline[day]))
         const dayTotal = Math.max(1, daySegments.reduce((sum, seg) => sum + seg.pct, 0))
 
         return (
@@ -514,68 +545,74 @@ export default function Home() {
             )}
           </div>
 
-          {/* v15: Trust split cards with FOMO score rings + integrated WhatsApp */}
           {data && topEscape && (
-            <div className="mt-3 sm:mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
-              {/* Origin / Fog card */}
-              <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-white/10' : 'bg-white/75 backdrop-blur-sm'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <MiniRing score={data.origin_conditions.sun_score} size={36} stroke="#94a3b8" />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
-                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{currentTime} · {sunsetLine}</p>
-                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>
-                        Forecast: {origin.name} · {data.origin_conditions.sunshine_min} min sun
-                      </p>
+            <div className={`mt-3 sm:mt-4 rounded-2xl border text-left ${night ? 'border-slate-700 bg-slate-800/70' : 'border-slate-200/80 bg-white/80 backdrop-blur-sm'}`}>
+              <p className={`px-3.5 sm:px-4 pt-2.5 text-[9px] font-semibold uppercase tracking-[1.3px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
+                Decision now
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-[0.95fr_1.35fr]">
+                <div className={`order-2 sm:order-1 px-3.5 sm:px-4 py-3 border-t sm:border-t-0 sm:border-r ${night ? 'border-slate-700' : 'border-slate-200/80'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <MiniRing score={data.origin_conditions.sun_score} size={34} stroke="#94a3b8" />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-slate-400' : 'text-slate-500'}`}>Now in {origin.name}</p>
+                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{currentTime} · {sunsetLine}</p>
+                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-500'}`}>
+                          {data.origin_conditions.sunshine_min} min sun forecast
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                      <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
+                      <span>{originWeatherText || 'Now'}</span>
+                      <span>{Math.round(originTempC)}°</span>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <span aria-hidden="true">{weatherGlyph(data.origin_conditions.description)}</span>
-                    <span>{originWeatherText || 'Now'}</span>
-                    <span>{Math.round(originTempC)}°</span>
-                  </div>
+                  {data.origin_timeline && (
+                    <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
+                      <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} />
+                    </div>
+                  )}
                 </div>
-                {data.origin_timeline && (
-                  <div className={`mt-2 rounded-md px-2.5 py-2 ${night ? 'bg-white/5' : 'bg-white/70'}`}>
-                    <SunBar timeline={data.origin_timeline} demo={demo} sunWindow={data.sun_window} />
-                  </div>
-                )}
-              </div>
 
-              {/* Best escape card */}
-              <div className={`rounded-xl px-3 py-2.5 ${night ? 'bg-amber-500/10 border border-amber-500/20' : 'bg-amber-50/80 border border-amber-200/50 backdrop-blur-sm'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-start gap-2.5 min-w-0">
-                    <MiniRing score={topEscape.sun_score.score} size={36} stroke="#f59e0b" />
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-[8.5px] sm:text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-400/80' : 'text-amber-700/70'}`}>Best escape now</p>
-                      <p className={`text-[11px] sm:text-[12px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-800'}`}>
-                        {topEscape.destination.name}
-                      </p>
-                      <p className={`text-[9px] sm:text-[9.5px] mt-0.5 ${night ? 'text-slate-400' : 'text-slate-500'}`}>{topTravelText} · {topEscape.destination.region}</p>
-                      <p className="mt-1">
-                        {sunGainMin > 0 ? (
-                          <span className={`text-[8.5px] sm:text-[9px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                            {sunGainTag}
-                          </span>
-                        ) : (
-                          <span className={`text-[8.5px] sm:text-[9px] ${night ? 'text-slate-500' : 'text-slate-500'}`}>
-                            Best confidence option in this travel window
-                          </span>
-                        )}
-                      </p>
-                      <a href={topWhatsAppHref} target="_blank" rel="noopener noreferrer"
-                        className={`wa-btn mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}>
-                        <WaIcon c="w-3 h-3" /> Share this escape
-                      </a>
+                <div className={`order-1 sm:order-2 px-3.5 sm:px-4 py-3 ${night ? 'bg-amber-500/10' : 'bg-amber-50/70'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <MiniRing score={topEscape.sun_score.score} size={38} stroke="#f59e0b" />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[9px] uppercase tracking-[1px] font-semibold ${night ? 'text-amber-300/90' : 'text-amber-700/80'}`}>Best escape now</p>
+                        <p className={`text-[13px] sm:text-[14px] mt-0.5 font-semibold ${night ? 'text-white' : 'text-slate-900'}`}>
+                          {topEscape.destination.name}
+                        </p>
+                        <p className={`text-[10px] mt-0.5 ${night ? 'text-slate-300' : 'text-slate-600'}`}>{topTravelText} · {topEscape.destination.region}</p>
+                        <p className="mt-1">
+                          {sunGainMin > 0 ? (
+                            <span className={`text-[10px] font-semibold ${night ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                              {sunGainTag}
+                            </span>
+                          ) : (
+                            <span className={`text-[10px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                              Best confidence option in this travel window
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
+                      <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
+                      <span>{topWeatherText || 'Sunny'}</span>
+                      <span>{topTempC}°</span>
                     </div>
                   </div>
-                  <div className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold border shrink-0 ${night ? 'bg-slate-700/80 border-slate-600 text-slate-100' : 'bg-sky-50 border-sky-100 text-sky-700'}`}>
-                    <span aria-hidden="true">{weatherGlyph(topEscape.weather_now?.summary)}</span>
-                    <span>{topWeatherText || 'Sunny'}</span>
-                    <span>{topTempC}°</span>
-                  </div>
+                  <a
+                    href={topWhatsAppHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`wa-btn mt-2 inline-flex items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}
+                  >
+                    <WaIcon c="w-3.5 h-3.5" /> Share this escape
+                  </a>
                 </div>
               </div>
             </div>
@@ -607,6 +644,24 @@ export default function Home() {
                 >
                   +1 day
                 </button>
+              </div>
+            </div>
+            <div className="mb-2.5 flex items-center justify-between gap-2">
+              <span className={`text-[10px] font-semibold uppercase tracking-[1.2px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>Prioritize</span>
+              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
+                {([
+                  ['best', 'Best now'],
+                  ['fastest', 'Fastest'],
+                  ['warmest', 'Warmest'],
+                ] as [SortMode, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => setSortBy(id)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${sortBy === id ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
             </div>
             <div className="flex justify-between items-baseline mb-2">
@@ -710,7 +765,7 @@ export default function Home() {
 
       {/* ══════ RESULTS ══════ */}
       <section className="max-w-xl mx-auto px-4 mt-4 sm:mt-5 pb-14 sm:pb-16">
-        {loading ? (
+        {loading && !data ? (
           <div className="text-center py-16">
             <div className="sun-anim w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 mx-auto" />
             <p className={`mt-4 text-sm ${night ? 'text-slate-500' : 'text-slate-400'}`}>Finding sunshine...</p>
@@ -723,26 +778,13 @@ export default function Home() {
               </h2>
               <span className={`text-[11px] ${night ? 'text-slate-500' : 'text-slate-400'}`}>{sortedEscapes.length} found</span>
             </div>
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <span className={`text-[10px] uppercase tracking-[1.1px] font-semibold ${night ? 'text-slate-500' : 'text-slate-500'}`}>Sort by</span>
-              <div className={`inline-flex p-1 rounded-full border ${night ? 'border-slate-600 bg-slate-700/70' : 'border-slate-200 bg-slate-50'}`}>
-                {([
-                  ['best', 'Best now'],
-                  ['fastest', 'Fastest'],
-                  ['warmest', 'Warmest'],
-                ] as [SortMode, string][]).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setSortBy(id)}
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition-all ${sortBy === id ? (night ? 'bg-slate-800 text-slate-100' : 'bg-white text-slate-800 shadow-sm') : (night ? 'text-slate-400' : 'text-slate-500')}`}
-                  >
-                    {label}
-                  </button>
-                ))}
+            {loading && (
+              <div className={`mb-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium border ${night ? 'border-slate-600 bg-slate-800 text-slate-300' : 'border-slate-200 bg-white text-slate-500'}`}>
+                <span className="inline-block w-1.5 h-1.5 rounded-full bg-sky-500 animate-pulse" />
+                Updating forecast...
               </div>
-            </div>
-
-            <div className="space-y-2">
+            )}
+            <div className={`space-y-2 transition-opacity duration-200 ${loading ? 'opacity-65' : 'opacity-100'}`} aria-busy={loading ? 'true' : 'false'}>
               {sortedEscapes.map((e, i) => {
                 const carMin = e.travel.car?.duration_min ?? Infinity
                 const trainMin = e.travel.train?.duration_min ?? Infinity
@@ -772,7 +814,7 @@ export default function Home() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1 flex-wrap">
                             <span className="text-[11px]">{FLAG[e.destination.country]}</span>
-                            <span className={`font-semibold text-[13.5px] sm:text-[14px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
+                            <span className={`font-semibold text-[14px] sm:text-[15px] ${night ? 'text-white' : 'text-slate-800'}`}>{e.destination.name}</span>
                           </div>
                           <p className={`text-[10.5px] sm:text-[11px] mt-0.5 ${night ? 'text-slate-500' : 'text-slate-400'}`}>{e.destination.region} · {e.destination.altitude_m.toLocaleString()} m</p>
                         </div>
@@ -782,9 +824,8 @@ export default function Home() {
                           <span>{Math.round(e.weather_now?.temp_c ?? 0)}°</span>
                         </div>
                       </div>
-                      <p className="text-[10px] sm:text-[10.5px] text-amber-600/90 mt-1 leading-snug font-medium">☀️ {e.conditions}</p>
                       {night && (
-                        <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
+                        <p className="text-[9px] sm:text-[9.5px] text-slate-400 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
                       )}
                       {/* v18: compact card shows only the fastest travel mode */}
                       <div className="flex items-center gap-2.5 mt-1.5">
@@ -795,14 +836,6 @@ export default function Home() {
                             <span className="text-slate-400">by {bestMode}</span>
                           </span>
                         )}
-                      </div>
-                      {/* v15: WhatsApp button with icon, visually integrated */}
-                      <div className="mt-2">
-                        <a href={buildWhatsAppHref(e)} target="_blank" rel="noopener noreferrer"
-                          onClick={ev => ev.stopPropagation()}
-                          className={`wa-btn inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}>
-                          <WaIcon c="w-3 h-3" /> Share via WhatsApp
-                        </a>
                       </div>
                     </div>
                   </div>
@@ -817,6 +850,7 @@ export default function Home() {
 
                   {openCard === i && (
                     <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] ${night ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
+                      <p className={`text-[11px] mb-2 leading-snug ${night ? 'text-slate-300' : 'text-slate-600'}`}>☀️ {e.conditions}</p>
                       <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel options</p>
                       <div className="flex items-center flex-wrap gap-2 mb-3">
                         {e.travel.car && (
@@ -851,6 +885,15 @@ export default function Home() {
                         {e.links.sbb && <a href={e.links.sbb} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-red-600 text-white text-[11px] font-semibold hover:bg-red-500 transition-colors"><TrainI c="w-3.5 h-3.5" /> SBB</a>}
                         {e.links.webcam && <a href={e.links.webcam} target="_blank" rel="noopener noreferrer" onClick={ev => ev.stopPropagation()} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg bg-white text-slate-500 border border-slate-200 text-[11px] font-semibold hover:bg-slate-50 transition-colors"><CamI /> Webcam</a>}
                       </div>
+                      <a
+                        href={buildWhatsAppHref(e)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={ev => ev.stopPropagation()}
+                        className={`wa-btn mt-2.5 inline-flex items-center gap-1.5 rounded-full px-3 text-[10px] font-semibold transition-all ${night ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-white text-emerald-700 shadow-sm border border-emerald-100 hover:shadow hover:border-emerald-200'}`}
+                      >
+                        <WaIcon c="w-3.5 h-3.5" /> Share via WhatsApp
+                      </a>
                     </div>
                   )}
                 </div>
@@ -860,7 +903,7 @@ export default function Home() {
         ) : (
           <div className="text-center py-16">
             <p className={`text-base mb-1 ${night ? 'text-slate-400' : 'text-slate-500'}`}>No sunny escapes found</p>
-            <p className={`text-xs ${night ? 'text-slate-600' : 'text-slate-400'}`}>Try increasing travel time or removing filters</p>
+            <p className={`text-xs ${night ? 'text-slate-600' : 'text-slate-400'}`}>Try expanding your travel time or changing filters</p>
           </div>
         )}
       </section>

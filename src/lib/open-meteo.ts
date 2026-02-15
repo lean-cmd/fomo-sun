@@ -125,25 +125,31 @@ function parseHourly(payload: any): LiveForecastHour[] {
 function parseCurrent(payload: any): LiveWeatherResult {
   const c = payload?.current ?? {}
   const visibility = c.visibility ?? 10000
+  const cloudTotal = c.cloud_cover ?? 0
   const cloudLow = c.cloud_cover_low ?? 0
-  const isFoggy = visibility < 1000 || cloudLow > 80
+  const humidity = c.relative_humidity_2m ?? 0
+  const wind = c.wind_speed_10m ?? 0
+  const isFoggy =
+    visibility < 2500 ||
+    cloudLow > 72 ||
+    (humidity > 88 && wind < 14 && cloudTotal > 60)
 
   let conditions = ''
-  if (isFoggy) conditions = `Fog, ${Math.round(c.temperature_2m ?? 0)}°C, low visibility`
-  else if ((c.cloud_cover ?? 0) > 80) conditions = `Overcast, ${Math.round(c.temperature_2m ?? 0)}°C`
-  else if ((c.cloud_cover ?? 0) > 50) conditions = `Partly cloudy, ${Math.round(c.temperature_2m ?? 0)}°C`
-  else conditions = `Mostly clear, ${Math.round(c.temperature_2m ?? 0)}°C`
+  if (isFoggy) conditions = `Low cloud/fog likely, ${Math.round(c.temperature_2m ?? 0)}°C`
+  else if (cloudTotal > 82 || cloudLow > 68) conditions = `Cloudy, ${Math.round(c.temperature_2m ?? 0)}°C`
+  else if (cloudTotal > 45) conditions = `Partly sunny, ${Math.round(c.temperature_2m ?? 0)}°C`
+  else conditions = `Mostly sunny, ${Math.round(c.temperature_2m ?? 0)}°C`
 
   return {
     temperature_c: c.temperature_2m ?? 0,
-    cloud_cover_pct: c.cloud_cover ?? 0,
+    cloud_cover_pct: cloudTotal,
     low_cloud_cover_pct: cloudLow,
-    relative_humidity_pct: c.relative_humidity_2m ?? 0,
+    relative_humidity_pct: humidity,
     visibility_m: visibility,
     sunshine_duration_min: Math.round((c.sunshine_duration ?? 0) / 60),
     is_foggy: isFoggy,
     conditions_text: conditions,
-    wind_speed_kmh: c.wind_speed_10m ?? 0,
+    wind_speed_kmh: wind,
   }
 }
 

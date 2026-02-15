@@ -211,10 +211,27 @@ function timelineFromLive(
   }
 }
 
-function originSunScoreFromCurrent(sunshineMin: number, lowCloud: number) {
-  const s = clamp(sunshineMin / 60, 0, 1)
-  const c = 1 - clamp(lowCloud / 100, 0, 1)
-  return clamp(0.15 + 0.6 * s + 0.25 * c, 0.02, 0.95)
+function originSunScoreFromCurrent(input: {
+  sunshine_duration_min: number
+  low_cloud_cover_pct: number
+  cloud_cover_pct: number
+  relative_humidity_pct: number
+  visibility_m: number
+  wind_speed_kmh: number
+}) {
+  const sunshine = clamp(input.sunshine_duration_min / 60, 0, 1)
+  const lowCloudClear = 1 - clamp(input.low_cloud_cover_pct / 100, 0, 1)
+  const totalCloudClear = 1 - clamp(input.cloud_cover_pct / 100, 0, 1)
+
+  let score = 0.1 + 0.56 * sunshine + 0.2 * lowCloudClear + 0.14 * totalCloudClear
+
+  // Conservative trust posture for origin card: degrade score when fog risk is present.
+  if (input.visibility_m < 3000) score -= 0.12
+  if (input.visibility_m < 1200) score -= 0.12
+  if (input.low_cloud_cover_pct > 75) score -= 0.1
+  if (input.relative_humidity_pct > 90 && input.wind_speed_kmh < 14) score -= 0.08
+
+  return clamp(score, 0.03, 0.92)
 }
 
 export async function GET(request: NextRequest) {
@@ -342,7 +359,7 @@ export async function GET(request: NextRequest) {
 
       originDescription = originCurrent.conditions_text
       originSunMin = originCurrent.sunshine_duration_min
-      originSunScore = originSunScoreFromCurrent(originSunMin, originCurrent.low_cloud_cover_pct)
+      originSunScore = originSunScoreFromCurrent(originCurrent)
       inversionLikely = detectInversion({
         visibility_m: originCurrent.visibility_m,
         humidity_pct: originCurrent.relative_humidity_pct,
@@ -426,6 +443,28 @@ export async function GET(request: NextRequest) {
       .map(r => ({ destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin })),
     maxTravelMin
   )
+
+  // Live mode: rank primarily by sun quality, with a lighter travel-time tie-breaker.
+  if (!demoMode) {
+    const rankedLive = withTravel
+      .filter(r => r.bestTravelMin <= maxTravelMin)
+      .map(r => {
+        const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
+        const combined = r.sun_score.score * 0.88 + travelConvenience * 0.12
+        return {
+          destination: r.destination,
+          sun_score: r.sun_score,
+          travel_time_min: r.bestTravelMin,
+          combined_score: combined,
+        }
+      })
+      .sort((a, b) => {
+        const scoreDelta = b.sun_score.score - a.sun_score.score
+        if (Math.abs(scoreDelta) >= 0.08) return scoreDelta
+        return b.combined_score - a.combined_score
+      })
+    pickedRanked = rankedLive
+  }
 
   // Demo mode uses slider-centered window sorting for material list changes.
   if (demoMode) {
@@ -582,7 +621,7 @@ export async function GET(request: NextRequest) {
 
   const headers: Record<string, string> = {
     'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    'X-FOMO-Sun-Version': '0.6.0',
+    'X-FOMO-Sun-Version': '0.6.1',
     'X-FOMO-Live-Source': demoMode ? 'mock' : 'open-meteo',
     'X-FOMO-Trip-Span': tripSpan,
     'X-FOMO-Response-Cache': 'MISS',

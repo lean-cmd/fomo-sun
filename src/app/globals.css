@@ -27,11 +27,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;heigh
 input[type=range]:active::-webkit-slider-thumb{transform:scale(1.08);border-color:#0369a1}
 input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;border:2px solid #0284c7;border-radius:50%;cursor:pointer;box-shadow:0 1px 6px rgba(0,0,0,.12)}
 
-.escape-card{background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);overflow:visible;transition:transform .2s,box-shadow .2s}
+.escape-card{background:white;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.04);overflow:visible;transition:transform .2s,box-shadow .2s,opacity .2s}
 .escape-card:hover{transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,.06),0 12px 32px rgba(0,0,0,.06)}
 
 /* v15: improved timeline bar colors -- more visual contrast & warmth */
-.tl-bar{flex:1;height:14px;border-radius:6px;background:#f1f5f9;display:flex;gap:1px;overflow:hidden;position:relative}
+.tl-bar{flex:1;height:16px;border-radius:6px;background:#f1f5f9;display:flex;gap:1px;overflow:hidden;position:relative}
 .tl-sun{background:linear-gradient(180deg,#fbbf24,#f59e0b)}.tl-partial{background:linear-gradient(180deg,#fde68a,#fcd34d)}.tl-cloud{background:#cbd5e1}.tl-night{background:#94a3b8}
 .tl-night-soft{background:#c3ccd8}
 .tl-now{position:absolute;top:-2px;bottom:-2px;width:2px;background:#ef4444;z-index:2;border-radius:1px}
@@ -113,7 +113,15 @@ input[type=range]::-moz-range-thumb{width:20px;height:20px;background:white;bord
 .loc-pulse::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid var(--sun);animation:pulse-ring 2s ease-out infinite}
 
 /* v15: WhatsApp button styling -- integrated, not bolted-on */
-.wa-btn{backdrop-filter:blur(4px);letter-spacing:.2px}
+.wa-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:44px;
+  padding-inline:12px;
+  backdrop-filter:blur(4px);
+  letter-spacing:.2px
+}
 .wa-btn:active{transform:scale(.97)}
 
 /* Demo/Live segmented toggle */
