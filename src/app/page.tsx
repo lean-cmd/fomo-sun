@@ -5,7 +5,7 @@ import { SunnyEscapesResponse, TravelMode, DestinationType, SunTimeline } from '
 
 // ── Icons ─────────────────────────────────────────────────────────────
 const CarI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M3.375 14.25V5.625m0 0h4.5m-4.5 0H3.375" /></svg>
-const TrainI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-18v18M3.6 9h16.8M3.6 15h16.8" /></svg>
+const TrainI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.6} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 17.25h9m-9 0 1.5 3m6-3-1.5 3M6.75 3.75h10.5A1.5 1.5 0 0 1 18.75 5.25v9a3 3 0 0 1-3 3h-7.5a3 3 0 0 1-3-3v-9a1.5 1.5 0 0 1 1.5-1.5Zm1.5 3h7.5m-7.5 3h.008v.008H8.25V9.75Zm7.5 0h.008v.008H15.75V9.75Z" /></svg>
 const BothI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>
 const FilterI = ({ c = 'w-4 h-4' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 0 1-.659 1.591l-5.432 5.432a2.25 2.25 0 0 0-.659 1.591v2.927a2.25 2.25 0 0 1-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 0 0-.659-1.591L3.659 7.409A2.25 2.25 0 0 1 3 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0 1 12 3Z" /></svg>
 const MapI = ({ c = 'w-3.5 h-3.5' }: { c?: string }) => <svg className={c} fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" /></svg>
@@ -404,7 +404,16 @@ export default function Home() {
             </div>
 
             <div className="space-y-2">
-              {data.escapes.map((e, i) => (
+              {data.escapes.map((e, i) => {
+                const carMin = e.travel.car?.duration_min ?? Infinity
+                const trainMin = e.travel.train?.duration_min ?? Infinity
+                const bestMode: 'car' | 'train' | null =
+                  carMin <= trainMin
+                    ? Number.isFinite(carMin) ? 'car' : Number.isFinite(trainMin) ? 'train' : null
+                    : Number.isFinite(trainMin) ? 'train' : Number.isFinite(carMin) ? 'car' : null
+                const bestMin = Math.min(carMin, trainMin)
+
+                return (
                 <div key={e.destination.id}
                   className={`escape-card anim-in d${Math.min(i+1,5)} cursor-pointer rounded-[14px] border ${night ? 'bg-slate-800 border-slate-700' : 'border-slate-100'}`}
                   onClick={() => { setOpenCard(openCard === i ? null : i); setScorePopup(null) }}>
@@ -429,10 +438,15 @@ export default function Home() {
                       {night && (
                         <p className="text-[9px] sm:text-[9.5px] text-amber-500/70 mt-0.5">Tomorrow: {e.tomorrow_sun_hours}h of sun forecast</p>
                       )}
-                      {/* v15: removed globe/net-sun-min line -- was confusing for users */}
+                      {/* v18: compact card shows only the fastest travel mode */}
                       <div className="flex items-center gap-2.5 mt-1.5">
-                        {e.travel.car && <span className={`flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><CarI c="w-[13px] h-[13px] text-slate-400" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.car.duration_min} min</strong></span>}
-                        {e.travel.train && <span className={`flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}><TrainI c="w-[13px] h-[13px] text-slate-400" /><strong className={night ? 'text-slate-300' : 'text-slate-700'}>{e.travel.train.duration_min} min</strong>{e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}{e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}</span>}
+                        {bestMode && Number.isFinite(bestMin) && (
+                          <span className={`flex items-center gap-1 text-[11px] ${night ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {bestMode === 'car' ? <CarI c="w-[13px] h-[13px] text-slate-400" /> : <TrainI c="w-[13px] h-[13px] text-slate-400" />}
+                            <strong className={night ? 'text-slate-300' : 'text-slate-700'}>{bestMin} min</strong>
+                            <span className="text-slate-400">by {bestMode}</span>
+                          </span>
+                        )}
                       </div>
                       {/* v15: WhatsApp button with icon, visually integrated */}
                       <div className="mt-2">
@@ -456,6 +470,26 @@ export default function Home() {
 
                   {openCard === i && (
                     <div className={`border-t px-4 py-3.5 anim-in rounded-b-[14px] ${night ? 'border-slate-700 bg-slate-900/50' : 'border-slate-100 bg-slate-50/50'}`}>
+                      <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 ${night ? 'text-slate-500' : 'text-slate-400'}`}>Travel options</p>
+                      <div className="flex items-center flex-wrap gap-2 mb-3">
+                        {e.travel.car && (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] ${night ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                            <CarI c="w-3 h-3" />
+                            <strong>{e.travel.car.duration_min} min</strong>
+                            <span>car</span>
+                          </span>
+                        )}
+                        {e.travel.train && (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] ${night ? 'bg-slate-800 text-slate-300 border border-slate-700' : 'bg-white text-slate-600 border border-slate-200'}`}>
+                            <TrainI c="w-3 h-3" />
+                            <strong>{e.travel.train.duration_min} min</strong>
+                            <span>train</span>
+                            {e.travel.train.changes !== undefined && <span className="text-slate-400">{e.travel.train.changes}×</span>}
+                            {e.travel.train.ga_included && <span className="text-[8px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-semibold">GA</span>}
+                          </span>
+                        )}
+                      </div>
+
                       <p className={`text-[9px] font-semibold uppercase tracking-[1.2px] mb-2 ${night ? 'text-slate-500' : 'text-slate-400'}`}>Trip plan</p>
                       <div className="space-y-1.5">
                         {e.plan.map((step, j) => (
@@ -473,7 +507,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           </>
         ) : (
