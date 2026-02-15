@@ -16,7 +16,6 @@ import {
 } from 'lucide-react'
 import {
   DaylightWindow,
-  DestinationType,
   SunnyEscapesResponse,
   SunTimeline,
   TravelMode,
@@ -28,6 +27,7 @@ type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
+type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 
 type CitySeed = { name: string; lat: number; lon: number }
 
@@ -62,14 +62,12 @@ const SWISS_CITY_FALLBACKS: CitySeed[] = [
   { name: 'Neuchâtel', lat: 46.9896, lon: 6.9293 },
 ]
 
-const TYPES: { id: DestinationType; label: string }[] = [
-  { id: 'nature', label: 'Nature' },
-  { id: 'viewpoint', label: 'Views' },
-  { id: 'town', label: 'Town' },
-  { id: 'lake', label: 'Lake' },
-  { id: 'family', label: 'Family' },
-  { id: 'food', label: 'Food' },
-  { id: 'thermal', label: 'Thermal' },
+const TYPE_FILTER_CHIPS: { id: EscapeFilterChip; label: string }[] = [
+  { id: 'mountain', label: '⛰️ Mountain' },
+  { id: 'town', label: '🏘️ Town' },
+  { id: 'ski', label: '🏔️ Ski' },
+  { id: 'thermal', label: '♨️ Thermal' },
+  { id: 'lake', label: '🌊 Lake' },
 ]
 
 const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR' }
@@ -322,7 +320,7 @@ export default function Home() {
 
   const [mode, setMode] = useState<TravelMode>('both')
   const [ga, setGA] = useState(false)
-  const [types, setTypes] = useState<DestinationType[]>([])
+  const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
 
@@ -331,7 +329,7 @@ export default function Home() {
   const [demo, setDemo] = useState(true)
   const [openCard, setOpenCard] = useState<number | null>(0)
   const [openFastest, setOpenFastest] = useState(false)
-  const [openSetting, setOpenSetting] = useState<'mode' | 'filters' | null>(null)
+  const [openSetting, setOpenSetting] = useState<'mode' | null>(null)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
@@ -410,7 +408,6 @@ export default function Home() {
           origin_kind: originMode,
           origin_name: origin.name,
         })
-        if (types.length) p.set('types', types.join(','))
         const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { signal: ctrl.signal })
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
@@ -431,7 +428,7 @@ export default function Home() {
     }
 
     run()
-  }, [queryMaxH, mode, ga, types, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal])
+  }, [queryMaxH, mode, ga, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode, hasSetOptimal])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
@@ -487,8 +484,8 @@ export default function Home() {
       window.setTimeout(() => {
         setSentenceIdx(prev => (prev + 1) % originSentences.length)
         setSentenceVisible(true)
-      }, 300)
-    }, 4000)
+      }, 400)
+    }, 6000)
     return () => window.clearInterval(timer)
   }, [originSentences.length])
 
@@ -547,8 +544,8 @@ export default function Home() {
   const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
   const sunGainMin = Math.max(0, topSunMin - originSunMin)
 
-  const toggleType = (t: DestinationType) => {
-    setTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
+  const toggleTypeChip = (chip: EscapeFilterChip) => {
+    setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
   const jumpToBestDetails = () => {
@@ -557,6 +554,17 @@ export default function Home() {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
+
+  const filteredRows = useMemo(() => {
+    if (activeTypeChips.length === 0) return resultRows
+    return resultRows.filter((escape) => {
+      const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
+      return activeTypeChips.some((chip) => {
+        if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
+        return has(chip)
+      })
+    })
+  }, [activeTypeChips, resultRows])
 
   const timelineOriginPreview = timelineEmojiPreview(data?.origin_timeline, dayFocus)
 
@@ -589,7 +597,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 fomo-grid-bg">
+    <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
         <div className="max-w-xl mx-auto px-3 h-12 flex items-center gap-2">
           <label className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 h-8 min-w-0">
@@ -636,8 +644,31 @@ export default function Home() {
       </header>
 
       <main className="max-w-xl mx-auto px-3 pb-16">
+        <section className="py-2 -mx-3 px-3 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 min-w-max">
+            {TYPE_FILTER_CHIPS.map(chip => {
+              const active = activeTypeChips.includes(chip.id)
+              return (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={() => toggleTypeChip(chip.id)}
+                  className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${
+                    active
+                      ? 'bg-amber-100 border-amber-300 text-amber-800'
+                      : 'bg-white border-slate-200 text-slate-600'
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
         <section className="h-12 flex flex-col justify-center text-center">
-          <p className={`text-[13px] text-slate-700 transition-opacity duration-300 ${sentenceVisible ? 'opacity-100' : 'opacity-0'}`}>
+          <p className={`text-[13px] text-slate-700 transition-opacity duration-[400ms] ${sentenceVisible ? 'opacity-100' : 'opacity-0'}`}>
+            <span className="text-slate-500">☀️ FOMO Sun | </span>
             {originSentences[sentenceIdx] || `Forecast in ${origin.name}: ${originTempC}° · ${weatherLabel(data?.origin_conditions.description)}`}
           </p>
           <p className="text-[10px] text-slate-400 inline-flex items-center justify-center gap-1 mt-0.5">
@@ -652,7 +683,7 @@ export default function Home() {
         )}
 
         {topEscape && (
-          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-3.5 sm:p-4 mb-3">
+          <section className="fomo-card p-3.5 sm:p-4 mb-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3 min-w-0">
                 <ScoreRing score={topEscape.sun_score.score} size={44} />
@@ -741,7 +772,7 @@ export default function Home() {
           </section>
         )}
 
-        <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-3.5 sm:p-4 mb-3">
+        <section className="fomo-card p-3.5 sm:p-4 mb-3">
           <div className="flex items-center justify-between mb-2">
             <div>
               <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel time</p>
@@ -862,31 +893,11 @@ export default function Home() {
               </div>
             )}
 
-            <button
-              onClick={() => setOpenSetting(prev => prev === 'filters' ? null : 'filters')}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-left text-[12px] font-medium text-slate-700 inline-flex items-center justify-between"
-            >
-              <span>Filters: {types.length ? `${types.length} selected` : 'All'}</span>
-              <ChevronDown className={`w-4 h-4 transition-transform ${openSetting === 'filters' ? 'rotate-180' : ''}`} />
-            </button>
-            {openSetting === 'filters' && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 flex flex-wrap gap-1.5">
-                {TYPES.map(type => (
-                  <button
-                    key={type.id}
-                    onClick={() => toggleType(type.id)}
-                    className={`h-8 px-3 rounded-full border text-[11px] font-medium ${types.includes(type.id) ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-slate-200 text-slate-600'}`}
-                  >
-                    {type.label}
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
         </section>
 
         {fastestEscape && (
-          <article className="rounded-2xl border border-slate-200 border-l-[3px] border-l-amber-400 bg-white shadow-sm overflow-hidden mb-3">
+          <article className="fomo-card border-l-[3px] border-l-amber-400 overflow-hidden mb-3">
             <button
               type="button"
               onClick={() => setOpenFastest(v => !v)}
@@ -987,10 +998,10 @@ export default function Home() {
             <h2 className="text-[16px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
               Sunny escapes
             </h2>
-            <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{resultRows.length}</span>
+            <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{filteredRows.length}</span>
           </div>
 
-          {resultRows.length === 0 && !loading && (
+          {filteredRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
               <p className="text-[14px] text-slate-700">No matches in this travel window.</p>
               <p className="text-[12px] text-slate-500 mt-1">Try expanding your travel time.</p>
@@ -998,7 +1009,7 @@ export default function Home() {
           )}
 
           <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isDraggingSlider) ? 'opacity-60' : 'opacity-100'}`}>
-            {resultRows.map((escape, index) => {
+            {filteredRows.map((escape, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCard === index
               const scoreBreakdown = escape.sun_score.score_breakdown
@@ -1008,7 +1019,7 @@ export default function Home() {
               return (
                 <article
                   key={escape.destination.id}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden"
+                  className="fomo-card overflow-hidden"
                   style={{ animation: `cardIn 180ms ease-out ${Math.min(index * 60, 240)}ms both` }}
                 >
                   <button
