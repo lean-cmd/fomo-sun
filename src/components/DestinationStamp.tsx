@@ -5,7 +5,7 @@ interface StampProps {
   altitude?: number
   region?: string
   type: StampType
-  country?: 'CH' | 'DE' | 'FR'
+  country?: 'CH' | 'DE' | 'FR' | 'IT'
   className?: string
 }
 
@@ -21,10 +21,11 @@ const TYPE_PALETTE: Record<StampType, Palette> = {
   default: { silhouette: '#334155', accent: '#F59E0B' },
 }
 
-const COUNTRY_LABEL: Record<'CH' | 'DE' | 'FR', string> = {
+const COUNTRY_LABEL: Record<'CH' | 'DE' | 'FR' | 'IT', string> = {
   CH: 'SCHWEIZ',
   DE: 'DEUTSCHLAND',
   FR: 'FRANCE',
+  IT: 'ITALIA',
 }
 
 function sanitizeId(v: string) {

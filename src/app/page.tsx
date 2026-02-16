@@ -87,7 +87,7 @@ const TYPE_FILTER_CHIPS: { id: EscapeFilterChip; label: string }[] = [
   { id: 'lake', label: '🌊 Lake' },
 ]
 
-const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR' }
+const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR', IT: 'IT' }
 const TIMELINE_TICKS = [8, 10, 12, 14, 16, 18] as const
 
 function clamp(v: number, min: number, max: number) {
@@ -373,7 +373,7 @@ export default function Home() {
 
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  const [demo, setDemo] = useState(true)
+  const [demo, setDemo] = useState(false)
   const [openCardId, setOpenCardId] = useState<string | null>(null)
   const [heroFlowDir, setHeroFlowDir] = useState<'left' | 'right'>('right')
   const [heroFlowTick, setHeroFlowTick] = useState(0)
@@ -767,9 +767,6 @@ export default function Home() {
   const topSunMin = heroEscape ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : 0
   const resolvedTopSunMin = topSunMin > 0 ? topSunMin : (heroEscape?.sun_score.sunshine_forecast_min ?? 0)
   const sunGainMin = Math.max(0, resolvedTopSunMin - heroOriginSunMin)
-  const topTemp = Math.round(heroEscape?.weather_now?.temp_c ?? 0)
-  const topSummary = weatherLabel(heroEscape?.weather_now?.summary)
-
   const dataUpdatedText = useMemo(() => {
     if (!lastUpdatedAt) return 'just now'
     const deltaMin = Math.max(0, Math.round((Date.now() - lastUpdatedAt.getTime()) / 60000))
@@ -777,21 +774,26 @@ export default function Home() {
     return `${deltaMin} min ago`
   }, [lastUpdatedAt, loading, data])
 
-  const tomorrowWhy = useMemo(() => {
+  const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
-    const city = compactLabel(origin.name, 12)
-    const best = compactLabel(heroEscape.destination.name, 13)
     const travel = topBestTravel ? formatTravelClock(topBestTravel.min / 60) : 'short'
-    const templates = [
-      `Tomorrow flips: ${best} gets ${formatSunHours(resolvedTopSunMin)}, ${city} stays clouded.`,
-      `${formatSunHours(sunGainMin)} more sun than ${city}. Worth setting an alarm.`,
-      `Clear from 9am in ${best}. ${travel} door to door.`,
-      `${city} stays muted tomorrow. ${best} opens bright.`,
-      `${best} leads tomorrow with ${formatSunHours(resolvedTopSunMin)} of sun.`,
-    ].filter(line => line.length <= 80)
+    const city = compactLabel(origin.name, 12)
+    const gain = formatSunHours(sunGainMin)
+    const sun = formatSunHours(resolvedTopSunMin)
+    const originSun = formatSunHours(heroOriginSunMin)
+    const templates = sunGainMin > 0
+      ? [
+        `+${gain} more sun than ${city}. ${travel} by ${topBestTravel?.mode || 'car'}. Go.`,
+        `${sun} sunshine. ${city} gets ${originSun}. ${travel} away.`,
+        `While ${city} sits in fog, ${heroEscape.destination.name} has ${sun}. ${travel}.`,
+      ]
+      : [
+        `${sun} sunshine forecast. ${travel} by ${topBestTravel?.mode || 'car'}. Worth it.`,
+        `${heroEscape.destination.name} leads tomorrow with ${sun}. ${travel} away.`,
+      ]
     const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [heroEscape, origin.name, topBestTravel, resolvedTopSunMin, sunGainMin, heroFlowTick])
+  }, [heroEscape, origin.name, topBestTravel, resolvedTopSunMin, sunGainMin, heroOriginSunMin, heroFlowTick])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
@@ -805,10 +807,13 @@ export default function Home() {
   }
 
   const filteredRows = useMemo(() => {
-    const better = resultRows.filter(escape => escape.sun_score.sunshine_forecast_min > originSunMin)
+    const strictBetter = resultRows.filter(escape => escape.sun_score.sunshine_forecast_min > originSunMin)
+    const baseline = strictBetter.length >= 5
+      ? strictBetter
+      : resultRows.filter(escape => escape.sun_score.sunshine_forecast_min >= originSunMin)
     const typed = activeTypeChips.length === 0
-      ? better
-      : better.filter((escape) => {
+      ? baseline
+      : baseline.filter((escape) => {
         const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
         return activeTypeChips.some((chip) => {
           if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
@@ -945,6 +950,8 @@ export default function Home() {
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
         <div className="max-w-xl mx-auto px-3 h-12 flex items-center gap-2">
+          <FomoWordmark className="w-[90px] h-[22px] shrink-0" />
+
           <label className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 h-8 min-w-0">
             <MapPinned className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.8} />
             <select
@@ -975,16 +982,6 @@ export default function Home() {
               </button>
             </div>
           </div>
-
-          <button
-            onClick={() => { setDemo(v => !v) }}
-            className={`live-toggle ${demo ? 'is-demo' : 'is-live'}`}
-            aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-          >
-            <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
-            <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
-            <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
-          </button>
         </div>
       </header>
 
@@ -1033,11 +1030,6 @@ export default function Home() {
                     <h1 className="text-[19px] leading-tight font-semibold text-slate-900 truncate" style={{ fontFamily: 'Sora, sans-serif' }}>
                       {heroEscape.destination.name}
                     </h1>
-                    {sunGainMin > 0 && (
-                      <span className="text-[12px] text-emerald-500 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                        (+{formatSunHours(sunGainMin)} gain)
-                      </span>
-                    )}
                     <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
                       {heroEscape.destination.altitude_m}m
                     </span>
@@ -1046,11 +1038,8 @@ export default function Home() {
                     </span>
                   </div>
 
-                  {tomorrowWhy && (
-                    <p className="mt-1 text-[12px] text-slate-500">{tomorrowWhy}</p>
-                  )}
-                  <p className="mt-1 text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
-                    {topBestTravel ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}` : 'Travel time varies'} · {topTemp}° {topSummary.toLowerCase()}
+                  <p className="mt-1 text-[12px] text-slate-600">
+                    {heroInfoLine}
                   </p>
                 </div>
               </div>
@@ -1083,7 +1072,7 @@ export default function Home() {
                 onClick={jumpToBestDetails}
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
-                Plan this trip ↓
+                Escape now ↓
               </button>
               <a
                 href={buildWhatsAppHref(heroEscape, heroDayFocus)}
@@ -1482,6 +1471,15 @@ export default function Home() {
           )}
           <span className="opacity-35">•</span>
           <a href="/admin" className="hover:underline underline-offset-2">Admin</a>
+          <button
+            onClick={() => { setDemo(v => !v) }}
+            className={`live-toggle scale-[0.9] origin-center ${demo ? 'is-demo' : 'is-live'}`}
+            aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+          >
+            <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+            <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+            <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
+          </button>
           <span className="opacity-35">•</span>
           <a href="/blog" className="hover:underline underline-offset-2">Blog</a>
           <span className="opacity-35">•</span>

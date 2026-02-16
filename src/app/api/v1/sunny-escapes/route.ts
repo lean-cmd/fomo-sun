@@ -60,8 +60,7 @@ const LIVE_RATE_MAX_PER_WINDOW = 90
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
-const LIVE_WEATHER_POOL_MIN = 60
-const LIVE_WEATHER_POOL_MAX = 140
+const LIVE_WEATHER_POOL_TARGET = 20
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 
 function clamp(v: number, min: number, max: number) {
@@ -194,6 +193,12 @@ function normalizeTripSpan(raw: string | null): TripSpan {
   return raw === 'plus1day' ? 'plus1day' : 'daytrip'
 }
 
+function isBaselLikeOrigin(originName: string, lat: number, lon: number) {
+  const lower = originName.trim().toLowerCase()
+  if (lower.includes('basel')) return true
+  return Math.abs(lat - DEFAULT_ORIGIN.lat) <= 0.18 && Math.abs(lon - DEFAULT_ORIGIN.lon) <= 0.22
+}
+
 function remainingTodaySunshineMin(hours: LiveForecastBundle['hours']) {
   const now = Date.now()
   const today = new Date().toISOString().slice(0, 10)
@@ -252,17 +257,13 @@ function selectLiveWeatherPool(candidates: Array<{
   carTravel?: ReturnType<typeof getMockTravelTime>
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
 }>, maxTravelMin: number) {
-  if (candidates.length <= LIVE_WEATHER_POOL_MAX) return candidates
+  if (candidates.length <= LIVE_WEATHER_POOL_TARGET) return candidates
 
-  const target = clamp(
-    Math.round((maxTravelMin / 60) * 28),
-    LIVE_WEATHER_POOL_MIN,
-    LIVE_WEATHER_POOL_MAX
-  )
-
-  const nearQuota = Math.max(24, Math.round(target * 0.6))
-  const altitudeQuota = Math.max(16, Math.round(target * 0.25))
-  const farQuota = Math.max(8, target - nearQuota - altitudeQuota)
+  const target = LIVE_WEATHER_POOL_TARGET
+  const nearQuota = Math.max(8, Math.round(target * 0.5))
+  const altitudeQuota = Math.max(5, Math.round(target * 0.3))
+  const farQuota = Math.max(3, target - nearQuota - altitudeQuota)
+  const preferredMax = Math.max(120, maxTravelMin)
 
   const byNear = [...candidates]
     .sort((a, b) => a.bestTravelMin - b.bestTravelMin)
@@ -273,6 +274,7 @@ function selectLiveWeatherPool(candidates: Array<{
     .slice(0, altitudeQuota)
 
   const byFar = [...candidates]
+    .filter(c => c.bestTravelMin <= preferredMax + 30)
     .sort((a, b) => b.bestTravelMin - a.bestTravelMin)
     .slice(0, farQuota)
 
@@ -288,7 +290,7 @@ function selectLiveWeatherPool(candidates: Array<{
     }
   }
 
-  return Array.from(deduped.values())
+  return Array.from(deduped.values()).slice(0, target)
 }
 
 function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
@@ -528,6 +530,7 @@ export async function GET(request: NextRequest) {
 
   const maxTravelMin = maxTravelH * 60
   const reqId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const baselLikeOrigin = isBaselLikeOrigin(originNameParam, lat, lon)
 
   const mockOrigin = getMockOriginWeather()
   let originDescription = mockOrigin.description
@@ -568,6 +571,15 @@ export async function GET(request: NextRequest) {
           duration_min: Math.max(car.duration_min + 18, Math.round(car.duration_min * 1.35)),
           changes: Math.max(1, Math.min(3, (train.changes ?? 1) + 1)),
         }
+      }
+    }
+
+    if (baselLikeOrigin) {
+      if (car && typeof dest.travel_car_min === 'number') {
+        car.duration_min = dest.travel_car_min
+      }
+      if (train && typeof dest.travel_train_min === 'number') {
+        train.duration_min = dest.travel_train_min
       }
     }
 
@@ -727,15 +739,13 @@ export async function GET(request: NextRequest) {
     })
     .slice(0, topLimit)
   const windowHalfMin = Math.round(travelWindowH * 60)
-  const windowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
-  const windowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
-  const inTravelWindow = adminAll
-    ? withTravel
-    : withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
-  const betterThanOrigin = adminAll
-    ? inTravelWindow
-    : inTravelWindow.filter(r => r.netSunAfterArrivalMin > originSunMin)
-  const rankedByNet = betterThanOrigin
+  const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
+  const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
+  let appliedWindowMin = strictWindowMin
+  let appliedWindowMax = strictWindowMax
+  const fallbackMinResults = adminView ? 1 : Math.min(5, limit)
+
+  const rankRowsByNet = (rows: ScoredWithTravel[]) => rows
     .map(r => {
       const netGainMin = Math.max(0, r.netSunAfterArrivalMin - originSunMin)
       const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
@@ -753,6 +763,38 @@ export async function GET(request: NextRequest) {
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       return a.travel_time_min - b.travel_time_min
     })
+
+  const strictWindowRows = adminAll
+    ? withTravel
+    : withTravel.filter(r => r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax)
+  const strictBetterRows = adminAll
+    ? strictWindowRows
+    : strictWindowRows.filter(r => r.netSunAfterArrivalMin > originSunMin)
+  const strictAtLeastRows = strictWindowRows.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+
+  let rankingPool = strictBetterRows
+
+  // v69: keep a full 5-card experience by progressively relaxing filters.
+  if (!adminAll && rankingPool.length < fallbackMinResults) {
+    rankingPool = strictAtLeastRows
+  }
+  if (!adminAll && rankingPool.length < fallbackMinResults) {
+    appliedWindowMin = Math.max(0, strictWindowMin - 15)
+    appliedWindowMax = strictWindowMax + 15
+    const widenedRows = withTravel.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
+    const widenedBetterRows = widenedRows.filter(r => r.netSunAfterArrivalMin > originSunMin)
+    const widenedAtLeastRows = widenedRows.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+    rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
+  }
+  if (!adminAll && rankingPool.length < fallbackMinResults) {
+    const atLeastGlobalRows = withTravel.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+    if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
+  }
+  if (!adminAll && rankingPool.length < fallbackMinResults) {
+    rankingPool = withTravel
+  }
+
+  const rankedByNet = rankRowsByNet(rankingPool)
 
   let pickedRanked = rankedByNet
   if (demoMode) {
@@ -933,8 +975,8 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
-    'X-FOMO-Travel-Window-Min': String(windowMin),
-    'X-FOMO-Travel-Window-Max': String(windowMax),
+    'X-FOMO-Travel-Window-Min': String(appliedWindowMin),
+    'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
     'X-FOMO-Request-Ms': String(Date.now() - startedAt),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
