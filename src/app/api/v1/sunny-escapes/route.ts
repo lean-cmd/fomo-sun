@@ -16,6 +16,8 @@ type ScoredWithTravel = {
   temp_c: number
   netSunAfterArrivalMin: number
   netGainVsOriginMin: number
+  tomorrowSunMin: number
+  tomorrowNetAfterArrivalMin: number
   carTravel?: ReturnType<typeof getMockTravelTime>
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
   bestTravelMin: number
@@ -266,38 +268,68 @@ function selectLiveWeatherPool(candidates: Array<{
   bestTravelMin: number
   carTravel?: ReturnType<typeof getMockTravelTime>
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
-}>, maxTravelMin: number) {
+}>, maxTravelMin: number, windowMinMin?: number | null, windowMaxMin?: number | null) {
   if (candidates.length <= LIVE_WEATHER_POOL_TARGET) return candidates
 
   const target = LIVE_WEATHER_POOL_TARGET
-  const nearQuota = Math.max(8, Math.round(target * 0.5))
-  const altitudeQuota = Math.max(5, Math.round(target * 0.3))
-  const farQuota = Math.max(3, target - nearQuota - altitudeQuota)
-  const preferredMax = Math.max(120, maxTravelMin)
+  const hasExplicitWindow = Number.isFinite(windowMinMin ?? NaN) || Number.isFinite(windowMaxMin ?? NaN)
+  const resolvedWindowMin = Number.isFinite(windowMinMin ?? NaN)
+    ? Math.max(0, windowMinMin as number)
+    : Math.max(0, maxTravelMin - 45)
+  const resolvedWindowMax = Number.isFinite(windowMaxMin ?? NaN)
+    ? Math.max(resolvedWindowMin, windowMaxMin as number)
+    : maxTravelMin + 45
+  const windowCenter = (resolvedWindowMin + resolvedWindowMax) / 2
 
-  const byNear = [...candidates]
-    .sort((a, b) => a.bestTravelMin - b.bestTravelMin)
-    .slice(0, nearQuota)
+  const inWindowCandidates = candidates
+    .filter(c => c.bestTravelMin >= resolvedWindowMin && c.bestTravelMin <= resolvedWindowMax)
+    .sort((a, b) => {
+      const da = Math.abs(a.bestTravelMin - windowCenter)
+      const db = Math.abs(b.bestTravelMin - windowCenter)
+      if (da !== db) return da - db
+      return b.destination.altitude_m - a.destination.altitude_m
+    })
 
-  const byAltitude = [...candidates]
-    .sort((a, b) => b.destination.altitude_m - a.destination.altitude_m)
-    .slice(0, altitudeQuota)
-
-  const byFar = [...candidates]
-    .filter(c => c.bestTravelMin <= preferredMax + 30)
-    .sort((a, b) => b.bestTravelMin - a.bestTravelMin)
-    .slice(0, farQuota)
-
-  const merged = [...byNear, ...byAltitude, ...byFar]
   const deduped = new Map<string, typeof candidates[number]>()
-  for (const row of merged) deduped.set(row.destination.id, row)
-
-  if (deduped.size < target) {
-    for (const row of [...candidates].sort((a, b) => b.destination.altitude_m - a.destination.altitude_m)) {
+  const addRows = (rows: typeof candidates) => {
+    for (const row of rows) {
       if (deduped.has(row.destination.id)) continue
       deduped.set(row.destination.id, row)
       if (deduped.size >= target) break
     }
+  }
+
+  if (hasExplicitWindow) {
+    const inWindowQuota = Math.min(target, Math.max(12, Math.round(target * 0.7)))
+    addRows(inWindowCandidates.slice(0, inWindowQuota))
+  } else {
+    const broadQuota = Math.min(target, Math.max(8, Math.round(target * 0.45)))
+    addRows(inWindowCandidates.slice(0, broadQuota))
+  }
+
+  if (deduped.size < target) {
+    addRows(
+      [...candidates]
+        .sort((a, b) => b.destination.altitude_m - a.destination.altitude_m)
+        .slice(0, target)
+    )
+  }
+
+  if (deduped.size < target) {
+    addRows(
+      [...candidates]
+        .sort((a, b) => a.bestTravelMin - b.bestTravelMin)
+        .slice(0, target)
+    )
+  }
+
+  if (deduped.size < target) {
+    addRows(
+      [...candidates]
+        .filter(c => c.bestTravelMin <= maxTravelMin + 45)
+        .sort((a, b) => b.bestTravelMin - a.bestTravelMin)
+        .slice(0, target)
+    )
   }
 
   return Array.from(deduped.values()).slice(0, target)
@@ -604,7 +636,12 @@ export async function GET(request: NextRequest) {
   })
   const liveCandidatesWithTravel = (demoMode || adminView)
     ? candidatesWithTravel
-    : selectLiveWeatherPool(candidatesWithTravel, maxTravelMin)
+    : selectLiveWeatherPool(
+      candidatesWithTravel,
+      maxTravelMin,
+      travelMinH === null ? null : Math.round(travelMinH * 60),
+      travelMaxH === null ? null : Math.round(travelMaxH * 60)
+    )
 
   let scored: ScoredWithTravel[] = []
   const buildDemoScored = () => {
@@ -631,6 +668,8 @@ export async function GET(request: NextRequest) {
         temp_c: w.temp_c,
         netSunAfterArrivalMin,
         netGainVsOriginMin: netGainVsOrigin,
+        tomorrowSunMin: tomorrowMin,
+        tomorrowNetAfterArrivalMin: Math.max(0, Math.round(tomorrowMin - c.bestTravelMin)),
         carTravel: c.carTravel,
         trainTravel: c.trainTravel,
         bestTravelMin: c.bestTravelMin,
@@ -685,8 +724,9 @@ export async function GET(request: NextRequest) {
 
         const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely)
         const remainingTodayMin = remainingTodaySunshineMin(live.hours)
+        const tomorrowSunMin = Math.round(live.total_sunshine_tomorrow_min)
         const effectiveSunMin = tripSpan === 'plus1day'
-          ? clamp(remainingTodayMin + live.total_sunshine_tomorrow_min, 0, 600)
+          ? clamp(remainingTodayMin + tomorrowSunMin, 0, 600)
           : liveWindow.weatherInput.sunshine_forecast_min
         const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
         const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originSunMin)
@@ -706,6 +746,8 @@ export async function GET(request: NextRequest) {
           temp_c: Math.round(live.current.temperature_c),
           netSunAfterArrivalMin,
           netGainVsOriginMin: netGainVsOrigin,
+          tomorrowSunMin,
+          tomorrowNetAfterArrivalMin: Math.max(0, Math.round(tomorrowSunMin - c.bestTravelMin)),
           carTravel: c.carTravel,
           trainTravel: c.trainTravel,
           bestTravelMin: c.bestTravelMin,
@@ -742,9 +784,27 @@ export async function GET(request: NextRequest) {
 
   // Keep a much broader candidate set in demo so slider materially changes outcomes.
   const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
+  const originTomorrowMin = Math.max(0, Math.round(originTomorrowHours * 60))
+  const comparisonOriginMin = tripSpan === 'plus1day' ? originTomorrowMin : originSunMin
+  const comparisonMetric = (row: ScoredWithTravel) => (
+    tripSpan === 'plus1day' ? row.tomorrowNetAfterArrivalMin : row.netSunAfterArrivalMin
+  )
+  const isStrictBetterThanOrigin = (row: ScoredWithTravel) => {
+    if (comparisonMetric(row) > comparisonOriginMin) return true
+    // Tomorrow mode: allow clearly sunnier destinations even if travel erodes strict net lead.
+    if (tripSpan === 'plus1day') return row.tomorrowSunMin >= originTomorrowMin + 45
+    return false
+  }
+  const isAtLeastAsGoodAsOrigin = (row: ScoredWithTravel) => {
+    if (comparisonMetric(row) >= comparisonOriginMin) return true
+    if (tripSpan === 'plus1day') return row.tomorrowSunMin >= originTomorrowMin
+    return false
+  }
   const withTravel = scored
     .sort((a, b) => {
-      if (b.netSunAfterArrivalMin !== a.netSunAfterArrivalMin) return b.netSunAfterArrivalMin - a.netSunAfterArrivalMin
+      const bMetric = comparisonMetric(b)
+      const aMetric = comparisonMetric(a)
+      if (bMetric !== aMetric) return bMetric - aMetric
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       return a.bestTravelMin - b.bestTravelMin
     })
@@ -758,7 +818,7 @@ export async function GET(request: NextRequest) {
 
   const rankRowsByNet = (rows: ScoredWithTravel[]) => rows
     .map(r => {
-      const netGainMin = Math.max(0, r.netSunAfterArrivalMin - originSunMin)
+      const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
       const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
       const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8
       return {
@@ -780,8 +840,8 @@ export async function GET(request: NextRequest) {
     : withTravel.filter(r => r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax)
   const strictBetterRows = adminAll
     ? strictWindowRows
-    : strictWindowRows.filter(r => r.netSunAfterArrivalMin > originSunMin)
-  const strictAtLeastRows = strictWindowRows.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+    : strictWindowRows.filter(isStrictBetterThanOrigin)
+  const strictAtLeastRows = strictWindowRows.filter(isAtLeastAsGoodAsOrigin)
 
   let rankingPool = strictBetterRows
 
@@ -793,12 +853,12 @@ export async function GET(request: NextRequest) {
     appliedWindowMin = Math.max(0, strictWindowMin - 15)
     appliedWindowMax = strictWindowMax + 15
     const widenedRows = withTravel.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
-    const widenedBetterRows = widenedRows.filter(r => r.netSunAfterArrivalMin > originSunMin)
-    const widenedAtLeastRows = widenedRows.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+    const widenedBetterRows = widenedRows.filter(isStrictBetterThanOrigin)
+    const widenedAtLeastRows = widenedRows.filter(isAtLeastAsGoodAsOrigin)
     rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
   }
   if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
-    const atLeastGlobalRows = withTravel.filter(r => r.netSunAfterArrivalMin >= originSunMin)
+    const atLeastGlobalRows = withTravel.filter(isAtLeastAsGoodAsOrigin)
     if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
   }
   if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
@@ -828,7 +888,7 @@ export async function GET(request: NextRequest) {
     const bucket = withTravel.filter(r => r.bestTravelMin <= testMin && r.bestTravelMin > (testH - 0.5) * 60)
     if (bucket.length === 0) continue
     const avgNet = bucket.reduce((sum, r) => {
-      return sum + r.netSunAfterArrivalMin
+      return sum + comparisonMetric(r)
     }, 0) / bucket.length
     if (avgNet > bestNetSun) {
       bestNetSun = avgNet
@@ -918,8 +978,8 @@ export async function GET(request: NextRequest) {
     .filter(r => Number.isFinite(r.bestTravelMin))
     .filter(r => r.bestTravelMin <= 75)
     .sort((a, b) => {
-      const aNetGain = Math.max(0, a.netSunAfterArrivalMin - originSunMin)
-      const bNetGain = Math.max(0, b.netSunAfterArrivalMin - originSunMin)
+      const aNetGain = Math.max(0, comparisonMetric(a) - comparisonOriginMin)
+      const bNetGain = Math.max(0, comparisonMetric(b) - comparisonOriginMin)
       if (bNetGain !== aNetGain) return bNetGain - aNetGain
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       if (a.bestTravelMin !== b.bestTravelMin) return a.bestTravelMin - b.bestTravelMin
