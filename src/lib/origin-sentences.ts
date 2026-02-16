@@ -8,6 +8,7 @@ type OriginSentenceInput = {
   best_escape_sun: string
   travel_time: string
   altitude_m: number
+  sun_gain: string
   origin_score_pct: number
   best_score_pct: number
 }
@@ -32,30 +33,47 @@ function hasBadOrigin(condition: string, originScorePct: number) {
   return c.includes('fog') || c.includes('cloud') || c.includes('overcast') || c.includes('low cloud')
 }
 
-export function buildOriginSentences(input: OriginSentenceInput) {
-  const badOrigin = hasBadOrigin(input.condition, input.origin_score_pct)
-  const all = [
-    `${input.city} forecast: ${input.sun_hours_today} of sun. ${input.best_escape_name} has ${input.best_escape_sun}.`,
-    `Current conditions in ${input.city}: ${input.temp_c}°, ${input.condition}.`,
-    `${input.condition} in ${input.city}. ${input.best_escape_name} is ${input.travel_time} away with ${input.best_escape_sun} of sun.`,
-    `${input.city}: ${input.sun_hours_today} of sun today. ${input.best_escape_name} has ${input.best_escape_sun}.`,
-    `Right now in ${input.city}: ${input.temp_c}°. ${input.best_escape_name} is sunnier.`,
-    `${input.best_escape_name}: ${input.best_escape_sun} of sunshine, ${input.travel_time} from ${input.city}.`,
-    `${input.sun_hours_today} of sun in ${input.city}. ${input.best_escape_name} has ${input.best_escape_sun}.`,
-    `${input.city} tomorrow: ${input.sun_hours_tomorrow} of sun. Or drive ${input.travel_time} for ${input.best_escape_sun} today.`,
-    `Satellite trend: more sun above 1,000m. ${input.best_escape_name} is at ${input.altitude_m}m.`,
-    `${input.city} score: ${input.origin_score_pct}%. ${input.best_escape_name}: ${input.best_score_pct}%.`,
-  ]
-
-  const badWeatherOnly = [
-    `The fog in ${input.city} may not lift today. ${input.best_escape_name} is already sunny.`,
-    `Inversion likely in ${input.city}. ${input.best_escape_name} is above it.`,
-    `Visibility in ${input.city}: low. Sunshine in ${input.best_escape_name}: high.`,
-    `${input.temp_c}° in ${input.city}. ${input.best_escape_name} is warmer and brighter.`,
-    `Every minute in ${input.city} cloud is a minute of ${input.best_escape_name} sun you are missing.`,
-  ]
-
-  const sentences = badOrigin ? [...all, ...badWeatherOnly] : all
-  return seededShuffle(sentences, `${input.city}|${input.best_escape_name}|${input.condition}`).slice(0, 20)
+function shortName(name: string, max = 12) {
+  if (name.length <= max) return name
+  const first = name.split(/[ ,/-]/)[0]
+  return first.length > 2 ? first : name.slice(0, max)
 }
 
+export function buildOriginSentences(input: OriginSentenceInput) {
+  const badOrigin = hasBadOrigin(input.condition, input.origin_score_pct)
+  const city = shortName(input.city, 12)
+  const best = shortName(input.best_escape_name, 13)
+
+  const base = [
+    `${city}: ${input.sun_hours_today}. ${best} has ${input.best_escape_sun}.`,
+    `${best} is sunny. ${city} isn't.`,
+    `FOMO score for staying: ${input.origin_score_pct}%.`,
+    `${input.sun_gain} of sunshine you're missing now.`,
+    `${best}: ${input.best_escape_sun}, ${input.travel_time} away.`,
+    `${input.sun_hours_today} vs ${input.best_escape_sun}. Clear math.`,
+    `Fog ceiling ~800m. ${best} at ${input.altitude_m}m.`,
+    `The sun called. It's in ${best}.`,
+    `Grey skies, warm coat, zero excuses.`,
+    `This is your sign to leave.`,
+    `Sunshine is ${input.travel_time} away.`,
+    `Your ceiling is someone else's floor.`,
+    `${best} beats ${city} right now.`,
+    `${city} waits. ${best} shines.`,
+    `${input.best_score_pct}% at ${best}. ${input.origin_score_pct}% in ${city}.`,
+    `Live forecast says: go higher.`,
+    `${input.temp_c}° in ${city}. Better above the cloud.`,
+    `${best} has the edge today.`,
+  ]
+
+  const fogOnly = [
+    `The fog in ${city} won't lift today.`,
+    `The Mittelland is grey. The Jura isn't.`,
+    `Everyone above 1000m is in the sun.`,
+    `${city} stays under cloud. ${best} clears.`,
+  ]
+
+  const sentences = badOrigin ? [...base, ...fogOnly] : base
+  const shortEnough = sentences.filter(line => line.length <= 50)
+  const pool = shortEnough.length >= 15 ? shortEnough : sentences
+  return seededShuffle(pool, `${input.city}|${input.best_escape_name}|${input.condition}`).slice(0, 20)
+}
