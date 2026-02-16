@@ -9,6 +9,7 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
+  Share2,
   SlidersHorizontal,
   Sun,
   Thermometer,
@@ -173,47 +174,51 @@ function extractTemp(summary?: string) {
   return m ? Number(m[1]) : null
 }
 
-function ringTier(score: number) {
-  if (score >= 0.9) return { id: 'elite', colors: ['#fbbf24', '#f59e0b', '#ef4444'] }
-  if (score >= 0.75) return { id: 'strong', colors: ['#f59e0b', '#f97316', '#ef4444'] }
-  if (score >= 0.55) return { id: 'promising', colors: ['#fb923c', '#f97316', '#dc2626'] }
-  return { id: 'low', colors: ['#fdba74', '#fb923c', '#ea580c'] }
+function FomoGlyph({ className = 'w-[44px] h-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 72 20" className={className} aria-label="FOMO logo" role="img">
+      <g fill="#334155" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 700, letterSpacing: 0.7 }}>
+        <text x="0" y="14" fontSize="13">F</text>
+        <text x="28" y="14" fontSize="13">M</text>
+      </g>
+      <g fill="#f59e0b" stroke="#f59e0b" strokeLinecap="round" strokeWidth="1.15">
+        <circle cx="12" cy="9" r="3.3" />
+        <path d="M12 2.2v1.9M12 13.9v1.9M5.2 9h1.9M16.9 9h1.9M7.2 4.2l1.3 1.3M15.5 12.5l1.3 1.3M16.8 4.2l-1.3 1.3M8.5 12.5l-1.3 1.3" />
+        <circle cx="45" cy="9" r="3.3" />
+        <path d="M45 2.2v1.9M45 13.9v1.9M38.2 9h1.9M49.9 9h1.9M40.2 4.2l1.3 1.3M48.5 12.5l1.3 1.3M49.8 4.2l-1.3 1.3M41.5 12.5l-1.3 1.3" />
+      </g>
+    </svg>
+  )
 }
 
-function ScoreRing({ score, size = 44 }: { score: number; size?: number }) {
+function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
   const pct = Math.round(score * 100)
-  const r = (size - 8) / 2
-  const circ = 2 * Math.PI * r
-  const tier = ringTier(score)
-  const gradId = `fomo-ring-${tier.id}-${size}-${pct}`
+  const pctSize = Math.max(14, Math.round(size * 0.35))
 
   return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }} aria-label={`FOMO score ${pct}%`}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <defs>
-          <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={tier.colors[0]} />
-            <stop offset="55%" stopColor={tier.colors[1]} />
-            <stop offset="100%" stopColor={tier.colors[2]} />
-          </linearGradient>
-        </defs>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={4} />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={`url(#${gradId})`}
-          strokeWidth={4}
-          strokeDasharray={circ}
-          strokeDashoffset={circ * (1 - score)}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 300ms ease-out' }}
-        />
+    <div
+      className="relative flex-shrink-0 rounded-full"
+      style={{
+        width: size,
+        height: size,
+        background: '#F5F0E8',
+        boxShadow: 'inset 0 0 0 1px rgba(148, 163, 184, 0.25)',
+      }}
+      aria-label={`FOMO score ${pct}%`}
+    >
+      <svg className="absolute inset-0" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="48" fill="none" stroke="#cbd5e1" strokeWidth="2.1" strokeDasharray="4.1 3.2" />
       </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-        <span className="text-[12px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>{pct}%</span>
-        <span className="text-[6px] tracking-[0.16em] text-amber-600 font-semibold">FOMO</span>
+      <span className="absolute inset-0 flex flex-col items-center justify-center leading-none pt-[2px]">
+        <span style={{ width: `${Math.round(size * 0.72)}px` }}>
+          <FomoGlyph className="w-full h-auto" />
+        </span>
+        <span
+          className="mt-0.5 text-slate-900"
+          style={{ fontFamily: '"Bebas Neue", Sora, sans-serif', fontSize: `${pctSize}px`, letterSpacing: '0.3px' }}
+        >
+          {pct}%
+        </span>
       </span>
     </div>
   )
@@ -317,18 +322,6 @@ function IconForMode({ mode }: { mode: 'car' | 'train' }) {
     : <TrainFront className="w-4 h-4" strokeWidth={1.8} />
 }
 
-function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <circle cx="12" cy="12" r="10" fill="#25D366" />
-      <path
-        fill="#fff"
-        d="M16.6 13.9c-.2-.1-1.2-.6-1.4-.7-.2-.1-.3-.1-.5.1-.1.2-.6.7-.7.8-.1.1-.2.2-.4.1-.2-.1-.9-.3-1.7-1-.6-.5-1-1.1-1.1-1.3-.1-.2 0-.3.1-.4.1-.1.2-.2.3-.4.1-.1.1-.2.2-.3.1-.1 0-.2 0-.3s-.5-1.2-.7-1.6c-.2-.4-.3-.4-.5-.4h-.4c-.1 0-.3 0-.4.2-.1.2-.6.6-.6 1.5 0 .9.6 1.7.7 1.8.1.1 1.3 2 3.2 2.8 1.9.8 1.9.6 2.3.6.4 0 1.2-.5 1.3-1 .2-.5.2-.9.1-1-.1-.1-.2-.1-.4-.2Z"
-      />
-    </svg>
-  )
-}
-
 function stampTypeFromDestination(destination: EscapeCard['destination']): StampType {
   const typeSet = new Set(destination.types || [])
   if (typeSet.has('thermal')) return 'thermal'
@@ -339,23 +332,9 @@ function stampTypeFromDestination(destination: EscapeCard['destination']): Stamp
   return 'default'
 }
 
-function FomoWordmark({ className = 'w-[88px] h-5' }: { className?: string }) {
+function FomoWordmark({ className = 'w-[118px] h-[26px]' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 144 24" className={className} aria-label="FOMO Sun logo" role="img">
-      <g fill="#334155" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 700, letterSpacing: 0.5 }}>
-        <text x="0" y="16" fontSize="13">F</text>
-        <text x="22" y="16" fontSize="13">M</text>
-      </g>
-      <g fill="#f59e0b" stroke="#f59e0b" strokeLinecap="round" strokeWidth="1.3">
-        <circle cx="13" cy="10" r="3.6" />
-        <path d="M13 2.1v2.1M13 15.8v2.1M5.1 10h2.1M18.8 10h2.1M7.5 4.5l1.5 1.5M17 14l1.5 1.5M18.5 4.5 17 6M9 14 7.5 15.5" />
-        <circle cx="37" cy="10" r="3.6" />
-        <path d="M37 2.1v2.1M37 15.8v2.1M29.1 10h2.1M42.8 10h2.1M31.5 4.5l1.5 1.5M41 14l1.5 1.5M42.5 4.5 41 6M33 14l-1.5 1.5" />
-      </g>
-      <text x="48" y="16" fill="#475569" fontSize="11" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 600, letterSpacing: 1.2 }}>
-        SUN
-      </text>
-    </svg>
+    <FomoGlyph className={className} />
   )
 }
 
@@ -582,6 +561,7 @@ export default function Home() {
   }
 
   const onJoystickKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.repeat) return
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       stepJoystickRange('left')
@@ -592,6 +572,28 @@ export default function Home() {
       stepJoystickRange('right')
     }
   }
+
+  useEffect(() => {
+    const onDocKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return
+      if (e.defaultPrevented) return
+      if (e.altKey || e.ctrlKey || e.metaKey) return
+      const target = e.target as HTMLElement | null
+      if (target) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        stepJoystickRange('left')
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        stepJoystickRange('right')
+      }
+    }
+    document.addEventListener('keydown', onDocKeyDown)
+    return () => document.removeEventListener('keydown', onDocKeyDown)
+  }, [stepJoystickRange])
 
   const rangeLabel = activeBand.label
 
@@ -941,11 +943,11 @@ export default function Home() {
 
       <main className="max-w-xl mx-auto px-3 pb-16">
         <section className="h-11 flex items-center">
-          <div className="w-full inline-flex items-center gap-1.5 overflow-hidden">
-            <FomoWordmark className="w-[90px] h-5 shrink-0" />
-            <span className={`text-[12px] text-slate-700 whitespace-nowrap truncate transition-opacity duration-[400ms] ${tickerFade ? 'opacity-0' : 'opacity-100'}`}>
-              {tickerText}
-            </span>
+            <div className="w-full inline-flex items-center gap-1.5 overflow-hidden">
+              <FomoWordmark className="w-[118px] h-[26px] shrink-0" />
+              <span className={`text-[12px] text-slate-700 whitespace-nowrap truncate transition-opacity duration-[400ms] ${tickerFade ? 'opacity-0' : 'opacity-100'}`}>
+                {tickerText}
+              </span>
           </div>
         </section>
 
@@ -973,7 +975,9 @@ export default function Home() {
 
             <div className="flex items-start justify-between gap-3 pr-[88px] sm:pr-[96px]">
               <div className="flex items-start gap-3 min-w-0">
-                <ScoreRing score={topEscape.sun_score.score} size={44} />
+                <div className="sm:scale-[1.16] sm:origin-top-left">
+                  <ScoreRing score={topEscape.sun_score.score} size={48} />
+                </div>
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">
                     Best escape {dayFocus === 'today' ? 'today' : 'tomorrow'}
@@ -994,45 +998,29 @@ export default function Home() {
                     <p className="mt-1 text-[12px] text-slate-500">{tomorrowWhy}</p>
                   )}
 
-                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <p className="text-[18px] leading-none font-semibold text-amber-600 inline-flex items-end gap-1.5">
-                      <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                      <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
-                      {sunGainMin > 0 && (
-                        <span className="text-[12px] text-emerald-500 font-semibold -ml-0.5">
-                          +{formatSunHours(sunGainMin)}
-                        </span>
-                      )}
-                    </p>
-                    {topBestTravel && (
-                      <p className="text-[18px] leading-none text-slate-600 inline-flex items-end gap-1.5 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
-                        <IconForMode mode={topBestTravel.mode} />
-                        {formatTravelClock(topBestTravel.min / 60)}
-                      </p>
+                  <p className="mt-2 text-[12px] text-slate-600 leading-snug truncate">
+                    <span className="text-amber-600 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                      {formatSunHours(topEscape.sun_score.sunshine_forecast_min)}
+                    </span>
+                    {sunGainMin > 0 && (
+                      <span className="text-emerald-500 text-[11px] font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                        {' '}({`+${formatSunHours(sunGainMin)} gain`})
+                      </span>
                     )}
-                    <p className="text-[14px] text-slate-500 inline-flex items-center gap-1">
-                      <span style={{ fontFamily: 'DM Mono, monospace' }}>{topTemp}°</span>
-                      <span>{weatherEmoji(topEscape.weather_now?.summary)}</span>
-                      <span>{topSummary.toLowerCase()}</span>
-                    </p>
-                  </div>
+                    {topBestTravel && (
+                      <span className="text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>
+                        {' '} · {formatTravelClock(topBestTravel.min / 60)} by {topBestTravel.mode}
+                      </span>
+                    )}
+                    <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                      {' '} · {topTemp}° {topSummary.toLowerCase()}
+                    </span>
+                  </p>
                 </div>
-              </div>
-
-              <div className="flex flex-col items-end gap-2">
-                <a
-                  href={buildWhatsAppHref(topEscape)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 h-11 rounded-full border border-emerald-200 bg-emerald-50/60 px-3 text-[11px] font-semibold text-slate-800 hover:bg-emerald-50"
-                >
-                  <WhatsAppIcon className="w-4 h-4" />
-                  Share
-                </a>
               </div>
             </div>
 
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-2">
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-1">
               <SunTimelineBar
                 timeline={data?.origin_timeline || topEscape.sun_timeline}
                 dayFocus={dayFocus}
@@ -1042,10 +1030,6 @@ export default function Home() {
                 sunLabel={formatSunHours(originSunMin)}
                 compact
               />
-
-              <div className="text-center text-[11px] leading-none text-emerald-500 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                +{formatSunHours(sunGainMin)} more sun
-              </div>
               <SunTimelineBar
                 timeline={topEscape.sun_timeline}
                 dayFocus={dayFocus}
@@ -1057,14 +1041,23 @@ export default function Home() {
               />
             </div>
 
-            <div className="mt-3">
+            <div className="mt-3 inline-flex items-center gap-4">
               <button
                 type="button"
                 onClick={jumpToBestDetails}
-                className="inline-flex items-center gap-1.5 h-10 px-3 rounded-xl border border-slate-200 bg-white text-[11px] font-semibold text-slate-700 hover:bg-slate-50"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
                 Plan this trip ↓
               </button>
+              <a
+                href={buildWhatsAppHref(topEscape)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
+              >
+                <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                Share ↗
+              </a>
             </div>
           </section>
         )}
@@ -1234,7 +1227,7 @@ export default function Home() {
                         className="flex-1 text-left"
                       >
                         <div className="flex items-start gap-3">
-                          <ScoreRing score={escape.sun_score.score} size={40} />
+                          <ScoreRing score={escape.sun_score.score} size={48} />
 
                           <div className="flex-1 min-w-0">
                             {isFastest && (
@@ -1386,13 +1379,13 @@ export default function Home() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
                           {escape.links.google_maps && (
                             <a
                               href={escape.links.google_maps}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"
+                              className="inline-flex items-center gap-1 text-slate-600 font-semibold hover:text-slate-900"
                             >
                               <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
                               Navigate
@@ -1403,7 +1396,7 @@ export default function Home() {
                               href={escape.links.sbb}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
+                              className="inline-flex items-center gap-1 text-slate-600 font-semibold hover:text-slate-900"
                             >
                               🚆 SBB Timetable
                             </a>
@@ -1412,10 +1405,10 @@ export default function Home() {
                             href={buildWhatsAppHref(escape)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-emerald-200 bg-emerald-50/60 text-slate-800 text-[11px] font-semibold hover:bg-emerald-50"
+                            className="inline-flex items-center gap-1 text-slate-600 font-semibold hover:text-slate-900"
                           >
-                            <WhatsAppIcon className="w-4 h-4" />
-                            Share via WhatsApp
+                            <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            Share ↗
                           </a>
                         </div>
                       </div>
