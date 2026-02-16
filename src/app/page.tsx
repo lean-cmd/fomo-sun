@@ -48,7 +48,7 @@ const TRAVEL_BANDS = [
   { id: 'quick', label: '0-60min', minH: 0, maxH: 1, maxLabel: '1h' },
   { id: 'short', label: '1h-2h', minH: 1, maxH: 2, maxLabel: '2h' },
   { id: 'mid', label: '2h-3h', minH: 2, maxH: 3, maxLabel: '3h' },
-  { id: 'long', label: '3h+', minH: 3, maxH: 4.5, maxLabel: '3hrs+' },
+  { id: 'long', label: '3hrs+', minH: 3, maxH: 4.5, maxLabel: '3hrs+' },
 ] as const
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
@@ -387,6 +387,8 @@ export default function Home() {
   const [openCardId, setOpenCardId] = useState<string | null>(null)
   const [heroFlowDir, setHeroFlowDir] = useState<'left' | 'right'>('right')
   const [heroFlowTick, setHeroFlowTick] = useState(0)
+  const [cardFlowDir, setCardFlowDir] = useState<'left' | 'right'>('right')
+  const [cardFlowTick, setCardFlowTick] = useState(0)
   const [tickerIndex, setTickerIndex] = useState(0)
   const [tickerFade, setTickerFade] = useState(false)
 
@@ -435,7 +437,7 @@ export default function Home() {
 
     const magnitude = Math.abs(clamped)
     let shift = 0
-    if (magnitude >= 0.26) shift = 1
+    if (magnitude >= 0.34) shift = 1
     if (clamped < 0) shift *= -1
 
     const nextIndex = clamp(joyBaseRangeRef.current + shift, 0, TRAVEL_BANDS.length - 1)
@@ -460,8 +462,8 @@ export default function Home() {
     let x = joyPosRef.current
     let v = joyVelRef.current
     let lastTs = performance.now()
-    const spring = 48
-    const damping = 16
+    const spring = 92
+    const damping = 26
     const step = (ts: number) => {
       const dt = Math.min(0.032, Math.max(0.008, (ts - lastTs) / 1000))
       lastTs = ts
@@ -489,7 +491,7 @@ export default function Home() {
     joyVelRef.current = 0
     window.setTimeout(() => {
       startJoystickSpringBack()
-    }, 28)
+    }, 16)
   }, [applyJoyPosition, startJoystickSpringBack, stopJoystickAnim])
 
   const stepJoystickRange = useCallback((dir: 'left' | 'right') => {
@@ -613,8 +615,11 @@ export default function Home() {
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
         if (joystickDirRef.current) {
-          setHeroFlowDir(joystickDirRef.current)
+          const dir = joystickDirRef.current
+          setHeroFlowDir(dir)
+          setCardFlowDir(dir)
           setHeroFlowTick(v => v + 1)
+          setCardFlowTick(v => v + 1)
           joystickDirRef.current = null
         }
       } catch (err) {
@@ -1019,7 +1024,7 @@ export default function Home() {
             <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
               Max travel {activeBand.maxLabel}
             </p>
-            <p className="text-[11px] text-slate-500">{rangeLabel} window · flick to switch</p>
+            <p className="text-[11px] text-slate-500">Range {rangeLabel} · flick left or right</p>
           </div>
 
           <div className="flex justify-center mt-2"
@@ -1136,19 +1141,22 @@ export default function Home() {
             </div>
           )}
 
-          <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isJoystickActive) ? 'opacity-60' : 'opacity-100'}`}>
+          <div className={`space-y-2.5 transition-opacity duration-200 ${loading ? 'opacity-65' : 'opacity-100'}`}>
             {displayRows.map(({ escape, isFastest }, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
               const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
+              const cardFlowAnimation = cardFlowDir === 'right'
+                ? 'cardFlowRight 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+                : 'cardFlowLeft 320ms cubic-bezier(0.22, 1, 0.36, 1)'
 
               return (
                 <article
-                  key={escape.destination.id}
+                  key={`${escape.destination.id}-${cardFlowTick}`}
                   className={`fomo-card overflow-hidden ${isFastest ? 'border-l-[3px] border-l-amber-400' : ''}`}
-                  style={{ animation: `cardIn 260ms cubic-bezier(0.22, 1, 0.36, 1) ${Math.min(index * 45, 180)}ms both` }}
+                  style={{ animation: `${cardFlowAnimation} ${Math.min(index * 30, 120)}ms both` }}
                 >
                   <div className="px-3.5 pt-3.5 pb-2.5">
                     <div className="flex items-start gap-2">
