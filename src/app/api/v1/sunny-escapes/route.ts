@@ -786,11 +786,11 @@ export async function GET(request: NextRequest) {
     const widenedAtLeastRows = widenedRows.filter(r => r.netSunAfterArrivalMin >= originSunMin)
     rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
   }
-  if (!adminAll && rankingPool.length < fallbackMinResults) {
+  if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
     const atLeastGlobalRows = withTravel.filter(r => r.netSunAfterArrivalMin >= originSunMin)
     if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
   }
-  if (!adminAll && rankingPool.length < fallbackMinResults) {
+  if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
     rankingPool = withTravel
   }
 

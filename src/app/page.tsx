@@ -21,7 +21,6 @@ import {
   TravelMode,
 } from '@/lib/types'
 import { formatSunHours, formatTravelClock } from '@/lib/format'
-import { buildOriginSentences } from '@/lib/origin-sentences'
 import { DestinationStamp, type StampType } from '@/components/DestinationStamp'
 
 type TripSpan = 'daytrip' | 'plus1day'
@@ -86,6 +85,15 @@ const TYPE_FILTER_CHIPS: { id: EscapeFilterChip; label: string }[] = [
   { id: 'thermal', label: '♨️ Thermal' },
   { id: 'lake', label: '🌊 Lake' },
 ]
+
+const HEADER_TAGLINES = [
+  "Don't chase clouds. Chase sun.",
+  'Fog below. Sun above.',
+  'Find light, fast.',
+  'Tomorrow looks better up high.',
+  'Grey in town. Gold in the hills.',
+  'Less fog. More day.',
+] as const
 
 const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR', IT: 'IT' }
 const TIMELINE_TICKS = [8, 10, 12, 14, 16, 18] as const
@@ -379,8 +387,7 @@ export default function Home() {
   const [heroFlowTick, setHeroFlowTick] = useState(0)
   const [cardFlowDir, setCardFlowDir] = useState<'left' | 'right'>('right')
   const [cardFlowTick, setCardFlowTick] = useState(0)
-  const [tickerIndex, setTickerIndex] = useState(0)
-  const [tickerFade, setTickerFade] = useState(false)
+  const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * HEADER_TAGLINES.length))
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
@@ -417,8 +424,6 @@ export default function Home() {
   const topEscapeCurrent = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
-  const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
-  const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
     const clamped = clamp(nextJoy, -1, 1)
@@ -666,48 +671,10 @@ export default function Home() {
     }
   }, [data, tripSpanTouched])
 
-  const originSentences = useMemo(() => {
-    if (!data || !topEscapeCurrent) return []
-    const bestTravel = getBestTravel(topEscapeCurrent)
-    return buildOriginSentences({
-      city: origin.name,
-      condition: weatherLabel(data.origin_conditions.description),
-      temp_c: originTempC,
-      sun_hours_today: formatSunHours(data.origin_conditions.sunshine_min),
-      sun_hours_tomorrow: formatSunHours(Math.round((data.tomorrow_sun_hours || 0) * 60)),
-      best_escape_name: topEscapeCurrent.destination.name,
-      best_escape_sun: formatSunHours(topEscapeCurrent.sun_score.sunshine_forecast_min),
-      travel_time: bestTravel ? formatTravelClock(bestTravel.min / 60) : 'short',
-      altitude_m: topEscapeCurrent.destination.altitude_m,
-      sun_gain: formatSunHours(Math.max(0, topEscapeCurrent.sun_score.sunshine_forecast_min - data.origin_conditions.sunshine_min)),
-      origin_score_pct: originFomoPct,
-      best_score_pct: Math.round(topEscapeCurrent.sun_score.score * 100),
-    })
-  }, [data, topEscapeCurrent, origin.name, originTempC, originFomoPct])
-
   useEffect(() => {
-    setTickerIndex(0)
-    if (originSentences.length <= 1) {
-      setTickerFade(false)
-      return
-    }
-
-    let fadeTimeout: number | null = null
-    const interval = window.setInterval(() => {
-      setTickerFade(true)
-      fadeTimeout = window.setTimeout(() => {
-        setTickerIndex(prev => (prev + 1) % originSentences.length)
-        setTickerFade(false)
-      }, 400)
-    }, 6000)
-
-    return () => {
-      window.clearInterval(interval)
-      if (fadeTimeout) window.clearTimeout(fadeTimeout)
-    }
-  }, [originSentences])
-
-  const tickerText = originSentences[tickerIndex] || `${origin.name}: ${formatSunHours(originSunMin)}.`
+    if (!data?._meta?.request_id) return
+    setTaglineIndex(prev => (prev + 1) % HEADER_TAGLINES.length)
+  }, [data?._meta?.request_id])
 
   const detectLocation = async () => {
     if (!navigator.geolocation) return
@@ -834,6 +801,8 @@ export default function Home() {
       return base.map((row, idx) => idx === existingIdx ? { ...row, isFastest: true } : row)
     }
 
+    if (base.length >= 3) return base
+
     const merged = [...base]
     const insertAt = Math.min(1, merged.length)
     merged.splice(insertAt, 0, { escape: fastestEscape, isFastest: true })
@@ -949,8 +918,13 @@ export default function Home() {
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
-        <div className="max-w-xl mx-auto px-3 h-12 flex items-center gap-2">
-          <FomoWordmark className="w-[90px] h-[22px] shrink-0" />
+        <div className="max-w-xl mx-auto px-3 h-14 flex items-center gap-2">
+          <div className="shrink-0 min-w-0">
+            <FomoWordmark className="w-[90px] h-[22px]" />
+            <p className="mt-0.5 text-[9px] leading-none text-slate-500 truncate max-w-[112px]">
+              {HEADER_TAGLINES[taglineIndex]}
+            </p>
+          </div>
 
           <label className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 h-8 min-w-0">
             <MapPinned className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.8} />
@@ -986,14 +960,6 @@ export default function Home() {
       </header>
 
       <main className="max-w-xl mx-auto px-3 pb-16">
-        <section className="h-11 flex items-center">
-            <div className="w-full inline-flex items-center gap-1.5 overflow-hidden">
-              <FomoWordmark className="w-[118px] h-[26px] shrink-0" />
-              <span className={`text-[12px] text-slate-700 whitespace-nowrap truncate transition-opacity duration-[400ms] ${tickerFade ? 'opacity-0' : 'opacity-100'}`}>
-                {tickerText}
-              </span>
-          </div>
-        </section>
 
         {fallbackNotice && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium px-3 py-2 mb-3 text-center">
