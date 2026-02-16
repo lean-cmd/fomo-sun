@@ -864,8 +864,10 @@ export async function GET(request: NextRequest) {
   const fastestCandidate = withTravel
     .filter(r => Number.isFinite(r.bestTravelMin))
     .filter(r => r.bestTravelMin <= 75)
-    .filter(r => r.sun_score.sunshine_forecast_min - originSunMin >= 60)
     .sort((a, b) => {
+      const aNetGain = Math.max(0, a.netSunAfterArrivalMin - originSunMin)
+      const bNetGain = Math.max(0, b.netSunAfterArrivalMin - originSunMin)
+      if (bNetGain !== aNetGain) return bNetGain - aNetGain
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       if (a.bestTravelMin !== b.bestTravelMin) return a.bestTravelMin - b.bestTravelMin
       return b.destination.altitude_m - a.destination.altitude_m

@@ -9,7 +9,6 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
-  Share2,
   SlidersHorizontal,
   Sun,
   Thermometer,
@@ -174,18 +173,18 @@ function extractTemp(summary?: string) {
   return m ? Number(m[1]) : null
 }
 
-function FomoGlyph({ className = 'w-[44px] h-3.5' }: { className?: string }) {
+function FomoGlyph({ className = 'w-[42px] h-3.5' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 72 20" className={className} aria-label="FOMO logo" role="img">
+    <svg viewBox="0 0 58 20" className={className} aria-label="FOMO logo" role="img">
       <g fill="#334155" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 700, letterSpacing: 0.7 }}>
         <text x="0" y="14" fontSize="13">F</text>
-        <text x="28" y="14" fontSize="13">M</text>
+        <text x="21.8" y="14" fontSize="13">M</text>
       </g>
       <g fill="#f59e0b" stroke="#f59e0b" strokeLinecap="round" strokeWidth="1.15">
-        <circle cx="12" cy="9" r="3.3" />
-        <path d="M12 2.2v1.9M12 13.9v1.9M5.2 9h1.9M16.9 9h1.9M7.2 4.2l1.3 1.3M15.5 12.5l1.3 1.3M16.8 4.2l-1.3 1.3M8.5 12.5l-1.3 1.3" />
-        <circle cx="45" cy="9" r="3.3" />
-        <path d="M45 2.2v1.9M45 13.9v1.9M38.2 9h1.9M49.9 9h1.9M40.2 4.2l1.3 1.3M48.5 12.5l1.3 1.3M49.8 4.2l-1.3 1.3M41.5 12.5l-1.3 1.3" />
+        <circle cx="11.2" cy="9" r="3.2" />
+        <path d="M11.2 2.3v1.8M11.2 13.9v1.8M4.6 9h1.8M15.9 9h1.8M6.5 4.3l1.2 1.2M14.7 12.4l1.2 1.2M16 4.3l-1.2 1.2M7.7 12.4l-1.2 1.2" />
+        <circle cx="35.8" cy="9" r="3.2" />
+        <path d="M35.8 2.3v1.8M35.8 13.9v1.8M29.2 9H31M40.5 9h1.8M31.1 4.3l1.2 1.2M39.3 12.4l1.2 1.2M40.6 4.3l-1.2 1.2M32.3 12.4l-1.2 1.2" />
       </g>
     </svg>
   )
@@ -210,17 +209,25 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
         <circle cx="50" cy="50" r="48" fill="none" stroke="#cbd5e1" strokeWidth="2.1" strokeDasharray="4.1 3.2" />
       </svg>
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none pt-[2px]">
-        <span style={{ width: `${Math.round(size * 0.72)}px` }}>
-          <FomoGlyph className="w-full h-auto" />
-        </span>
         <span
-          className="mt-0.5 text-slate-900"
+          className="text-slate-900"
           style={{ fontFamily: '"Bebas Neue", Sora, sans-serif', fontSize: `${pctSize}px`, letterSpacing: '0.3px' }}
         >
           {pct}%
         </span>
+        <span style={{ width: `${Math.round(size * 0.72)}px` }}>
+          <FomoGlyph className="w-full h-auto" />
+        </span>
       </span>
     </div>
+  )
+}
+
+function WhatsAppIcon({ className = 'w-3.5 h-3.5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M12.04 2C6.56 2 2.11 6.43 2.11 11.9c0 1.75.46 3.46 1.34 4.97L2 22l5.3-1.39a9.9 9.9 0 0 0 4.74 1.2h.01c5.47 0 9.9-4.43 9.9-9.9A9.9 9.9 0 0 0 12.04 2Zm0 18.16h-.01a8.24 8.24 0 0 1-4.2-1.15l-.3-.18-3.14.82.84-3.06-.2-.31a8.22 8.22 0 0 1-1.26-4.37 8.28 8.28 0 0 1 8.27-8.27 8.29 8.29 0 0 1 8.27 8.27 8.28 8.28 0 0 1-8.27 8.27Zm4.53-6.2c-.25-.13-1.5-.74-1.73-.82-.23-.09-.4-.13-.57.12-.17.25-.66.82-.8.99-.15.17-.3.19-.55.07-.25-.13-1.07-.39-2.03-1.24-.75-.67-1.25-1.49-1.4-1.74-.15-.25-.02-.38.11-.5.12-.12.25-.3.38-.45.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.43-.07-.13-.57-1.37-.78-1.88-.2-.48-.4-.41-.56-.42h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1s.9 2.43 1.02 2.6c.13.17 1.76 2.68 4.26 3.76.59.25 1.05.39 1.4.5.59.19 1.14.16 1.57.1.48-.07 1.5-.61 1.71-1.2.21-.59.21-1.09.15-1.2-.06-.11-.23-.17-.48-.3Z" />
+    </svg>
   )
 }
 
@@ -407,7 +414,7 @@ export default function Home() {
   const maxH = activeBand.maxH
 
   const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
-  const topEscape = data?.escapes?.[0] ?? null
+  const topEscapeCurrent = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
@@ -660,23 +667,23 @@ export default function Home() {
   }, [data, tripSpanTouched])
 
   const originSentences = useMemo(() => {
-    if (!data || !topEscape) return []
-    const bestTravel = getBestTravel(topEscape)
+    if (!data || !topEscapeCurrent) return []
+    const bestTravel = getBestTravel(topEscapeCurrent)
     return buildOriginSentences({
       city: origin.name,
       condition: weatherLabel(data.origin_conditions.description),
       temp_c: originTempC,
       sun_hours_today: formatSunHours(data.origin_conditions.sunshine_min),
       sun_hours_tomorrow: formatSunHours(Math.round((data.tomorrow_sun_hours || 0) * 60)),
-      best_escape_name: topEscape.destination.name,
-      best_escape_sun: formatSunHours(topEscape.sun_score.sunshine_forecast_min),
+      best_escape_name: topEscapeCurrent.destination.name,
+      best_escape_sun: formatSunHours(topEscapeCurrent.sun_score.sunshine_forecast_min),
       travel_time: bestTravel ? formatTravelClock(bestTravel.min / 60) : 'short',
-      altitude_m: topEscape.destination.altitude_m,
-      sun_gain: formatSunHours(Math.max(0, topEscape.sun_score.sunshine_forecast_min - data.origin_conditions.sunshine_min)),
+      altitude_m: topEscapeCurrent.destination.altitude_m,
+      sun_gain: formatSunHours(Math.max(0, topEscapeCurrent.sun_score.sunshine_forecast_min - data.origin_conditions.sunshine_min)),
       origin_score_pct: originFomoPct,
-      best_score_pct: Math.round(topEscape.sun_score.score * 100),
+      best_score_pct: Math.round(topEscapeCurrent.sun_score.score * 100),
     })
-  }, [data, topEscape, origin.name, originTempC, originFomoPct])
+  }, [data, topEscapeCurrent, origin.name, originTempC, originFomoPct])
 
   useEffect(() => {
     setTickerIndex(0)
@@ -737,12 +744,31 @@ export default function Home() {
 
   const fallbackNotice = data?._meta?.fallback_notice || ''
   const resultRows = data?.escapes || []
+  const heroDayFocus: DayFocus = 'tomorrow'
 
-  const topBestTravel = topEscape ? getBestTravel(topEscape) : null
-  const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
-  const sunGainMin = Math.max(0, topSunMin - originSunMin)
-  const topTemp = Math.round(topEscape?.weather_now?.temp_c ?? 0)
-  const topSummary = weatherLabel(topEscape?.weather_now?.summary)
+  const topEscapeTomorrow = useMemo(() => {
+    if (!resultRows.length) return fastestEscape ?? null
+    return [...resultRows]
+      .sort((a, b) => {
+        const aTomorrow = Math.round((a.tomorrow_sun_hours ?? 0) * 60)
+        const bTomorrow = Math.round((b.tomorrow_sun_hours ?? 0) * 60)
+        if (bTomorrow !== aTomorrow) return bTomorrow - aTomorrow
+        const aTravel = getBestTravel(a)?.min ?? Infinity
+        const bTravel = getBestTravel(b)?.min ?? Infinity
+        if (aTravel !== bTravel) return aTravel - bTravel
+        return b.sun_score.score - a.sun_score.score
+      })[0] ?? fastestEscape ?? null
+  }, [resultRows, fastestEscape])
+
+  const heroEscape = topEscapeTomorrow ?? topEscapeCurrent ?? fastestEscape ?? null
+  const heroOriginSunMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60) || originSunMin
+
+  const topBestTravel = heroEscape ? getBestTravel(heroEscape) : null
+  const topSunMin = heroEscape ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : 0
+  const resolvedTopSunMin = topSunMin > 0 ? topSunMin : (heroEscape?.sun_score.sunshine_forecast_min ?? 0)
+  const sunGainMin = Math.max(0, resolvedTopSunMin - heroOriginSunMin)
+  const topTemp = Math.round(heroEscape?.weather_now?.temp_c ?? 0)
+  const topSummary = weatherLabel(heroEscape?.weather_now?.summary)
 
   const dataUpdatedText = useMemo(() => {
     if (!lastUpdatedAt) return 'just now'
@@ -752,27 +778,27 @@ export default function Home() {
   }, [lastUpdatedAt, loading, data])
 
   const tomorrowWhy = useMemo(() => {
-    if (!topEscape || dayFocus !== 'tomorrow') return ''
+    if (!heroEscape) return ''
     const city = compactLabel(origin.name, 12)
-    const best = compactLabel(topEscape.destination.name, 13)
+    const best = compactLabel(heroEscape.destination.name, 13)
     const travel = topBestTravel ? formatTravelClock(topBestTravel.min / 60) : 'short'
     const templates = [
-      `Tomorrow flips: ${best} gets ${formatSunHours(topSunMin)}, ${city} stays clouded.`,
+      `Tomorrow flips: ${best} gets ${formatSunHours(resolvedTopSunMin)}, ${city} stays clouded.`,
       `${formatSunHours(sunGainMin)} more sun than ${city}. Worth setting an alarm.`,
       `Clear from 9am in ${best}. ${travel} door to door.`,
       `${city} stays muted tomorrow. ${best} opens bright.`,
-      `${best} leads tomorrow with ${formatSunHours(topSunMin)} of sun.`,
+      `${best} leads tomorrow with ${formatSunHours(resolvedTopSunMin)} of sun.`,
     ].filter(line => line.length <= 80)
-    const idx = Math.abs((heroFlowTick + topEscape.destination.id.length) % templates.length)
+    const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [topEscape, dayFocus, origin.name, topBestTravel, topSunMin, sunGainMin, heroFlowTick])
+  }, [heroEscape, origin.name, topBestTravel, resolvedTopSunMin, sunGainMin, heroFlowTick])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
   const jumpToBestDetails = () => {
-    if (topEscape) setOpenCardId(topEscape.destination.id)
+    if (heroEscape) setOpenCardId(heroEscape.destination.id)
     requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -817,16 +843,37 @@ export default function Home() {
     setOpenCardId(displayRows[0]?.escape.destination.id ?? null)
   }, [displayRows])
 
-  const timelineOriginPreview = timelineEmojiPreview(data?.origin_timeline, dayFocus)
+  const fastestTravelMin = fastestEscape ? (getBestTravel(fastestEscape)?.min ?? null) : null
 
-  const buildWhatsAppHref = (escape: EscapeCard) => {
+  useEffect(() => {
+    if (loading || displayRows.length > 0) return
+    const targetIdx = fastestTravelMin === null
+      ? 0
+      : TRAVEL_BANDS.findIndex((band) => fastestTravelMin >= band.minH * 60 && fastestTravelMin <= band.maxH * 60)
+    const nextIdx = targetIdx >= 0 ? targetIdx : 0
+    if (nextIdx === rangeIndex) return
+    joystickDirRef.current = nextIdx > rangeIndex ? 'right' : 'left'
+    previewRangeRef.current = null
+    setPreviewRangeIndex(null)
+    setRangeIndex(nextIdx)
+    setJoystickNudge(false)
+  }, [displayRows.length, fastestTravelMin, loading, rangeIndex])
+
+  const buildWhatsAppHref = (escape: EscapeCard, shareDay: DayFocus = dayFocus) => {
+    const isTomorrowShare = shareDay === 'tomorrow'
     const bestTravel = getBestTravel(escape)
     const travelText = bestTravel
       ? `${bestTravel.mode === 'car' ? '🚗' : '🚆'} ${formatTravelClock(bestTravel.min / 60)} from ${origin.name}`
       : ''
-    const destinationSun = formatSunHours(escape.sun_score.sunshine_forecast_min)
-    const destinationSky = timelineEmojiPreview(escape.sun_timeline, dayFocus)
-    const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
+    const destinationMin = isTomorrowShare
+      ? Math.round((escape.tomorrow_sun_hours ?? 0) * 60)
+      : escape.sun_score.sunshine_forecast_min
+    const destinationSunMin = destinationMin > 0 ? destinationMin : escape.sun_score.sunshine_forecast_min
+    const destinationSun = formatSunHours(destinationSunMin)
+    const originComparisonMin = isTomorrowShare ? heroOriginSunMin : originSunMin
+    const originTimelinePreview = timelineEmojiPreview(data?.origin_timeline, shareDay)
+    const destinationSky = timelineEmojiPreview(escape.sun_timeline, shareDay)
+    const gainMin = Math.max(0, destinationSunMin - originComparisonMin)
     const shareText = [
       `🌤️ FOMO Sun: Escape the fog!`,
       '',
@@ -834,7 +881,7 @@ export default function Home() {
       `☀️ ${destinationSun} sun · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
       travelText,
       '',
-      `${origin.name}:    ${timelineOriginPreview}`,
+      `${origin.name}:    ${originTimelinePreview}`,
       `${escape.destination.name}: ${destinationSky}`,
       '',
       gainMin > 0
@@ -957,18 +1004,18 @@ export default function Home() {
           </div>
         )}
 
-        {topEscape && (
+        {heroEscape && (
           <section
-            key={`hero-${topEscape.destination.id}-${heroFlowTick}`}
+            key={`hero-${heroEscape.destination.id}-${heroFlowTick}`}
             className={`fomo-card relative overflow-visible p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
           >
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
-                name={topEscape.destination.name}
-                altitude={topEscape.destination.altitude_m}
-                region={topEscape.destination.region}
-                type={stampTypeFromDestination(topEscape.destination)}
-                country={topEscape.destination.country}
+                name={heroEscape.destination.name}
+                altitude={heroEscape.destination.altitude_m}
+                region={heroEscape.destination.region}
+                type={stampTypeFromDestination(heroEscape.destination)}
+                country={heroEscape.destination.country}
                 className="h-[112px] w-[80px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"
               />
             </div>
@@ -976,45 +1023,34 @@ export default function Home() {
             <div className="flex items-start justify-between gap-3 pr-[88px] sm:pr-[96px]">
               <div className="flex items-start gap-3 min-w-0">
                 <div className="sm:scale-[1.16] sm:origin-top-left">
-                  <ScoreRing score={topEscape.sun_score.score} size={48} />
+                  <ScoreRing score={heroEscape.sun_score.score} size={48} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">
-                    Best escape {dayFocus === 'today' ? 'today' : 'tomorrow'}
+                    Best escape tomorrow
                   </p>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <h1 className="text-[19px] leading-tight font-semibold text-slate-900 truncate" style={{ fontFamily: 'Sora, sans-serif' }}>
-                      {topEscape.destination.name}
+                      {heroEscape.destination.name}
                     </h1>
+                    {sunGainMin > 0 && (
+                      <span className="text-[12px] text-emerald-500 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                        (+{formatSunHours(sunGainMin)} gain)
+                      </span>
+                    )}
                     <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
-                      {topEscape.destination.altitude_m}m
+                      {heroEscape.destination.altitude_m}m
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      {topEscape.destination.region} · {FLAG[topEscape.destination.country]}
+                      {heroEscape.destination.region} · {FLAG[heroEscape.destination.country]}
                     </span>
                   </div>
 
                   {tomorrowWhy && (
                     <p className="mt-1 text-[12px] text-slate-500">{tomorrowWhy}</p>
                   )}
-
-                  <p className="mt-2 text-[12px] text-slate-600 leading-snug truncate">
-                    <span className="text-amber-600 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                      {formatSunHours(topEscape.sun_score.sunshine_forecast_min)}
-                    </span>
-                    {sunGainMin > 0 && (
-                      <span className="text-emerald-500 text-[11px] font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                        {' '}({`+${formatSunHours(sunGainMin)} gain`})
-                      </span>
-                    )}
-                    {topBestTravel && (
-                      <span className="text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>
-                        {' '} · {formatTravelClock(topBestTravel.min / 60)} by {topBestTravel.mode}
-                      </span>
-                    )}
-                    <span className="text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
-                      {' '} · {topTemp}° {topSummary.toLowerCase()}
-                    </span>
+                  <p className="mt-1 text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                    {topBestTravel ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}` : 'Travel time varies'} · {topTemp}° {topSummary.toLowerCase()}
                   </p>
                 </div>
               </div>
@@ -1022,20 +1058,20 @@ export default function Home() {
 
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-1">
               <SunTimelineBar
-                timeline={data?.origin_timeline || topEscape.sun_timeline}
-                dayFocus={dayFocus}
+                timeline={data?.origin_timeline || heroEscape.sun_timeline}
+                dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
                 showNowMarker
                 label={origin.name}
-                sunLabel={formatSunHours(originSunMin)}
+                sunLabel={`☀️ ${formatSunHours(heroOriginSunMin)}`}
                 compact
               />
               <SunTimelineBar
-                timeline={topEscape.sun_timeline}
-                dayFocus={dayFocus}
+                timeline={heroEscape.sun_timeline}
+                dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
-                label={topEscape.destination.name}
-                sunLabel={formatSunHours(topEscape.sun_score.sunshine_forecast_min)}
+                label={heroEscape.destination.name}
+                sunLabel={`☀️ ${formatSunHours(resolvedTopSunMin)}`}
                 travelMin={topBestTravel?.min}
                 compact
               />
@@ -1050,12 +1086,12 @@ export default function Home() {
                 Plan this trip ↓
               </button>
               <a
-                href={buildWhatsAppHref(topEscape)}
+                href={buildWhatsAppHref(heroEscape, heroDayFocus)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
-                <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                <WhatsAppIcon className="w-3.5 h-3.5" />
                 Share ↗
               </a>
             </div>
@@ -1230,14 +1266,16 @@ export default function Home() {
                           <ScoreRing score={escape.sun_score.score} size={48} />
 
                           <div className="flex-1 min-w-0">
-                            {isFastest && (
-                              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold mb-1">
-                                ⚡ Fastest escape
-                              </p>
-                            )}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
+                                  {isFastest && (
+                                    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-amber-800 font-semibold">
+                                      ⚡ Fastest
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-[11px] text-slate-500 mt-0.5">{escape.destination.region} · {escape.destination.altitude_m.toLocaleString()}m · {FLAG[escape.destination.country]}</p>
                                 <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
                                   <span>{Math.round(escape.weather_now?.temp_c ?? 0)}°</span>
@@ -1247,8 +1285,8 @@ export default function Home() {
                               </div>
 
                               <div className="shrink-0">
-                                <div className="inline-flex items-end gap-3">
-                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-end gap-1.5 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                <div className="inline-flex items-center gap-4">
+                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-2 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
                                     <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                                     <span>{formatSunHours(escape.sun_score.sunshine_forecast_min)}</span>
                                     {gainMin > 0 && (
@@ -1258,7 +1296,7 @@ export default function Home() {
                                     )}
                                   </p>
                                   {bestTravel && (
-                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-end gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
                                       <IconForMode mode={bestTravel.mode} />
                                       <span>{formatTravelClock(bestTravel.min / 60)}</span>
                                     </p>
@@ -1407,7 +1445,7 @@ export default function Home() {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-slate-600 font-semibold hover:text-slate-900"
                           >
-                            <Share2 className="w-3.5 h-3.5" strokeWidth={1.8} />
+                            <WhatsAppIcon className="w-3.5 h-3.5" />
                             Share ↗
                           </a>
                         </div>
