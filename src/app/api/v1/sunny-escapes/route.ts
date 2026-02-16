@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
-import { computeSunScore, detectInversion, preFilterByDistance } from '@/lib/scoring'
+import { computeSunScore, detectInversion, haversineDistance, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
@@ -22,6 +22,16 @@ type ScoredWithTravel = {
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
   bestTravelMin: number
   liveForecast?: LiveForecastBundle
+}
+
+type RankedEscapeRow = {
+  destination: typeof destinations[number]
+  sun_score: ReturnType<typeof computeSunScore>
+  travel_time_min: number
+  net_gain_min: number
+  combined_score: number
+  in_window: boolean
+  window_overflow_min: number
 }
 
 const DEMO_TRAIN_FAST_IDS = new Set([
@@ -63,6 +73,10 @@ const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
 const LIVE_WEATHER_POOL_TARGET = 20
+const BUCKET_MERGE_MIN_RESULTS = 4
+const DIVERSITY_RADIUS_KM = 25
+const DIVERSITY_MAX_NEARBY_IN_TOP = 2
+const DIVERSITY_TOP_ROWS = 5
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 const ZURICH_TZ = 'Europe/Zurich'
 
@@ -333,6 +347,49 @@ function selectLiveWeatherPool(candidates: Array<{
   }
 
   return Array.from(deduped.values()).slice(0, target)
+}
+
+function diversifyTopRows(rows: RankedEscapeRow[]) {
+  if (rows.length <= DIVERSITY_TOP_ROWS) return rows
+
+  const selected: RankedEscapeRow[] = []
+  const deferred: RankedEscapeRow[] = []
+  for (const row of rows) {
+    let nearbyCount = 0
+    for (const picked of selected) {
+      const d = haversineDistance(
+        row.destination.lat,
+        row.destination.lon,
+        picked.destination.lat,
+        picked.destination.lon
+      )
+      if (d <= DIVERSITY_RADIUS_KM) nearbyCount += 1
+    }
+
+    if (nearbyCount >= DIVERSITY_MAX_NEARBY_IN_TOP && selected.length < DIVERSITY_TOP_ROWS) {
+      deferred.push(row)
+      continue
+    }
+
+    selected.push(row)
+    if (selected.length >= DIVERSITY_TOP_ROWS) break
+  }
+
+  if (selected.length < DIVERSITY_TOP_ROWS) {
+    for (const row of rows) {
+      if (selected.some(s => s.destination.id === row.destination.id)) continue
+      selected.push(row)
+      if (selected.length >= DIVERSITY_TOP_ROWS) break
+    }
+  }
+
+  for (const row of rows) {
+    if (selected.some(s => s.destination.id === row.destination.id)) continue
+    if (deferred.some(d => d.destination.id === row.destination.id)) continue
+    deferred.push(row)
+  }
+
+  return [...selected, ...deferred]
 }
 
 function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
@@ -816,20 +873,28 @@ export async function GET(request: NextRequest) {
   let appliedWindowMax = strictWindowMax
   const fallbackMinResults = adminView ? 1 : Math.min(5, limit)
 
-  const rankRowsByNet = (rows: ScoredWithTravel[]) => rows
+  const rankRowsByNet = (rows: ScoredWithTravel[]): RankedEscapeRow[] => rows
     .map(r => {
       const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
       const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
       const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8
+      const inWindow = r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax
+      const overflowMin = inWindow
+        ? 0
+        : (r.bestTravelMin < strictWindowMin ? strictWindowMin - r.bestTravelMin : r.bestTravelMin - strictWindowMax)
       return {
         destination: r.destination,
         sun_score: r.sun_score,
         travel_time_min: r.bestTravelMin,
         net_gain_min: netGainMin,
         combined_score: combined,
+        in_window: inWindow,
+        window_overflow_min: overflowMin,
       }
     })
     .sort((a, b) => {
+      if (a.in_window !== b.in_window) return a.in_window ? -1 : 1
+      if (a.window_overflow_min !== b.window_overflow_min) return a.window_overflow_min - b.window_overflow_min
       if (b.net_gain_min !== a.net_gain_min) return b.net_gain_min - a.net_gain_min
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       return a.travel_time_min - b.travel_time_min
@@ -864,6 +929,42 @@ export async function GET(request: NextRequest) {
   if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
     rankingPool = withTravel
   }
+  if (!adminAll && hasExplicitTravelWindow && rankingPool.length < Math.min(BUCKET_MERGE_MIN_RESULTS, limit)) {
+    const windowSpanMin = Math.max(15, strictWindowMax - strictWindowMin)
+    const leftMin = Math.max(0, strictWindowMin - windowSpanMin)
+    const rightMax = strictWindowMax + windowSpanMin
+
+    const leftRows = withTravel.filter(r => r.bestTravelMin >= leftMin && r.bestTravelMin < strictWindowMin)
+    const rightRows = withTravel.filter(r => r.bestTravelMin > strictWindowMax && r.bestTravelMin <= rightMax)
+
+    const neighborPool = (rows: ScoredWithTravel[]) => {
+      const better = rows.filter(isStrictBetterThanOrigin)
+      if (better.length > 0) return better
+      const atLeast = rows.filter(isAtLeastAsGoodAsOrigin)
+      if (atLeast.length > 0) return atLeast
+      return rows
+    }
+    const leftPool = neighborPool(leftRows)
+    const rightPool = neighborPool(rightRows)
+
+    const useRight = rightPool.length > leftPool.length
+    const chosenNeighbor = useRight ? rightPool : leftPool
+    if (chosenNeighbor.length > 0) {
+      const seen = new Set(rankingPool.map(r => r.destination.id))
+      const merged = [...rankingPool]
+      for (const row of chosenNeighbor) {
+        if (seen.has(row.destination.id)) continue
+        merged.push(row)
+        seen.add(row.destination.id)
+        if (merged.length >= fallbackMinResults) break
+      }
+      if (merged.length > rankingPool.length) {
+        rankingPool = merged
+        if (useRight) appliedWindowMax = rightMax
+        else appliedWindowMin = leftMin
+      }
+    }
+  }
 
   const rankedByNet = rankRowsByNet(rankingPool)
 
@@ -878,6 +979,9 @@ export async function GET(request: NextRequest) {
         return b.sun_score.score - a.sun_score.score
       })
       .slice(0, Math.max(limit, 8))
+  }
+  if (!adminAll) {
+    pickedRanked = diversifyTopRows(pickedRanked)
   }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)

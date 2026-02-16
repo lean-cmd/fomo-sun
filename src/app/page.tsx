@@ -45,7 +45,8 @@ const JOYSTICK_MAX_PX = 42
 
 const TRAVEL_BANDS = [
   { id: 'quick', label: '0-60min', minH: 0, maxH: 1, maxLabel: '1h' },
-  { id: 'short', label: '1h-2h', minH: 1, maxH: 2, maxLabel: '2h' },
+  { id: 'short-a', label: '1h-1.5h', minH: 1, maxH: 1.5, maxLabel: '1h30' },
+  { id: 'short-b', label: '1.5h-2h', minH: 1.5, maxH: 2, maxLabel: '2h' },
   { id: 'mid', label: '2h-3h', minH: 2, maxH: 3, maxLabel: '3h' },
   { id: 'long', label: '3hrs+', minH: 3, maxH: 4.5, maxLabel: '3hrs+' },
 ] as const
@@ -370,7 +371,7 @@ function getBestTravel(escape: EscapeCard) {
 }
 
 export default function Home() {
-  const [rangeIndex, setRangeIndex] = useState(1)
+  const [rangeIndex, setRangeIndex] = useState(2)
   const [previewRangeIndex, setPreviewRangeIndex] = useState<number | null>(null)
   const [joyX, setJoyX] = useState(0)
   const [isJoystickActive, setIsJoystickActive] = useState(false)
@@ -412,7 +413,7 @@ export default function Home() {
   const joyPrevXRef = useRef(0)
   const joystickPointerRef = useRef<number | null>(null)
   const joystickDirRef = useRef<'left' | 'right' | null>(null)
-  const joyBaseRangeRef = useRef(1)
+  const joyBaseRangeRef = useRef(2)
   const previewRangeRef = useRef<number | null>(null)
   const joystickErrorTimerRef = useRef<number | null>(null)
 
@@ -1124,7 +1125,7 @@ export default function Home() {
             </button>
           </div>
 
-          <div className="mt-2 grid grid-cols-4 gap-1.5 text-[10px]">
+          <div className="mt-2 grid grid-cols-5 gap-1.5 text-[10px]">
             {TRAVEL_BANDS.map((band, idx) => {
               const active = idx === effectiveRangeIndex
               return (
