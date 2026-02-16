@@ -62,6 +62,7 @@ const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
 const LIVE_WEATHER_POOL_TARGET = 20
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
+const ZURICH_TZ = 'Europe/Zurich'
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -70,6 +71,15 @@ function clamp(v: number, min: number, max: number) {
 function avg(values: number[]) {
   if (values.length === 0) return 0
   return values.reduce((s, v) => s + v, 0) / values.length
+}
+
+function dayStringInZurich(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZURICH_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
 }
 
 function demoTrainFactor(id: string): number {
@@ -201,7 +211,7 @@ function isBaselLikeOrigin(originName: string, lat: number, lon: number) {
 
 function remainingTodaySunshineMin(hours: LiveForecastBundle['hours']) {
   const now = Date.now()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = dayStringInZurich(new Date())
   return Math.round(
     hours
       .filter(h => h.time.startsWith(today))
@@ -307,9 +317,12 @@ function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionL
   const temp = Math.round(avg(window.map(h => h.temperature_c)))
   const humidity = Math.round(avg(window.map(h => h.relative_humidity_pct)))
   const wind = Math.round(avg(window.map(h => h.wind_speed_kmh)))
+  const snowfall = avg(window.map(h => h.snowfall_cm))
+  const precipitation = avg(window.map(h => h.precipitation_mm))
 
   let conditionsText = ''
-  if (sunshineMin >= 90 && lowCloud < 35) conditionsText = `Mostly sunny, ${temp}°C`
+  if (snowfall > 0.05 || (precipitation > 0.2 && temp <= 1)) conditionsText = `Snow likely, ${temp}°C`
+  else if (sunshineMin >= 90 && lowCloud < 35) conditionsText = `Mostly sunny, ${temp}°C`
   else if (sunshineMin >= 45) conditionsText = `Partly sunny, ${temp}°C`
   else if (lowCloud > 80 || (humidity > 88 && wind < 10)) conditionsText = `Fog/low cloud likely, ${temp}°C`
   else conditionsText = `Cloudy, ${temp}°C`
@@ -361,17 +374,15 @@ function timelineFromLive(
   hours: LiveForecastBundle['hours'],
   sunWindow: { today: DaylightWindow; tomorrow: DaylightWindow }
 ): SunTimeline {
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const tomorrow = new Date()
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+  const now = new Date()
+  const todayStr = dayStringInZurich(now)
+  const tomorrowStr = dayStringInZurich(new Date(now.getTime() + 24 * 60 * 60 * 1000))
 
   const toSegments = (day: string, window: DaylightWindow) => {
     const daytime = hours
       .filter(h => h.time.startsWith(day))
       .filter(h => {
-        const t = new Date(h.time)
-        const hh = t.getHours() + t.getMinutes() / 60
+        const hh = Number(h.time.slice(11, 13)) + Number(h.time.slice(14, 16)) / 60
         return hh >= window.start_hour && hh < window.end_hour
       })
 

@@ -18,6 +18,8 @@ export interface LiveWeatherResult {
   relative_humidity_pct: number
   visibility_m: number
   sunshine_duration_min: number // sunshine in the past hour
+  precipitation_mm: number
+  snowfall_cm: number
   is_foggy: boolean
   conditions_text: string
   wind_speed_kmh: number
@@ -31,6 +33,8 @@ export interface LiveForecastHour {
   temperature_c: number
   relative_humidity_pct: number
   wind_speed_kmh: number
+  precipitation_mm: number
+  snowfall_cm: number
 }
 
 export interface LiveSunTimes {
@@ -54,11 +58,12 @@ export interface LiveBatchWeatherResult extends LiveHourlyForecastResult {
 }
 
 const BASE = 'https://api.open-meteo.com/v1'
-const CURRENT_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,visibility,sunshine_duration,wind_speed_10m'
-const HOURLY_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,wind_speed_10m,sunshine_duration'
+const CURRENT_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,visibility,sunshine_duration,wind_speed_10m,precipitation,snowfall'
+const HOURLY_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,wind_speed_10m,sunshine_duration,precipitation,snowfall'
 const BATCH_CHUNK_SIZE = 30
 const BATCH_PARALLELISM = 3
 const OPEN_METEO_TIMEOUT_MS = 9_000
+const ZURICH_TZ = 'Europe/Zurich'
 
 const CURRENT_TTL_MS = 5 * 60 * 1000
 const HOURLY_TTL_MS = 5 * 60 * 1000
@@ -81,6 +86,15 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+function dayStringInZurich(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: ZURICH_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
 function hourFromIso(iso: string): number {
   const d = new Date(iso)
   return d.getHours() + d.getMinutes() / 60
@@ -94,10 +108,9 @@ function windowFromSunriseSunset(sunriseIso: string, sunsetIso: string) {
 
 function computeSunTotals(hours: LiveForecastHour[]) {
   const nowDate = new Date()
-  const todayStr = nowDate.toISOString().slice(0, 10)
-  const tomorrow = new Date(nowDate)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10)
+  const todayStr = dayStringInZurich(nowDate)
+  const tomorrow = new Date(nowDate.getTime() + 24 * 60 * 60 * 1000)
+  const tomorrowStr = dayStringInZurich(tomorrow)
 
   const total_sunshine_today_min = hours
     .filter(h => h.time.startsWith(todayStr))
@@ -122,6 +135,8 @@ function parseHourly(payload: any): LiveForecastHour[] {
     temperature_c: h?.temperature_2m?.[i] ?? 0,
     relative_humidity_pct: h?.relative_humidity_2m?.[i] ?? 0,
     wind_speed_kmh: h?.wind_speed_10m?.[i] ?? 0,
+    precipitation_mm: h?.precipitation?.[i] ?? 0,
+    snowfall_cm: h?.snowfall?.[i] ?? 0,
   }))
 }
 
@@ -132,13 +147,17 @@ function parseCurrent(payload: any): LiveWeatherResult {
   const cloudLow = c.cloud_cover_low ?? 0
   const humidity = c.relative_humidity_2m ?? 0
   const wind = c.wind_speed_10m ?? 0
+  const precipitation = c.precipitation ?? 0
+  const snowfall = c.snowfall ?? 0
   const isFoggy =
     visibility < 2500 ||
     cloudLow > 72 ||
     (humidity > 88 && wind < 14 && cloudTotal > 60)
 
   let conditions = ''
-  if (isFoggy) conditions = `Low cloud/fog likely, ${Math.round(c.temperature_2m ?? 0)}°C`
+  if (snowfall > 0.05 || (precipitation > 0.2 && (c.temperature_2m ?? 0) <= 1)) {
+    conditions = `Snow likely, ${Math.round(c.temperature_2m ?? 0)}°C`
+  } else if (isFoggy) conditions = `Low cloud/fog likely, ${Math.round(c.temperature_2m ?? 0)}°C`
   else if (cloudTotal > 82 || cloudLow > 68) conditions = `Cloudy, ${Math.round(c.temperature_2m ?? 0)}°C`
   else if (cloudTotal > 45) conditions = `Partly sunny, ${Math.round(c.temperature_2m ?? 0)}°C`
   else conditions = `Mostly sunny, ${Math.round(c.temperature_2m ?? 0)}°C`
@@ -150,6 +169,8 @@ function parseCurrent(payload: any): LiveWeatherResult {
     relative_humidity_pct: humidity,
     visibility_m: visibility,
     sunshine_duration_min: Math.round((c.sunshine_duration ?? 0) / 60),
+    precipitation_mm: precipitation,
+    snowfall_cm: snowfall,
     is_foggy: isFoggy,
     conditions_text: conditions,
     wind_speed_kmh: wind,

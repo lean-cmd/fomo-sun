@@ -34,7 +34,7 @@ type TrainConnectionPreview = {
   transfers: number
   note?: string
 }
-type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
+type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy' | 'snowy'
 type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 
 type CitySeed = { name: string; lat: number; lon: number }
@@ -154,6 +154,7 @@ function pickNearestCityName(payload: unknown) {
 
 function weatherKind(summary?: string): WeatherKind {
   const s = (summary || '').toLowerCase()
+  if (s.includes('snow')) return 'snowy'
   if (s.includes('fog') || s.includes('low cloud')) return 'foggy'
   if (s.includes('partly')) return 'partly'
   if (s.includes('clear') || s.includes('sunny') || s.includes('sun')) return 'sunny'
@@ -162,6 +163,7 @@ function weatherKind(summary?: string): WeatherKind {
 
 function weatherLabel(summary?: string) {
   const kind = weatherKind(summary)
+  if (kind === 'snowy') return 'Snow'
   if (kind === 'sunny') return 'Sunny'
   if (kind === 'partly') return 'Partly sunny'
   if (kind === 'foggy') return 'Fog or low cloud'
@@ -170,6 +172,7 @@ function weatherLabel(summary?: string) {
 
 function weatherEmoji(summary?: string) {
   const kind = weatherKind(summary)
+  if (kind === 'snowy') return '❄️'
   if (kind === 'sunny' || kind === 'partly') return '☀️'
   if (kind === 'foggy') return '☁️'
   return '☁️'
@@ -372,6 +375,7 @@ export default function Home() {
   const [joyX, setJoyX] = useState(0)
   const [isJoystickActive, setIsJoystickActive] = useState(false)
   const [joystickNudge, setJoystickNudge] = useState(true)
+  const [joystickErrorShake, setJoystickErrorShake] = useState(false)
 
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
@@ -410,6 +414,7 @@ export default function Home() {
   const joystickDirRef = useRef<'left' | 'right' | null>(null)
   const joyBaseRangeRef = useRef(1)
   const previewRangeRef = useRef<number | null>(null)
+  const joystickErrorTimerRef = useRef<number | null>(null)
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -655,6 +660,10 @@ export default function Home() {
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
     stopJoystickAnim()
+    if (joystickErrorTimerRef.current !== null) {
+      window.clearTimeout(joystickErrorTimerRef.current)
+      joystickErrorTimerRef.current = null
+    }
   }, [stopJoystickAnim])
 
   useEffect(() => {
@@ -809,6 +818,31 @@ export default function Home() {
     merged.splice(insertAt, 0, { escape: fastestEscape, isFastest: true })
     return merged.slice(0, 5)
   }, [fastestEscape, visibleRows])
+
+  const fastestTravelMin = fastestEscape ? (getBestTravel(fastestEscape)?.min ?? null) : null
+
+  useEffect(() => {
+    if (loading || activeTypeChips.length > 0 || visibleRows.length > 0 || fastestTravelMin === null) return
+    const targetIdx = TRAVEL_BANDS.findIndex((band) => fastestTravelMin >= band.minH * 60 && fastestTravelMin <= band.maxH * 60)
+    if (targetIdx < 0 || targetIdx === rangeIndex) return
+
+    const dir: 'left' | 'right' = targetIdx > rangeIndex ? 'right' : 'left'
+    joystickDirRef.current = dir
+    setJoystickErrorShake(true)
+    pulseJoystick(dir, 0.58)
+
+    if (joystickErrorTimerRef.current !== null) {
+      window.clearTimeout(joystickErrorTimerRef.current)
+    }
+    joystickErrorTimerRef.current = window.setTimeout(() => {
+      setJoystickErrorShake(false)
+      previewRangeRef.current = null
+      setPreviewRangeIndex(null)
+      setRangeIndex(targetIdx)
+      setJoystickNudge(false)
+      joystickErrorTimerRef.current = null
+    }, 260)
+  }, [activeTypeChips.length, fastestTravelMin, loading, pulseJoystick, rangeIndex, visibleRows.length])
 
   useEffect(() => {
     if (!displayRows.length) {
@@ -1060,7 +1094,7 @@ export default function Home() {
             </button>
             <div
               ref={joystickZoneRef}
-              className={`fomo-joystick ${isJoystickActive ? 'is-active' : ''} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2`}
+              className={`fomo-joystick ${isJoystickActive ? 'is-active' : ''} ${joystickErrorShake ? 'joystick-error-shake' : ''} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2`}
               onPointerDown={onJoystickPointerDown}
               onPointerMove={onJoystickPointerMove}
               onPointerUp={onJoystickPointerUp}
