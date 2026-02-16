@@ -221,6 +221,15 @@ export default function AdminDiagnosticsPage() {
         ? r.sun_score.sunshine_forecast_min
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
+    const dayNetSunMin = (r: Escape) => {
+      if (forecastDay === 'today') return Math.max(0, r.net_sun_min)
+      const bestTravelMin = Math.min(
+        r.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
+        r.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+      )
+      if (!Number.isFinite(bestTravelMin)) return 0
+      return Math.max(0, daySunMin(r) - Math.round(bestTravelMin))
+    }
     const selectedQualities = Object.entries(activeQualities)
       .filter(([, enabled]) => enabled)
       .map(([quality]) => quality as DestinationQuality)
@@ -248,7 +257,7 @@ export default function AdminDiagnosticsPage() {
 
     filtered.sort((a, b) => {
       if (sortMode === 'sun') return daySunMin(b) - daySunMin(a)
-      if (sortMode === 'net') return b.net_sun_min - a.net_sun_min
+      if (sortMode === 'net') return dayNetSunMin(b) - dayNetSunMin(a)
       if (sortMode === 'name') return a.destination.name.localeCompare(b.destination.name, 'de-CH')
       if (sortMode === 'altitude') return b.destination.altitude_m - a.destination.altitude_m
       return b.sun_score.score - a.sun_score.score
@@ -312,6 +321,15 @@ export default function AdminDiagnosticsPage() {
         ? r.sun_score.sunshine_forecast_min
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
+    const dayNetSunMin = (r: Escape) => {
+      if (forecastDay === 'today') return Math.max(0, r.net_sun_min)
+      const bestTravelMin = Math.min(
+        r.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
+        r.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+      )
+      if (!Number.isFinite(bestTravelMin)) return 0
+      return Math.max(0, daySunMin(r) - Math.round(bestTravelMin))
+    }
 
     const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'net_sun_min', 'temp_c', 'condition']
     const lines = filteredSorted.map(r => [
@@ -323,7 +341,7 @@ export default function AdminDiagnosticsPage() {
       r.destination.altitude_m,
       Math.round(r.sun_score.score * 100),
       daySunMin(r),
-      r.net_sun_min,
+      dayNetSunMin(r),
       Math.round(r.weather_now?.temp_c ?? 0),
       r.weather_now?.summary || r.conditions,
     ])
@@ -580,6 +598,15 @@ export default function AdminDiagnosticsPage() {
                   {pagedRows.map((row) => {
                   const isExpanded = expandedId === row.destination.id
                   const daySunMin = forecastDay === 'today' ? row.sun_score.sunshine_forecast_min : Math.round((row.tomorrow_sun_hours || 0) * 60)
+                  const dayNetSunMin = (() => {
+                    if (forecastDay === 'today') return Math.max(0, row.net_sun_min)
+                    const bestTravelMin = Math.min(
+                      row.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
+                      row.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+                    )
+                    if (!Number.isFinite(bestTravelMin)) return 0
+                    return Math.max(0, daySunMin - Math.round(bestTravelMin))
+                  })()
                   const dayPrefix = forecastDay === 'today'
                     ? new Date().toISOString().slice(0, 10)
                     : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10) })()
@@ -607,7 +634,7 @@ export default function AdminDiagnosticsPage() {
                         <td className="px-3 py-2.5 text-slate-600">{row.destination.quality ?? 'generated'}</td>
                         <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(row.net_sun_min)}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(dayNetSunMin)}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
                         <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
