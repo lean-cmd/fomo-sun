@@ -801,7 +801,8 @@ export default function Home() {
       return base.map((row, idx) => idx === existingIdx ? { ...row, isFastest: true } : row)
     }
 
-    if (base.length >= 3) return base
+    // Only use fastest as a hard fallback when the selected bucket has no rows.
+    if (base.length > 0) return base
 
     const merged = [...base]
     const insertAt = Math.min(1, merged.length)
@@ -816,22 +817,6 @@ export default function Home() {
     }
     setOpenCardId(displayRows[0]?.escape.destination.id ?? null)
   }, [displayRows])
-
-  const fastestTravelMin = fastestEscape ? (getBestTravel(fastestEscape)?.min ?? null) : null
-
-  useEffect(() => {
-    if (loading || displayRows.length > 0) return
-    const targetIdx = fastestTravelMin === null
-      ? 0
-      : TRAVEL_BANDS.findIndex((band) => fastestTravelMin >= band.minH * 60 && fastestTravelMin <= band.maxH * 60)
-    const nextIdx = targetIdx >= 0 ? targetIdx : 0
-    if (nextIdx === rangeIndex) return
-    joystickDirRef.current = nextIdx > rangeIndex ? 'right' : 'left'
-    previewRangeRef.current = null
-    setPreviewRangeIndex(null)
-    setRangeIndex(nextIdx)
-    setJoystickNudge(false)
-  }, [displayRows.length, fastestTravelMin, loading, rangeIndex])
 
   const buildWhatsAppHref = (escape: EscapeCard, shareDay: DayFocus = dayFocus) => {
     const isTomorrowShare = shareDay === 'tomorrow'
