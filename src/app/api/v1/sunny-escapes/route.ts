@@ -3,6 +3,7 @@ import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, detectInversion, haversineDistance, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
+import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
 import { addRequestLog } from '@/lib/request-log'
 
@@ -225,15 +226,97 @@ function isBaselLikeOrigin(originName: string, lat: number, lon: number) {
   return Math.abs(lat - DEFAULT_ORIGIN.lat) <= 0.18 && Math.abs(lon - DEFAULT_ORIGIN.lon) <= 0.22
 }
 
-function remainingTodaySunshineMin(hours: LiveForecastBundle['hours']) {
-  const now = Date.now()
-  const today = dayStringInZurich(new Date())
-  return Math.round(
-    hours
-      .filter(h => h.time.startsWith(today))
-      .filter(h => new Date(h.time).getTime() >= now)
-      .reduce((sum, h) => sum + h.sunshine_duration_min, 0)
-  )
+function tomorrowStringInZurich() {
+  return dayStringInZurich(new Date(Date.now() + 24 * 60 * 60 * 1000))
+}
+
+function dayAverages(hours: LiveForecastBundle['hours'], dayStr: string) {
+  const bucket = hours.filter(h => h.time.startsWith(dayStr))
+  if (bucket.length === 0) {
+    return {
+      lowCloudPct: 0,
+      cloudPct: 0,
+      precipitationMm: 0,
+      snowfallCm: 0,
+      humidityPct: 0,
+      windKmh: 0,
+    }
+  }
+  return {
+    lowCloudPct: avg(bucket.map(h => h.low_cloud_cover_pct)),
+    cloudPct: avg(bucket.map(h => h.cloud_cover_pct)),
+    precipitationMm: avg(bucket.map(h => h.precipitation_mm)),
+    snowfallCm: avg(bucket.map(h => h.snowfall_cm)),
+    humidityPct: avg(bucket.map(h => h.relative_humidity_pct)),
+    windKmh: avg(bucket.map(h => h.wind_speed_kmh)),
+  }
+}
+
+function detectOriginFogRisk(input: {
+  isFoggy: boolean
+  visibilityM: number
+  lowCloudPct: number
+  cloudPct: number
+  humidityPct: number
+  windKmh: number
+  precipitationMm: number
+}) {
+  if (input.isFoggy) return true
+  if (input.visibilityM < 2600) return true
+  if (input.lowCloudPct >= 78) return true
+  if (input.precipitationMm >= 0.35 && input.cloudPct >= 70) return true
+  if (input.humidityPct >= 90 && input.windKmh <= 12 && input.cloudPct >= 60) return true
+  return false
+}
+
+function applyOriginFogPenalty(input: {
+  sunshineMin: number
+  fogRisk: boolean
+  lowCloudPct: number
+  cloudPct: number
+  precipitationMm: number
+}) {
+  if (!input.fogRisk) return input.sunshineMin
+
+  let factor = 0.82
+  if (input.lowCloudPct >= 75 || input.cloudPct >= 75) factor = 0.68
+  if (input.precipitationMm >= 0.35) factor = 0.52
+  return Math.max(0, Math.round(input.sunshineMin * factor))
+}
+
+function applyFogAltitudeAdjustment(input: {
+  baseSunMin: number
+  destinationAltitudeM: number
+  fogRisk: boolean
+  lowCloudPct: number
+  cloudPct: number
+  precipitationMm: number
+  snowfallCm: number
+  capMin: number
+}) {
+  if (!input.fogRisk) return { sunMin: clamp(Math.round(input.baseSunMin), 0, input.capMin), applied: false }
+
+  let adjusted = input.baseSunMin
+  if (
+    input.destinationAltitudeM >= 1100 &&
+    input.lowCloudPct <= 78 &&
+    input.precipitationMm <= 0.35 &&
+    input.snowfallCm <= 0.25
+  ) {
+    adjusted = input.baseSunMin * 1.16 + 18
+  } else if (
+    input.destinationAltitudeM <= 700 &&
+    (input.lowCloudPct >= 72 || input.cloudPct >= 74 || input.precipitationMm >= 0.3)
+  ) {
+    adjusted = input.baseSunMin * 0.62
+  } else if (input.destinationAltitudeM <= 900 && input.lowCloudPct >= 82) {
+    adjusted = input.baseSunMin * 0.78
+  }
+
+  return {
+    sunMin: clamp(Math.round(adjusted), 0, input.capMin),
+    applied: Math.round(adjusted) !== Math.round(input.baseSunMin),
+  }
 }
 
 function normalizeQueryCacheKey(input: {
@@ -427,6 +510,14 @@ function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionL
     },
     conditionsText,
     tempC: temp,
+    stats: {
+      lowCloudPct: clamp(lowCloud, 0, 100),
+      cloudPct: clamp(totalCloud, 0, 100),
+      precipitationMm: Math.max(0, precipitation),
+      snowfallCm: Math.max(0, snowfall),
+      humidityPct: clamp(humidity, 0, 100),
+      windKmh: Math.max(0, wind),
+    },
   }
 }
 
@@ -641,10 +732,13 @@ export async function GET(request: NextRequest) {
   let sunsetInfo = getMockSunset(demoMode)
   let originTomorrowHours = getMockTomorrowSunHours()
   if (tripSpan === 'plus1day') {
-    originSunMin = Math.round(originSunMin + originTomorrowHours * 60)
+    originSunMin = Math.round(originTomorrowHours * 60)
   }
   let weatherFreshness = new Date().toISOString()
   let inversionLikely = true
+  let originDataSource: 'open-meteo' | 'meteoswiss' | 'mock' = demoMode ? 'mock' : 'open-meteo'
+  let fogHeuristicApplied = false
+  const liveModelPolicy = 'CH:meteoswiss_seamless|DE/FR/IT:default'
 
   // Pre-filter by rough distance and user filters
   let candidates = adminAll
@@ -702,14 +796,17 @@ export async function GET(request: NextRequest) {
 
   let scored: ScoredWithTravel[] = []
   const buildDemoScored = () => {
+    const originForGainMin = tripSpan === 'plus1day'
+      ? Math.round(originTomorrowHours * 60)
+      : originSunMin
     return candidatesWithTravel.map(c => {
       const w = getMockWeather(c.destination, true)
       const tomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, true) * 60)
       const effectiveSunMin = tripSpan === 'plus1day'
-        ? clamp(w.sunshine_forecast_min + tomorrowMin, 0, 600)
+        ? clamp(tomorrowMin, 0, 600)
         : w.sunshine_forecast_min
       const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
-      const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originSunMin)
+      const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originForGainMin)
       return {
         destination: c.destination,
         sun_score: computeSunScore(c.destination, {
@@ -739,22 +836,33 @@ export async function GET(request: NextRequest) {
   } else {
     try {
       livePoolCount = liveCandidatesWithTravel.length
-      const [originCurrent, originHourly, sunTimes, destinationWeather] = await Promise.all([
+      const [originCurrent, originHourly, sunTimes, destinationWeather, swissOrigin] = await Promise.all([
         getCurrentWeather(lat, lon),
         getHourlyForecast(lat, lon),
         getSunTimes(lat, lon),
         batchGetWeather(liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon }))),
+        getSwissMeteoOriginSnapshot(lat, lon),
       ])
       weatherFreshness = new Date().toISOString()
+      originDataSource = swissOrigin ? 'meteoswiss' : 'open-meteo'
 
-      originDescription = originCurrent.conditions_text
-      originSunMin = originCurrent.sunshine_duration_min
-      originSunScore = originSunScoreFromCurrent(originCurrent)
-      inversionLikely = detectInversion({
+      originDescription = swissOrigin?.description ?? originCurrent.conditions_text
+      originSunMin = swissOrigin?.sunshine_min ?? originCurrent.sunshine_duration_min
+      originSunScore = swissOrigin?.sun_score ?? originSunScoreFromCurrent(originCurrent)
+      const originFogRisk = detectOriginFogRisk({
+        isFoggy: originCurrent.is_foggy,
+        visibilityM: originCurrent.visibility_m,
+        lowCloudPct: originCurrent.low_cloud_cover_pct,
+        cloudPct: originCurrent.cloud_cover_pct,
+        humidityPct: swissOrigin?.humidity_pct ?? originCurrent.relative_humidity_pct,
+        windKmh: swissOrigin?.wind_kmh ?? originCurrent.wind_speed_kmh,
+        precipitationMm: originCurrent.precipitation_mm,
+      })
+      inversionLikely = originFogRisk || detectInversion({
         visibility_m: originCurrent.visibility_m,
-        humidity_pct: originCurrent.relative_humidity_pct,
+        humidity_pct: swissOrigin?.humidity_pct ?? originCurrent.relative_humidity_pct,
         temp_c: originCurrent.temperature_c,
-        wind_speed_kmh: originCurrent.wind_speed_kmh,
+        wind_speed_kmh: swissOrigin?.wind_kmh ?? originCurrent.wind_speed_kmh,
       })
 
       sunWindow = {
@@ -762,10 +870,20 @@ export async function GET(request: NextRequest) {
         tomorrow: sunTimes.daylight_window_tomorrow,
       }
       originTimeline = timelineFromLive(originHourly.hours, sunWindow)
-      originTomorrowHours = Math.round((originHourly.total_sunshine_tomorrow_min / 60) * 10) / 10
+      const tomorrowDay = tomorrowStringInZurich()
+      const originTomorrowRawMin = Math.round(originHourly.total_sunshine_tomorrow_min)
+      const originTomorrowStats = dayAverages(originHourly.hours, tomorrowDay)
+      const originTomorrowAdjustedMin = applyOriginFogPenalty({
+        sunshineMin: originTomorrowRawMin,
+        fogRisk: originFogRisk,
+        lowCloudPct: originTomorrowStats.lowCloudPct,
+        cloudPct: originTomorrowStats.cloudPct,
+        precipitationMm: originTomorrowStats.precipitationMm,
+      })
+      if (originTomorrowAdjustedMin !== originTomorrowRawMin) fogHeuristicApplied = true
+      originTomorrowHours = Math.round((originTomorrowAdjustedMin / 60) * 10) / 10
       if (tripSpan === 'plus1day') {
-        const remainingOriginMin = remainingTodaySunshineMin(originHourly.hours)
-        originSunMin = Math.round(remainingOriginMin + originHourly.total_sunshine_tomorrow_min)
+        originSunMin = originTomorrowAdjustedMin
       }
       sunsetInfo = {
         time: sunTimes.sunset,
@@ -780,13 +898,38 @@ export async function GET(request: NextRequest) {
         }
 
         const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely)
-        const remainingTodayMin = remainingTodaySunshineMin(live.hours)
-        const tomorrowSunMin = Math.round(live.total_sunshine_tomorrow_min)
+        const tomorrowSunMinRaw = Math.round(live.total_sunshine_tomorrow_min)
+        const tomorrowStats = dayAverages(live.hours, tomorrowDay)
+        const tomorrowFogAdjusted = applyFogAltitudeAdjustment({
+          baseSunMin: tomorrowSunMinRaw,
+          destinationAltitudeM: c.destination.altitude_m,
+          fogRisk: originFogRisk,
+          lowCloudPct: tomorrowStats.lowCloudPct,
+          cloudPct: tomorrowStats.cloudPct,
+          precipitationMm: tomorrowStats.precipitationMm,
+          snowfallCm: tomorrowStats.snowfallCm,
+          capMin: 600,
+        })
+        const daytripFogAdjusted = applyFogAltitudeAdjustment({
+          baseSunMin: liveWindow.weatherInput.sunshine_forecast_min,
+          destinationAltitudeM: c.destination.altitude_m,
+          fogRisk: originFogRisk,
+          lowCloudPct: liveWindow.stats.lowCloudPct,
+          cloudPct: liveWindow.stats.cloudPct,
+          precipitationMm: liveWindow.stats.precipitationMm,
+          snowfallCm: liveWindow.stats.snowfallCm,
+          capMin: 180,
+        })
+        if (tomorrowFogAdjusted.applied || daytripFogAdjusted.applied) fogHeuristicApplied = true
+        const tomorrowSunMin = tomorrowFogAdjusted.sunMin
         const effectiveSunMin = tripSpan === 'plus1day'
-          ? clamp(remainingTodayMin + tomorrowSunMin, 0, 600)
-          : liveWindow.weatherInput.sunshine_forecast_min
+          ? tomorrowSunMin
+          : daytripFogAdjusted.sunMin
+        const originGainBaselineMin = tripSpan === 'plus1day'
+          ? originTomorrowAdjustedMin
+          : originSunMin
         const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
-        const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originSunMin)
+        const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originGainBaselineMin)
 
         return {
           destination: c.destination,
@@ -825,6 +968,7 @@ export async function GET(request: NextRequest) {
       demoMode = true
       liveFallbackReason = 'cached_forecast'
       fallbackNotice = 'Using cached forecast'
+      originDataSource = 'mock'
       originDescription = `${fallbackNotice} · ${mockOrigin.description}`
       originSunScore = mockOrigin.sun_score
       originSunMin = mockOrigin.sunshine_min
@@ -833,7 +977,7 @@ export async function GET(request: NextRequest) {
       sunsetInfo = getMockSunset(true)
       originTomorrowHours = getMockTomorrowSunHours()
       if (tripSpan === 'plus1day') {
-        originSunMin = Math.round(originSunMin + originTomorrowHours * 60)
+        originSunMin = Math.round(originTomorrowHours * 60)
       }
       scored = buildDemoScored()
     }
@@ -1150,6 +1294,10 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Candidate-Count': String(prefilterCandidateCount),
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
+    'X-FOMO-Origin-Source': originDataSource,
+    'X-FOMO-Weather-Model-Policy': liveModelPolicy,
+    'X-FOMO-Fog-Heuristic': fogHeuristicApplied ? 'applied' : 'off',
+    'X-FOMO-Trip-Horizon': tripSpan === 'plus1day' ? 'tomorrow-only' : 'next-3h',
     'X-FOMO-Travel-Window-Min': String(appliedWindowMin),
     'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
     'X-FOMO-Request-Ms': String(Date.now() - startedAt),

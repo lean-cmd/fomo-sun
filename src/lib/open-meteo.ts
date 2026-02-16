@@ -58,6 +58,7 @@ export interface LiveBatchWeatherResult extends LiveHourlyForecastResult {
 }
 
 const BASE = 'https://api.open-meteo.com/v1'
+const SWISS_MODEL = 'meteoswiss_seamless'
 const CURRENT_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,visibility,sunshine_duration,wind_speed_10m,precipitation,snowfall'
 const HOURLY_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,wind_speed_10m,sunshine_duration,precipitation,snowfall'
 const BATCH_CHUNK_SIZE = 30
@@ -75,6 +76,14 @@ let sunCache = new Map<string, { expires_at: number; data: LiveSunTimes }>()
 
 function cacheKey(lat: number, lon: number) {
   return `${lat.toFixed(3)},${lon.toFixed(3)}`
+}
+
+function inSwissModelBounds(lat: number, lon: number) {
+  return lat >= 45.6 && lat <= 47.95 && lon >= 5.6 && lon <= 10.7
+}
+
+function modelForPoint(lat: number, lon: number) {
+  return inSwissModelBounds(lat, lon) ? SWISS_MODEL : null
 }
 
 function batchPointKey(lat: number, lon: number) {
@@ -208,13 +217,16 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out
 }
 
-async function fetchBatchChunk(locations: { lat: number; lon: number }[]): Promise<LiveBatchWeatherResult[]> {
+async function fetchBatchChunk(
+  locations: { lat: number; lon: number }[],
+  model?: string | null
+): Promise<LiveBatchWeatherResult[]> {
   if (locations.length === 0) return []
 
   const latCsv = locations.map(l => l.lat.toFixed(5)).join(',')
   const lonCsv = locations.map(l => l.lon.toFixed(5)).join(',')
   const url = `${BASE}/forecast?latitude=${latCsv}&longitude=${lonCsv}&current=${CURRENT_FIELDS}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
-  const payload = await fetchOpenMeteoJson(url, 300)
+  const payload = await fetchOpenMeteoForecast(url, 300, model)
   const rows = normalizeBatchPayload(payload)
   const parsed = rows
     .map((row, idx) => {
@@ -251,6 +263,28 @@ async function fetchOpenMeteoJson(url: string, revalidate: number) {
   }
 }
 
+function shouldRetryWithoutModel(err: unknown) {
+  const msg = String((err as { message?: string })?.message || err || '').toLowerCase()
+  // Retry only for model/query-shape errors; keep transport/rate/timeouts as hard errors.
+  return msg.includes('open-meteo-http-400') || msg.includes('open-meteo-http-404') || msg.includes('open-meteo-http-422')
+}
+
+async function fetchOpenMeteoForecast(
+  baseUrl: string,
+  revalidate: number,
+  model?: string | null
+) {
+  if (!model) return fetchOpenMeteoJson(baseUrl, revalidate)
+
+  const modeledUrl = `${baseUrl}&models=${encodeURIComponent(model)}`
+  try {
+    return await fetchOpenMeteoJson(modeledUrl, revalidate)
+  } catch (err) {
+    if (!shouldRetryWithoutModel(err)) throw err
+    return fetchOpenMeteoJson(baseUrl, revalidate)
+  }
+}
+
 /**
  * Get current conditions for a location
  */
@@ -262,7 +296,7 @@ export async function getCurrentWeather(lat: number, lon: number): Promise<LiveW
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&current=${CURRENT_FIELDS}&timezone=Europe%2FZurich`
 
-  const data = await fetchOpenMeteoJson(url, 300)
+  const data = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon))
   const result = parseCurrent(data)
 
   currentCache.set(key, { expires_at: now + CURRENT_TTL_MS, data: result })
@@ -280,7 +314,7 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<LiveH
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
 
-  const payload = await fetchOpenMeteoJson(url, 300)
+  const payload = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon))
 
   const hours = parseHourly(payload)
   const result: LiveHourlyForecastResult = {
@@ -303,7 +337,7 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=2&timezone=Europe%2FZurich`
 
-  const data = await fetchOpenMeteoJson(url, 3600)
+  const data = await fetchOpenMeteoForecast(url, 3600, modelForPoint(lat, lon))
 
   const sunrise = data.daily.sunrise[0]
   const sunset = data.daily.sunset[0]
@@ -344,11 +378,15 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
   if (deduped.length === 0) return []
 
   const outByKey = new Map<string, LiveBatchWeatherResult>()
+  const swiss = deduped.filter(p => inSwissModelBounds(p.lat, p.lon))
+  const crossBorder = deduped.filter(p => !inSwissModelBounds(p.lat, p.lon))
 
-  const groups = chunk(deduped, BATCH_CHUNK_SIZE)
-  const processGroup = async (group: { lat: number; lon: number }[]) => {
+  const processGroup = async (
+    group: { lat: number; lon: number }[],
+    model?: string | null
+  ) => {
     try {
-      const batched = await fetchBatchChunk(group)
+      const batched = await fetchBatchChunk(group, model)
       for (const row of batched) {
         outByKey.set(batchPointKey(row.lat, row.lon), row)
       }
@@ -387,8 +425,12 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
     }
   }
 
+  const swissGroups = chunk(swiss, BATCH_CHUNK_SIZE).map(group => ({ group, model: SWISS_MODEL as string | null }))
+  const crossBorderGroups = chunk(crossBorder, BATCH_CHUNK_SIZE).map(group => ({ group, model: null as string | null }))
+  const groups = [...swissGroups, ...crossBorderGroups]
+
   for (let i = 0; i < groups.length; i += BATCH_PARALLELISM) {
-    await Promise.all(groups.slice(i, i + BATCH_PARALLELISM).map(processGroup))
+    await Promise.all(groups.slice(i, i + BATCH_PARALLELISM).map(({ group, model }) => processGroup(group, model)))
   }
 
   return Array.from(outByKey.values())
