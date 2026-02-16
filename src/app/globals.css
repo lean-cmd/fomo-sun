@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Jost:wght@500;600;700&family=Sora:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Sora:wght@600;700;800&display=swap');
 
 :root {
   --slate-50: #f8fafc;
@@ -58,42 +58,6 @@ body {
   border: 1px solid #f1e6d2;
   background: #fff;
   box-shadow: 0 8px 20px rgba(245, 158, 11, 0.08);
-}
-
-.hero-stamp {
-  min-width: 64px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  border: 1px solid #e2d7bf;
-  background: linear-gradient(180deg, #fffdf7 0%, #fdf6e7 100%);
-  color: #475569;
-  text-align: center;
-  box-shadow: 0 3px 10px rgba(71, 85, 105, 0.08);
-}
-
-.hero-stamp-name {
-  font-family: 'Jost', 'DM Sans', sans-serif;
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 72px;
-}
-
-.hero-stamp-icon {
-  width: 56px;
-  height: 18px;
-  margin: 3px auto 2px;
-}
-
-.hero-stamp-alt {
-  font-family: 'DM Mono', ui-monospace, monospace;
-  font-size: 9px;
-  line-height: 1;
-  color: #0f172a;
 }
 
 .no-scrollbar {

@@ -22,6 +22,7 @@ import {
 } from '@/lib/types'
 import { formatSunHours, formatTravelClock } from '@/lib/format'
 import { buildOriginSentences } from '@/lib/origin-sentences'
+import { DestinationStamp, type StampType } from '@/components/DestinationStamp'
 
 type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
@@ -328,46 +329,14 @@ function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
-function DestinationStamp({ escape }: { escape: EscapeCard }) {
-  const typeSet = new Set(escape.destination.types || [])
-  const stampKind = typeSet.has('thermal')
-    ? 'thermal'
-    : typeSet.has('lake')
-      ? 'lake'
-      : typeSet.has('town')
-        ? 'town'
-        : typeSet.has('mountain')
-          ? 'mountain'
-          : 'sun'
-
-  return (
-    <div className="hero-stamp" aria-hidden="true">
-      <div className="hero-stamp-name">{escape.destination.name.toUpperCase()}</div>
-      <svg viewBox="0 0 56 20" className="hero-stamp-icon">
-        {stampKind === 'mountain' && <path d="M3 18 16 4 26 14 33 8 45 18Z" fill="currentColor" opacity="0.9" />}
-        {stampKind === 'lake' && <path d="M4 12c4 0 4 2 8 2s4-2 8-2 4 2 8 2 4-2 8-2 4 2 8 2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />}
-        {stampKind === 'town' && (
-          <>
-            <rect x="8" y="9" width="16" height="9" fill="currentColor" opacity="0.9" />
-            <path d="M33 18V6l5-4 5 4v12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-          </>
-        )}
-        {stampKind === 'thermal' && (
-          <>
-            <path d="M12 18h32" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-            <path d="M20 16c2-3-2-4 0-7m8 7c2-3-2-4 0-7m8 7c2-3-2-4 0-7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-          </>
-        )}
-        {stampKind === 'sun' && (
-          <>
-            <circle cx="28" cy="10" r="4" fill="currentColor" />
-            <path d="M28 1v4M28 15v4M19 10h4M33 10h4M22.5 4.5l2.8 2.8M30.7 12.7l2.8 2.8M33.5 4.5l-2.8 2.8M25.3 12.7l-2.8 2.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </>
-        )}
-      </svg>
-      <div className="hero-stamp-alt">{escape.destination.altitude_m}m</div>
-    </div>
-  )
+function stampTypeFromDestination(destination: EscapeCard['destination']): StampType {
+  const typeSet = new Set(destination.types || [])
+  if (typeSet.has('thermal')) return 'thermal'
+  if (typeSet.has('lake')) return 'lake'
+  if (typeSet.has('town')) return 'town'
+  if (typeSet.has('viewpoint')) return 'viewpoint'
+  if (typeSet.has('mountain')) return destination.altitude_m >= 1400 ? 'ski' : 'mountain'
+  return 'default'
 }
 
 function FomoWordmark({ className = 'w-[88px] h-5' }: { className?: string }) {
@@ -989,9 +958,20 @@ export default function Home() {
         {topEscape && (
           <section
             key={`hero-${topEscape.destination.id}-${heroFlowTick}`}
-            className={`fomo-card p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
+            className={`fomo-card relative overflow-visible p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
+              <DestinationStamp
+                name={topEscape.destination.name}
+                altitude={topEscape.destination.altitude_m}
+                region={topEscape.destination.region}
+                type={stampTypeFromDestination(topEscape.destination)}
+                country={topEscape.destination.country}
+                className="h-[112px] w-[80px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"
+              />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 pr-[88px] sm:pr-[96px]">
               <div className="flex items-start gap-3 min-w-0">
                 <ScoreRing score={topEscape.sun_score.score} size={44} />
                 <div className="min-w-0">
@@ -1040,7 +1020,6 @@ export default function Home() {
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                <DestinationStamp escape={topEscape} />
                 <a
                   href={buildWhatsAppHref(topEscape)}
                   target="_blank"
