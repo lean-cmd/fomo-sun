@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
-import { computeSunScore, detectInversion, preFilterByDistance, rankDestinations } from '@/lib/scoring'
+import { computeSunScore, detectInversion, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
@@ -14,6 +14,8 @@ type ScoredWithTravel = {
   sun_score: ReturnType<typeof computeSunScore>
   conditions: string
   temp_c: number
+  netSunAfterArrivalMin: number
+  netGainVsOriginMin: number
   carTravel?: ReturnType<typeof getMockTravelTime>
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
   bestTravelMin: number
@@ -96,10 +98,40 @@ function buildGoogleMapsDirectionsUrl(mapsName: string, originName?: string) {
   return `https://www.google.com/maps/dir/?${p.toString()}`
 }
 
-function buildSbbTimetableUrl(sbbName?: string | null, originName = 'Basel') {
+function normalizeSbbOrigin(originName: string) {
+  const raw = originName.trim()
+  const key = raw.toLowerCase()
+  if (!raw) return 'Basel SBB'
+  if (key === 'basel' || key === 'basel sbb') return 'Basel SBB'
+  if (key === 'zurich' || key === 'zürich' || key === 'zurich hb' || key === 'zürich hb') return 'Zürich HB'
+  if (key === 'bern') return 'Bern'
+  if (key === 'luzern' || key === 'lucerne') return 'Luzern'
+  return raw
+}
+
+function buildSbbDateTime(tripSpan: TripSpan) {
+  const now = new Date()
+  if (tripSpan === 'plus1day') {
+    const next = new Date(now)
+    next.setDate(next.getDate() + 1)
+    return { date: next.toISOString().slice(0, 10), time: '08:00' }
+  }
+  const hh = String(now.getHours()).padStart(2, '0')
+  const mm = String(now.getMinutes()).padStart(2, '0')
+  return { date: now.toISOString().slice(0, 10), time: `${hh}:${mm}` }
+}
+
+function buildSbbTimetableUrl(sbbName?: string | null, originName = 'Basel', tripSpan: TripSpan = 'daytrip') {
   if (!sbbName) return undefined
-  const p = new URLSearchParams({ from: originName, to: sbbName })
-  return `https://www.sbb.ch/en/timetable.html?${p.toString()}`
+  const { date, time } = buildSbbDateTime(tripSpan)
+  const p = new URLSearchParams({
+    von: normalizeSbbOrigin(originName),
+    nach: sbbName,
+    date: `"${date}"`,
+    time: `"${time}"`,
+    moment: 'DEPARTURE',
+  })
+  return `https://www.sbb.ch/en?${p.toString()}`
 }
 
 function locationKey(lat: number, lon: number) {
@@ -410,9 +442,10 @@ export async function GET(request: NextRequest) {
   const typesParam = sp.get('types')
   const types = typesParam ? typesParam.split(',') : []
   const adminView = sp.get('admin') === 'true'
+  const adminAll = adminView && sp.get('admin_all') === 'true'
   const rawLimit = parseInt(sp.get('limit') || '6')
   const limit = adminView
-    ? Math.min(500, Math.max(1, rawLimit))
+    ? Math.min(adminAll ? 5000 : 500, Math.max(1, rawLimit))
     : Math.min(20, Math.max(1, rawLimit))
   const tripSpan = normalizeTripSpan(sp.get('trip_span'))
   const originNameParam = (sp.get('origin_name') || '').trim().slice(0, 80)
@@ -511,7 +544,9 @@ export async function GET(request: NextRequest) {
   let inversionLikely = true
 
   // Pre-filter by rough distance and user filters
-  let candidates = preFilterByDistance(lat, lon, destinations, maxSupportedH)
+  let candidates = adminAll
+    ? [...destinations]
+    : preFilterByDistance(lat, lon, destinations, maxSupportedH)
   if (types.length > 0) candidates = candidates.filter(d => d.types.some(t => types.includes(t)))
   const prefilterCandidateCount = candidates.length
   let livePoolCount = 0
@@ -556,18 +591,23 @@ export async function GET(request: NextRequest) {
       const effectiveSunMin = tripSpan === 'plus1day'
         ? clamp(w.sunshine_forecast_min + tomorrowMin, 0, 600)
         : w.sunshine_forecast_min
-      const gainVsOrigin = Math.max(0, effectiveSunMin - originSunMin)
+      const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
+      const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originSunMin)
       return {
         destination: c.destination,
         sun_score: computeSunScore(c.destination, {
           ...w,
           sunshine_forecast_min: effectiveSunMin,
           sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
-          gain_vs_origin_min: gainVsOrigin,
+          gain_vs_origin_min: netGainVsOrigin,
           gain_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+          net_sun_after_arrival_min: netSunAfterArrivalMin,
+          net_sun_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
         }),
         conditions: w.conditions_text,
         temp_c: w.temp_c,
+        netSunAfterArrivalMin,
+        netGainVsOriginMin: netGainVsOrigin,
         carTravel: c.carTravel,
         trainTravel: c.trainTravel,
         bestTravelMin: c.bestTravelMin,
@@ -625,7 +665,8 @@ export async function GET(request: NextRequest) {
         const effectiveSunMin = tripSpan === 'plus1day'
           ? clamp(remainingTodayMin + live.total_sunshine_tomorrow_min, 0, 600)
           : liveWindow.weatherInput.sunshine_forecast_min
-        const gainVsOrigin = Math.max(0, effectiveSunMin - originSunMin)
+        const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
+        const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originSunMin)
 
         return {
           destination: c.destination,
@@ -633,11 +674,15 @@ export async function GET(request: NextRequest) {
             ...liveWindow.weatherInput,
             sunshine_forecast_min: effectiveSunMin,
             sunshine_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
-            gain_vs_origin_min: gainVsOrigin,
+            gain_vs_origin_min: netGainVsOrigin,
             gain_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
+            net_sun_after_arrival_min: netSunAfterArrivalMin,
+            net_sun_norm_cap_min: tripSpan === 'plus1day' ? 600 : 180,
           }),
           conditions: liveWindow.conditionsText,
           temp_c: Math.round(live.current.temperature_c),
+          netSunAfterArrivalMin,
+          netGainVsOriginMin: netGainVsOrigin,
           carTravel: c.carTravel,
           trainTravel: c.trainTravel,
           bestTravelMin: c.bestTravelMin,
@@ -674,75 +719,55 @@ export async function GET(request: NextRequest) {
 
   // Keep a much broader candidate set in demo so slider materially changes outcomes.
   const topLimit = demoMode ? 48 : Math.max(limit, candidatesWithTravel.length)
-  const withTravel = scored.sort((a, b) => b.sun_score.score - a.sun_score.score).slice(0, topLimit)
+  const withTravel = scored
+    .sort((a, b) => {
+      if (b.netSunAfterArrivalMin !== a.netSunAfterArrivalMin) return b.netSunAfterArrivalMin - a.netSunAfterArrivalMin
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      return a.bestTravelMin - b.bestTravelMin
+    })
+    .slice(0, topLimit)
   const windowHalfMin = Math.round(travelWindowH * 60)
   const windowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const windowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
-  const inTravelWindow = withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
-  const betterThanOrigin = inTravelWindow.filter(r => r.sun_score.sunshine_forecast_min > originSunMin)
-
-  // Default ranking path
-  let pickedRanked = rankDestinations(
-    betterThanOrigin
-      .map(r => ({ destination: r.destination, sun_score: r.sun_score, travel_time_min: r.bestTravelMin })),
-    maxTravelMin
-  )
-
-  // Live mode: rank primarily by sun quality, with a lighter travel-time tie-breaker.
-  if (!demoMode) {
-    const rankedLive = betterThanOrigin
-      .map(r => {
-        const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
-        const combined = r.sun_score.score * 0.88 + travelConvenience * 0.12
-        return {
-          destination: r.destination,
-          sun_score: r.sun_score,
-          travel_time_min: r.bestTravelMin,
-          combined_score: combined,
-        }
-      })
-      .sort((a, b) => {
-        const scoreDelta = b.sun_score.score - a.sun_score.score
-        if (Math.abs(scoreDelta) >= 0.08) return scoreDelta
-        return b.combined_score - a.combined_score
-      })
-    pickedRanked = rankedLive
-  }
-
-  // Demo mode uses slider-centered window sorting for material list changes.
-  if (demoMode) {
-    const sortedByScore = betterThanOrigin
-      .map(r => ({
+  const inTravelWindow = adminAll
+    ? withTravel
+    : withTravel.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
+  const betterThanOrigin = adminAll
+    ? inTravelWindow
+    : inTravelWindow.filter(r => r.netSunAfterArrivalMin > originSunMin)
+  const rankedByNet = betterThanOrigin
+    .map(r => {
+      const netGainMin = Math.max(0, r.netSunAfterArrivalMin - originSunMin)
+      const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
+      const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8
+      return {
         destination: r.destination,
         sun_score: r.sun_score,
         travel_time_min: r.bestTravelMin,
-        combined_score: r.sun_score.score,
-      }))
+        net_gain_min: netGainMin,
+        combined_score: combined,
+      }
+    })
+    .sort((a, b) => {
+      if (b.net_gain_min !== a.net_gain_min) return b.net_gain_min - a.net_gain_min
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      return a.travel_time_min - b.travel_time_min
+    })
+
+  let pickedRanked = rankedByNet
+  if (demoMode) {
+    pickedRanked = [...rankedByNet]
       .sort((a, b) => {
-        if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+        if (b.net_gain_min !== a.net_gain_min) return b.net_gain_min - a.net_gain_min
         const da = Math.abs(a.travel_time_min - maxTravelMin)
         const db = Math.abs(b.travel_time_min - maxTravelMin)
-        return da - db
+        if (da !== db) return da - db
+        return b.sun_score.score - a.sun_score.score
       })
-
-    let selected = sortedByScore.slice(0, limit)
-    const hasNonHigh = selected.some(r => r.sun_score.confidence !== 'high')
-    if (!hasNonHigh) {
-      const nonHighCandidate = sortedByScore.find(r => r.sun_score.confidence !== 'high' && !selected.some(s => s.destination.id === r.destination.id))
-      if (nonHighCandidate && selected.length > 0) selected[selected.length - 1] = nonHighCandidate
-    }
-
-    selected = selected.sort((a, b) => {
-      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
-      const da = Math.abs(a.travel_time_min - maxTravelMin)
-      const db = Math.abs(b.travel_time_min - maxTravelMin)
-      return da - db
-    })
-    pickedRanked = selected
+      .slice(0, Math.max(limit, 8))
   }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
-  const remainingDayMin = sunsetInfo.minutes_until
   let bestOptH = 2
   let bestNetSun = 0
   for (let testH = 0.5; testH <= maxSupportedH; testH += 0.25) {
@@ -750,10 +775,7 @@ export async function GET(request: NextRequest) {
     const bucket = withTravel.filter(r => r.bestTravelMin <= testMin && r.bestTravelMin > (testH - 0.5) * 60)
     if (bucket.length === 0) continue
     const avgNet = bucket.reduce((sum, r) => {
-      const sunMin = r.sun_score.sunshine_forecast_min
-      const travelRound = r.bestTravelMin * 2
-      const usableSun = Math.max(0, Math.min(sunMin, remainingDayMin - travelRound))
-      return sum + usableSun
+      return sum + r.netSunAfterArrivalMin
     }, 0) / bucket.length
     if (avgNet > bestNetSun) {
       bestNetSun = avgNet
@@ -763,7 +785,7 @@ export async function GET(request: NextRequest) {
   if (demoMode) {
     const demoMidPool = withTravel
       .filter(r => r.bestTravelMin >= 90 && r.bestTravelMin <= 240)
-      .sort((a, b) => b.sun_score.score - a.sun_score.score)
+      .sort((a, b) => b.netSunAfterArrivalMin - a.netSunAfterArrivalMin)
     if (demoMidPool.length > 0) {
       const target = demoMidPool[0]
       const targetH = Math.round((target.bestTravelMin / 60) * 4) / 4
@@ -789,8 +811,7 @@ export async function GET(request: NextRequest) {
     rank: number
   ): EscapeResult => {
     const destSunMin = full.sun_score.sunshine_forecast_min
-    const roundTrip = full.bestTravelMin * 2
-    const netSun = Math.max(0, Math.min(destSunMin, remainingDayMin - roundTrip))
+    const netSun = full.netSunAfterArrivalMin
     const cmp = formatComparison(destSunMin, originSunMin)
 
     const liveTimeline = !demoMode && full.liveForecast ? timelineFromLive(full.liveForecast.hours, sunWindow) : null
@@ -826,7 +847,7 @@ export async function GET(request: NextRequest) {
       plan: buildTripPlan(full.destination),
       links: {
         google_maps: buildGoogleMapsDirectionsUrl(full.destination.maps_name, mapsOriginName),
-        sbb: buildSbbTimetableUrl(full.destination.sbb_name, sbbOriginName),
+        sbb: buildSbbTimetableUrl(full.destination.sbb_name, sbbOriginName, tripSpan),
         webcam: full.destination.webcam_url,
       },
       sun_timeline: liveTimeline ?? getMockSunTimeline(full.destination, demoMode),

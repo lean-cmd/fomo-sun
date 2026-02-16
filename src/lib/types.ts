@@ -21,6 +21,7 @@ export type Confidence = 'high' | 'medium' | 'low' | 'uncertain'
 export type SkyCondition = 'sun' | 'partial' | 'cloud' | 'night'
 
 export interface ScoreBreakdown {
+  net_sun_pct: number
   sunshine_pct: number
   cloud_pct: number
   altitude_bonus_pct: number

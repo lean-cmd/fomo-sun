@@ -16,6 +16,8 @@ interface WeatherData {
   sunshine_norm_cap_min?: number  // normalization cap for extended horizons (default 180)
   low_cloud_cover_pct: number     // predicted low cloud cover % (0-100)
   total_cloud_cover_pct: number   // predicted total cloud cover % (0-100)
+  net_sun_after_arrival_min?: number // usable sunshine after travel
+  net_sun_norm_cap_min?: number      // normalization cap for net sun
   gain_vs_origin_min?: number     // additional sunshine vs origin in same horizon
   gain_norm_cap_min?: number      // normalization cap for gain ratio (default sunshine cap)
   is_inversion_likely: boolean    // derived from temperature profile or manual flag
@@ -33,6 +35,8 @@ export function computeSunScore(
   // Normalize sunshine forecast (0-1)
   const sunshineCap = Math.max(60, weather.sunshine_norm_cap_min ?? 180)
   const sunshine_norm = Math.min(weather.sunshine_forecast_min / sunshineCap, 1)
+  const netSunCap = Math.max(60, weather.net_sun_norm_cap_min ?? sunshineCap)
+  const net_sun_norm = Math.min(Math.max((weather.net_sun_after_arrival_min ?? weather.sunshine_forecast_min) / netSunCap, 0), 1)
 
   // Invert low cloud cover (high cloud cover = bad)
   const low_cloud_norm = 1 - (weather.low_cloud_cover_pct / 100)
@@ -48,9 +52,10 @@ export function computeSunScore(
 
   // Weighted score
   const score = Math.min(1, Math.max(0,
-    0.6 * sunshine_norm +
-    0.3 * low_cloud_norm +
-    0.1 * altitude_bonus
+    0.56 * net_sun_norm +
+    0.24 * sunshine_norm +
+    0.14 * low_cloud_norm +
+    0.06 * altitude_bonus
   ))
 
   const gainCap = Math.max(60, weather.gain_norm_cap_min ?? sunshineCap)
@@ -66,6 +71,7 @@ export function computeSunScore(
     low_cloud_cover_pct: weather.low_cloud_cover_pct,
     altitude_bonus,
     score_breakdown: {
+      net_sun_pct: Math.round(net_sun_norm * 100),
       sunshine_pct: Math.round(sunshine_norm * 100),
       cloud_pct: Math.round(low_cloud_norm * 100),
       altitude_bonus_pct: Math.round(altitude_bonus * 100),

@@ -36,14 +36,25 @@ function hhmm(iso: string) {
   return new Date(iso).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })
 }
 
+function splitDateTime(raw?: string) {
+  if (!raw) return null
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/)
+  if (!m) return null
+  return { date: m[1], time: m[2] }
+}
+
 function encodeSbbUrl(from: string, to: string, departureIso?: string) {
-  const p = new URLSearchParams({ from, to })
-  if (departureIso) {
-    const d = new Date(departureIso)
-    p.set('date', d.toISOString().slice(0, 10))
-    p.set('time', d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }))
-  }
-  return `https://www.sbb.ch/en/timetable.html?${p.toString()}`
+  const d = departureIso ? new Date(departureIso) : new Date()
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  const p = new URLSearchParams({
+    von: from,
+    nach: to,
+    date: `"${d.toISOString().slice(0, 10)}"`,
+    time: `"${hh}:${mm}"`,
+    moment: 'DEPARTURE',
+  })
+  return `https://www.sbb.ch/en?${p.toString()}`
 }
 
 function lineAndCategory(products: string[] | undefined) {
@@ -66,8 +77,9 @@ function pseudo(min: number, max: number, seed: number) {
   return Math.round(min + (max - min) * n)
 }
 
-function mockConnections(from: string, to: string, limit: number): SbbConnection[] {
-  const now = Date.now()
+function mockConnections(from: string, to: string, limit: number, departureAt?: string): SbbConnection[] {
+  const split = splitDateTime(departureAt)
+  const now = split ? new Date(`${split.date}T${split.time}:00`).getTime() : Date.now()
   const seedBase = seedFrom(`${from}|${to}`)
   return Array.from({ length: clamp(limit, 1, 6) }).map((_, idx) => {
     const seed = seedBase + idx * 19
@@ -102,20 +114,22 @@ export async function getNextConnections(
   from: string,
   to: string,
   limit = 3,
-  opts?: { demo?: boolean }
+  opts?: { demo?: boolean; departureAt?: string }
 ): Promise<SbbConnection[]> {
   const safeFrom = from.trim() || 'Basel'
   const safeTo = to.trim()
   if (!safeTo) return []
 
   const safeLimit = clamp(limit, 1, 6)
-  const key = `${safeFrom.toLowerCase()}|${safeTo.toLowerCase()}|${safeLimit}|${opts?.demo ? 1 : 0}`
+  const split = splitDateTime(opts?.departureAt)
+  const departureTag = split ? `${split.date}T${split.time}` : 'now'
+  const key = `${safeFrom.toLowerCase()}|${safeTo.toLowerCase()}|${safeLimit}|${opts?.demo ? 1 : 0}|${departureTag}`
   const now = Date.now()
   const cached = cache.get(key)
   if (cached && cached.expires_at > now) return cached.rows
 
   if (opts?.demo) {
-    const rows = mockConnections(safeFrom, safeTo, safeLimit)
+    const rows = mockConnections(safeFrom, safeTo, safeLimit, opts.departureAt)
     cache.set(key, { expires_at: now + CACHE_TTL_MS, rows })
     return rows
   }
@@ -124,6 +138,10 @@ export async function getNextConnections(
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS)
   try {
     const p = new URLSearchParams({ from: safeFrom, to: safeTo, limit: String(safeLimit) })
+    if (split) {
+      p.set('date', split.date)
+      p.set('time', split.time)
+    }
     const res = await fetch(`${BASE}?${p.toString()}`, {
       signal: controller.signal,
       next: { revalidate: 300 },

@@ -1,12 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   Car,
   Clock3,
   ChevronDown,
   Cloud,
-  Heart,
   Info,
   LocateFixed,
   MapPinned,
@@ -15,7 +14,6 @@ import {
   Sun,
   Thermometer,
   TrainFront,
-  X,
 } from 'lucide-react'
 import {
   DaylightWindow,
@@ -29,6 +27,14 @@ import { buildOriginSentences } from '@/lib/origin-sentences'
 type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
+type TrainConnectionPreview = {
+  id: string
+  departure_hhmm: string
+  arrival_hhmm: string
+  duration_min: number
+  transfers: number
+  note?: string
+}
 type WeatherKind = 'sunny' | 'partly' | 'cloudy' | 'foggy'
 type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 
@@ -248,7 +254,7 @@ function SunTimelineBar({
   const now = new Date()
   const nowHour = now.getHours() + now.getMinutes() / 60
   const nowPct = clamp((nowHour / 24) * 100, 0, 100)
-  const travelPct = travelMin ? clamp(nowPct + ((travelMin / 60) / 24) * 100, 0, 100) : 0
+  const travelWidthPct = travelMin ? clamp(((travelMin / 60) / 24) * 100, 0, 100 - nowPct) : 0
 
   return (
     <div className="space-y-1">
@@ -262,7 +268,9 @@ function SunTimelineBar({
         {rightNightPct > 0 && <div className="tl-seg tl-night" style={{ width: `${rightNightPct}%` }} />}
 
         {showNowMarker && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
-        {showNowMarker && travelMin && <div className="tl-travel-overlay" style={{ width: `${travelPct}%` }} />}
+        {travelMin && travelWidthPct > 0 && (
+          <div className="tl-travel-overlay" style={{ left: `${nowPct}%`, width: `${travelWidthPct}%` }} />
+        )}
       </div>
       {!compact && (
         <div className="fomo-timeline-hours">
@@ -305,6 +313,48 @@ function WhatsAppIcon({ className = 'w-4 h-4' }: { className?: string }) {
   )
 }
 
+function DestinationStamp({ escape }: { escape: EscapeCard }) {
+  const typeSet = new Set(escape.destination.types || [])
+  const stampKind = typeSet.has('thermal')
+    ? 'thermal'
+    : typeSet.has('lake')
+      ? 'lake'
+      : typeSet.has('town')
+        ? 'town'
+        : typeSet.has('mountain')
+          ? 'mountain'
+          : 'sun'
+
+  return (
+    <div className="hero-stamp" aria-hidden="true">
+      <div className="hero-stamp-name">{escape.destination.name.toUpperCase()}</div>
+      <svg viewBox="0 0 56 20" className="hero-stamp-icon">
+        {stampKind === 'mountain' && <path d="M3 18 16 4 26 14 33 8 45 18Z" fill="currentColor" opacity="0.9" />}
+        {stampKind === 'lake' && <path d="M4 12c4 0 4 2 8 2s4-2 8-2 4 2 8 2 4-2 8-2 4 2 8 2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />}
+        {stampKind === 'town' && (
+          <>
+            <rect x="8" y="9" width="16" height="9" fill="currentColor" opacity="0.9" />
+            <path d="M33 18V6l5-4 5 4v12" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+          </>
+        )}
+        {stampKind === 'thermal' && (
+          <>
+            <path d="M12 18h32" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M20 16c2-3-2-4 0-7m8 7c2-3-2-4 0-7m8 7c2-3-2-4 0-7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none" />
+          </>
+        )}
+        {stampKind === 'sun' && (
+          <>
+            <circle cx="28" cy="10" r="4" fill="currentColor" />
+            <path d="M28 1v4M28 15v4M19 10h4M33 10h4M22.5 4.5l2.8 2.8M30.7 12.7l2.8 2.8M33.5 4.5l-2.8 2.8M25.3 12.7l-2.8 2.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </>
+        )}
+      </svg>
+      <div className="hero-stamp-alt">{escape.destination.altitude_m}m</div>
+    </div>
+  )
+}
+
 function getBestTravel(escape: EscapeCard) {
   const car = escape.travel.car?.duration_min ?? Infinity
   const train = escape.travel.train?.duration_min ?? Infinity
@@ -330,16 +380,15 @@ export default function Home() {
   const [showResultFilters, setShowResultFilters] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
-  const [dismissedIds, setDismissedIds] = useState<string[]>([])
-  const [savedIds, setSavedIds] = useState<string[]>([])
 
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [demo, setDemo] = useState(true)
-  const [openCard, setOpenCard] = useState<number | null>(0)
-  const [openFastest, setOpenFastest] = useState(false)
+  const [openCardId, setOpenCardId] = useState<string | null>(null)
   const [heroFlowDir, setHeroFlowDir] = useState<'left' | 'right'>('right')
   const [heroFlowTick, setHeroFlowTick] = useState(0)
+  const [tickerIndex, setTickerIndex] = useState(0)
+  const [tickerFade, setTickerFade] = useState(false)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
@@ -347,6 +396,7 @@ export default function Home() {
   const [locating, setLocating] = useState(false)
 
   const [expandedScoreDetails, setExpandedScoreDetails] = useState<Record<string, boolean>>({})
+  const [trainPreviewById, setTrainPreviewById] = useState<Record<string, { loading: boolean; rows: TrainConnectionPreview[]; error?: boolean }>>({})
 
   const requestCtrlRef = useRef<AbortController | null>(null)
   const resultsRef = useRef<HTMLElement | null>(null)
@@ -374,8 +424,6 @@ export default function Home() {
   const topEscape = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
-  const fastestTravel = fastestEscape ? getBestTravel(fastestEscape) : null
-  const fastestGainMin = fastestEscape ? Math.max(0, fastestEscape.sun_score.sunshine_forecast_min - originSunMin) : 0
   const originTempC = extractTemp(data?.origin_conditions.description || '') ?? 0
   const originFomoPct = data ? Math.round(data.origin_conditions.sun_score * 100) : 0
 
@@ -434,6 +482,46 @@ export default function Home() {
     joyAnimRef.current = requestAnimationFrame(step)
   }, [applyJoyPosition, stopJoystickAnim])
 
+  const pulseJoystick = useCallback((dir: 'left' | 'right', strength = 0.72) => {
+    stopJoystickAnim()
+    setIsJoystickActive(true)
+    applyJoyPosition(dir === 'left' ? -strength : strength, false)
+    joyVelRef.current = 0
+    window.setTimeout(() => {
+      startJoystickSpringBack()
+    }, 28)
+  }, [applyJoyPosition, startJoystickSpringBack, stopJoystickAnim])
+
+  const stepJoystickRange = useCallback((dir: 'left' | 'right') => {
+    setJoystickNudge(false)
+    const delta = dir === 'left' ? -1 : 1
+    const next = clamp(rangeIndex + delta, 0, TRAVEL_BANDS.length - 1)
+    if (next === rangeIndex) {
+      pulseJoystick(dir, 0.58)
+      return
+    }
+    joystickDirRef.current = dir
+    previewRangeRef.current = null
+    setPreviewRangeIndex(null)
+    setRangeIndex(next)
+    pulseJoystick(dir)
+  }, [pulseJoystick, rangeIndex])
+
+  const setJoystickRange = useCallback((targetIndex: number) => {
+    const next = clamp(targetIndex, 0, TRAVEL_BANDS.length - 1)
+    if (next === rangeIndex) {
+      pulseJoystick(next === 0 ? 'right' : 'left', 0.5)
+      return
+    }
+    const dir = next > rangeIndex ? 'right' : 'left'
+    joystickDirRef.current = dir
+    previewRangeRef.current = null
+    setPreviewRangeIndex(null)
+    setRangeIndex(next)
+    setJoystickNudge(false)
+    pulseJoystick(dir, 0.64)
+  }, [pulseJoystick, rangeIndex])
+
   const joyFromPointerX = useCallback((clientX: number) => {
     const el = joystickZoneRef.current
     if (!el) return 0
@@ -484,6 +572,18 @@ export default function Home() {
     previewRangeRef.current = null
     setPreviewRangeIndex(null)
     startJoystickSpringBack()
+  }
+
+  const onJoystickKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      stepJoystickRange('left')
+      return
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      stepJoystickRange('right')
+    }
   }
 
   const rangeLabel = activeBand.label
@@ -564,6 +664,30 @@ export default function Home() {
     })
   }, [data, topEscape, origin.name, originTempC, originFomoPct])
 
+  useEffect(() => {
+    setTickerIndex(0)
+    if (originSentences.length <= 1) {
+      setTickerFade(false)
+      return
+    }
+
+    let fadeTimeout: number | null = null
+    const interval = window.setInterval(() => {
+      setTickerFade(true)
+      fadeTimeout = window.setTimeout(() => {
+        setTickerIndex(prev => (prev + 1) % originSentences.length)
+        setTickerFade(false)
+      }, 200)
+    }, 6000)
+
+    return () => {
+      window.clearInterval(interval)
+      if (fadeTimeout) window.clearTimeout(fadeTimeout)
+    }
+  }, [originSentences])
+
+  const tickerText = originSentences[tickerIndex] || `Forecast in ${origin.name}: ${originTempC}° · ${weatherLabel(data?.origin_conditions.description)}`
+
   const detectLocation = async () => {
     if (!navigator.geolocation) return
     setLocating(true)
@@ -602,23 +726,15 @@ export default function Home() {
 
   const topBestTravel = topEscape ? getBestTravel(topEscape) : null
   const topSunMin = topEscape?.sun_score.sunshine_forecast_min ?? 0
+  const topNetSunMin = topEscape?.net_sun_min ?? 0
   const sunGainMin = Math.max(0, topSunMin - originSunMin)
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
-  const toggleSaved = (id: string) => {
-    setSavedIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id])
-  }
-
-  const dismissSuggestion = (id: string) => {
-    setDismissedIds(prev => prev.includes(id) ? prev : [...prev, id])
-    setSavedIds(prev => prev.filter(v => v !== id))
-  }
-
   const jumpToBestDetails = () => {
-    setOpenCard(0)
+    if (topEscape) setOpenCardId(topEscape.destination.id)
     requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -635,18 +751,33 @@ export default function Home() {
           return has(chip)
         })
       })
-    return typed.filter(escape => !dismissedIds.includes(escape.destination.id))
-  }, [activeTypeChips, dismissedIds, resultRows, originSunMin])
+    return typed
+  }, [activeTypeChips, resultRows, originSunMin])
 
   const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
 
+  const displayRows = useMemo(() => {
+    const base = visibleRows.map(escape => ({ escape, isFastest: false }))
+    if (!fastestEscape) return base
+
+    const existingIdx = base.findIndex(row => row.escape.destination.id === fastestEscape.destination.id)
+    if (existingIdx >= 0) {
+      return base.map((row, idx) => idx === existingIdx ? { ...row, isFastest: true } : row)
+    }
+
+    const merged = [...base]
+    const insertAt = Math.min(1, merged.length)
+    merged.splice(insertAt, 0, { escape: fastestEscape, isFastest: true })
+    return merged.slice(0, 5)
+  }, [fastestEscape, visibleRows])
+
   useEffect(() => {
-    if (!visibleRows.length) {
-      setOpenCard(null)
+    if (!displayRows.length) {
+      setOpenCardId(null)
       return
     }
-    setOpenCard(0)
-  }, [visibleRows.length])
+    setOpenCardId(displayRows[0]?.escape.destination.id ?? null)
+  }, [displayRows])
 
   const timelineOriginPreview = timelineEmojiPreview(data?.origin_timeline, dayFocus)
 
@@ -677,6 +808,53 @@ export default function Home() {
 
     return `https://wa.me/?text=${encodeURIComponent(shareText)}`
   }
+
+  const loadTrainPreview = useCallback(async (escape: EscapeCard) => {
+    const id = escape.destination.id
+    if (!escape.travel.train || !escape.destination.sbb_name) return
+    const current = trainPreviewById[id]
+    if (current?.loading || current?.rows?.length) return
+
+    setTrainPreviewById(prev => ({ ...prev, [id]: { loading: true, rows: prev[id]?.rows || [] } }))
+    try {
+      const p = new URLSearchParams({
+        from: origin.name,
+        to: escape.destination.sbb_name,
+        limit: '3',
+        demo: String(demo),
+        day_focus: dayFocus,
+      })
+      const res = await fetch(`/api/v1/sbb-connections?${p.toString()}`)
+      const payload = await res.json()
+      const rows = Array.isArray(payload?.connections) ? payload.connections : []
+      setTrainPreviewById(prev => ({
+        ...prev,
+        [id]: {
+          loading: false,
+          rows,
+          error: rows.length === 0,
+        },
+      }))
+    } catch {
+      setTrainPreviewById(prev => ({
+        ...prev,
+        [id]: {
+          loading: false,
+          rows: prev[id]?.rows || [],
+          error: true,
+        },
+      }))
+    }
+  }, [dayFocus, demo, origin.name, trainPreviewById])
+
+  useEffect(() => {
+    if (!openCardId) return
+    const active = displayRows.find(row => row.escape.destination.id === openCardId)?.escape
+    if (!active || !active.travel.train || !active.destination.sbb_name) return
+    const rec = trainPreviewById[active.destination.id]
+    if (rec?.loading || rec?.rows?.length || rec?.error) return
+    void loadTrainPreview(active)
+  }, [displayRows, loadTrainPreview, openCardId, trainPreviewById])
 
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
@@ -729,7 +907,9 @@ export default function Home() {
         <section className="h-12 flex flex-col justify-center text-center">
           <p className="text-[13px] text-slate-700">
             <span className="text-slate-500">☀️ FOMO Sun | </span>
-            {originSentences[0] || `Forecast in ${origin.name}: ${originTempC}° · ${weatherLabel(data?.origin_conditions.description)}`}
+            <span className={`transition-opacity duration-[400ms] ${tickerFade ? 'opacity-0' : 'opacity-100'}`}>
+              {tickerText}
+            </span>
           </p>
           <p className="text-[10px] text-slate-400 inline-flex items-center justify-center gap-1 mt-0.5">
             <Info className="w-3 h-3" strokeWidth={1.8} /> Based on live forecast
@@ -758,42 +938,47 @@ export default function Home() {
                     {topEscape.destination.name}
                   </h1>
                   <p className="text-[11px] text-slate-500 mt-0.5">{topEscape.destination.region} · {FLAG[topEscape.destination.country]}</p>
-                  {sunGainMin > 0 && (
-                    <p className="text-[12px] font-semibold text-emerald-600 mt-1">☀️ +{formatSunHours(sunGainMin)} more sun than {origin.name}</p>
-                  )}
-                  <div className="mt-1.5">
-                    <p className="text-[18px] leading-none font-semibold text-amber-600 inline-flex items-center gap-1.5">
+                  <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+                    <p className="text-[19px] leading-none font-semibold text-amber-600 inline-flex items-end gap-1.5">
                       <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                       <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
+                      {sunGainMin > 0 && (
+                        <span className="text-[12px] text-emerald-600 font-semibold">
+                          +{formatSunHours(sunGainMin)}
+                        </span>
+                      )}
                     </p>
                     {topBestTravel && (
-                      <p className="mt-1 text-[12px] text-slate-500 inline-flex items-center gap-1">
+                      <p className="text-[19px] leading-none text-slate-600 inline-flex items-end gap-1.5 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
                         <IconForMode mode={topBestTravel.mode} />
                         {formatTravelClock(topBestTravel.min / 60)}
                       </p>
                     )}
                   </div>
+                  <p className="mt-1 text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                    net {formatSunHours(topNetSunMin)} after arrival
+                  </p>
                 </div>
               </div>
 
-              <a
-                href={buildWhatsAppHref(topEscape)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 h-11 rounded-full border border-emerald-200 bg-emerald-50/60 px-3 text-[11px] font-semibold text-slate-800 hover:bg-emerald-50"
-              >
-                <WhatsAppIcon className="w-4 h-4" />
-                Share
-              </a>
+              <div className="flex flex-col items-end gap-2">
+                <DestinationStamp escape={topEscape} />
+                <a
+                  href={buildWhatsAppHref(topEscape)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 h-11 rounded-full border border-emerald-200 bg-emerald-50/60 px-3 text-[11px] font-semibold text-slate-800 hover:bg-emerald-50"
+                >
+                  <WhatsAppIcon className="w-4 h-4" />
+                  Share
+                </a>
+              </div>
             </div>
 
             <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-2">
               <div className="flex items-center justify-between text-[11px] text-slate-600">
                 <span className="font-medium">{origin.name}</span>
-                <span className="inline-flex items-center gap-1">
-                  <span>{timelineOriginPreview}</span>
-                  <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(originSunMin)}</span>
-                </span>
+                <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(originSunMin)}</span>
               </div>
               <SunTimelineBar
                 timeline={data?.origin_timeline || topEscape.sun_timeline}
@@ -805,10 +990,7 @@ export default function Home() {
 
               <div className="flex items-center justify-between text-[11px] text-slate-700">
                 <span className="font-semibold">{topEscape.destination.name}</span>
-                <span className="inline-flex items-center gap-1">
-                  <span>{timelineEmojiPreview(topEscape.sun_timeline, dayFocus)}</span>
-                  <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
-                </span>
+                <span style={{ fontFamily: 'DM Mono, monospace' }}>{formatSunHours(topEscape.sun_score.sunshine_forecast_min)}</span>
               </div>
               <SunTimelineBar
                 timeline={topEscape.sun_timeline}
@@ -844,12 +1026,14 @@ export default function Home() {
           >
             <div
               ref={joystickZoneRef}
-              className={`fomo-joystick ${isJoystickActive ? 'is-active' : ''}`}
+              className={`fomo-joystick ${isJoystickActive ? 'is-active' : ''} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300 focus-visible:ring-offset-2`}
               onPointerDown={onJoystickPointerDown}
               onPointerMove={onJoystickPointerMove}
               onPointerUp={onJoystickPointerUp}
               onPointerCancel={onJoystickPointerUp}
+              onKeyDown={onJoystickKeyDown}
               role="slider"
+              tabIndex={0}
               aria-label="Travel joystick"
               aria-valuemin={MIN_TRAVEL_H}
               aria-valuemax={MAX_TRAVEL_H}
@@ -868,153 +1052,21 @@ export default function Home() {
             {TRAVEL_BANDS.map((band, idx) => {
               const active = idx === effectiveRangeIndex
               return (
-                <span
+                <button
                   key={band.id}
+                  type="button"
+                  onClick={() => setJoystickRange(idx)}
                   className={`h-7 rounded-full border inline-flex items-center justify-center ${
                     active ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold' : 'border-slate-200 bg-white text-slate-500'
-                  }`}
+                  } cursor-pointer hover:border-amber-200 active:scale-[0.98] transition`}
                   style={{ fontFamily: 'DM Mono, monospace' }}
                 >
                   {band.label}
-                </span>
+                </button>
               )
             })}
           </div>
         </section>
-
-        {fastestEscape && (
-          <article className="fomo-card border-l-[3px] border-l-amber-400 overflow-hidden mb-3">
-            <button
-              type="button"
-              onClick={() => setOpenFastest(v => !v)}
-              className="w-full text-left px-3.5 pt-3.5 pb-2.5"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">⚡ Fastest escape</p>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${openFastest ? 'rotate-180' : ''}`} />
-              </div>
-              <div className="mt-1.5 flex items-start gap-3">
-                <ScoreRing score={fastestEscape.sun_score.score} size={40} />
-
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="text-[15px] font-semibold text-slate-900 truncate">{fastestEscape.destination.name}</h3>
-                      <p className="text-[11px] text-slate-500 mt-0.5">{fastestEscape.destination.region} · {fastestEscape.destination.altitude_m.toLocaleString()}m · {FLAG[fastestEscape.destination.country]}</p>
-                      <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
-                        <span>{Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°</span>
-                        <span>{weatherEmoji(fastestEscape.weather_now?.summary)}</span>
-                        <span>{weatherLabel(fastestEscape.weather_now?.summary)}</span>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 flex items-end gap-2 text-right">
-                      <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
-                        <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                        {formatSunHours(fastestEscape.sun_score.sunshine_forecast_min)}
-                      </p>
-                      {fastestTravel && (
-                        <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
-                          <IconForMode mode={fastestTravel.mode} />
-                          {formatTravelClock(fastestTravel.min / 60)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {fastestGainMin > 0 && (
-                    <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(fastestGainMin)} vs {origin.name}</p>
-                  )}
-                </div>
-              </div>
-            </button>
-
-            <div className={`grid transition-all duration-200 ease-out ${openFastest ? 'grid-rows-[1fr] border-t border-slate-200' : 'grid-rows-[0fr]'}`}>
-              <div className="overflow-hidden">
-                <div className="px-3.5 py-3 space-y-3">
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Detailed weather</p>
-                    <div className="flex flex-wrap gap-2 text-[11px] text-slate-600">
-                      <span className="inline-flex items-center gap-1">
-                        <Thermometer className="w-3.5 h-3.5" strokeWidth={1.8} />
-                        {Math.round(fastestEscape.weather_now?.temp_c ?? 0)}°C
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Cloud className="w-3.5 h-3.5" strokeWidth={1.8} />
-                        {fastestEscape.conditions}
-                      </span>
-                      <span className="inline-flex items-center gap-1">
-                        <Sun className="w-3.5 h-3.5 text-amber-500" strokeWidth={1.8} />
-                        {fastestEscape.sun_score.low_cloud_cover_pct}% low cloud
-                      </span>
-                    </div>
-                  </div>
-
-                  {fastestEscape.travel.train && (
-                    <div className="rounded-xl border border-slate-200 bg-white p-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Live train info</p>
-                      <div className="flex flex-wrap gap-2 text-[11px] text-slate-700">
-                        <span className="inline-flex items-center gap-1">
-                          <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                          {formatTravelClock(fastestEscape.travel.train.duration_min / 60)}
-                        </span>
-                        {typeof fastestEscape.travel.train.changes === 'number' && (
-                          <span className="text-slate-500">
-                            {fastestEscape.travel.train.changes} change{fastestEscape.travel.train.changes === 1 ? '' : 's'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {fastestEscape.plan.length > 0 && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Trip plan</p>
-                      <div className="space-y-1">
-                        {fastestEscape.plan.map((step, idx) => (
-                          <p key={idx} className="text-[12px] text-slate-700 leading-snug">{step.replace(/[📍🥾🍽️💡]/g, '').trim()}</p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {fastestEscape.links.google_maps && (
-                      <a
-                        href={fastestEscape.links.google_maps}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl bg-slate-900 text-white text-[11px] font-semibold hover:bg-slate-800"
-                      >
-                        <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
-                        Navigate
-                      </a>
-                    )}
-                    {fastestEscape.links.sbb && (
-                      <a
-                        href={fastestEscape.links.sbb}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
-                      >
-                        <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                        SBB timetable
-                      </a>
-                    )}
-                    <a
-                      href={buildWhatsAppHref(fastestEscape)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-emerald-200 bg-emerald-50/60 text-slate-800 text-[11px] font-semibold hover:bg-emerald-50"
-                    >
-                      <WhatsAppIcon className="w-4 h-4" />
-                      Share via WhatsApp
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        )}
 
         <section ref={resultsRef}>
           <div className="flex items-baseline justify-between mb-2.5">
@@ -1049,7 +1101,7 @@ export default function Home() {
                   <option value="train">Train</option>
                 </select>
               </label>
-              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{visibleRows.length}</span>
+              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{displayRows.length}</span>
             </div>
           </div>
 
@@ -1077,13 +1129,7 @@ export default function Home() {
             </section>
           )}
 
-          {savedIds.length > 0 && (
-            <p className="mb-2 text-[11px] text-emerald-700 inline-flex items-center gap-1">
-              <Heart className="w-3.5 h-3.5" strokeWidth={1.8} fill="currentColor" /> {savedIds.length} saved
-            </p>
-          )}
-
-          {visibleRows.length === 0 && !loading && (
+          {displayRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
               <p className="text-[14px] text-slate-700">No better escapes than {origin.name} in this joystick range.</p>
               <p className="text-[12px] text-slate-500 mt-1">Push the joystick right for broader options.</p>
@@ -1091,9 +1137,9 @@ export default function Home() {
           )}
 
           <div className={`space-y-2.5 transition-opacity duration-150 ${(loading || isJoystickActive) ? 'opacity-60' : 'opacity-100'}`}>
-            {visibleRows.map((escape, index) => {
+            {displayRows.map(({ escape, isFastest }, index) => {
               const bestTravel = getBestTravel(escape)
-              const isOpen = openCard === index
+              const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
               const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
@@ -1101,20 +1147,25 @@ export default function Home() {
               return (
                 <article
                   key={escape.destination.id}
-                  className="fomo-card overflow-hidden"
+                  className={`fomo-card overflow-hidden ${isFastest ? 'border-l-[3px] border-l-amber-400' : ''}`}
                   style={{ animation: `cardIn 260ms cubic-bezier(0.22, 1, 0.36, 1) ${Math.min(index * 45, 180)}ms both` }}
                 >
                   <div className="px-3.5 pt-3.5 pb-2.5">
                     <div className="flex items-start gap-2">
                       <button
                         type="button"
-                        onClick={() => setOpenCard(prev => prev === index ? null : index)}
+                        onClick={() => setOpenCardId(prev => prev === escape.destination.id ? null : escape.destination.id)}
                         className="flex-1 text-left"
                       >
                         <div className="flex items-start gap-3">
                           <ScoreRing score={escape.sun_score.score} size={40} />
 
                           <div className="flex-1 min-w-0">
+                            {isFastest && (
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold mb-1">
+                                ⚡ Fastest escape
+                              </p>
+                            )}
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
                                 <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
@@ -1126,51 +1177,33 @@ export default function Home() {
                                 </div>
                               </div>
 
-                              <div className="shrink-0 text-right">
-                                <div className="inline-flex items-end gap-2">
-                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-1 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                              <div className="shrink-0">
+                                <div className="inline-flex items-end gap-3">
+                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-end gap-1.5 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
                                     <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                                    {formatSunHours(escape.sun_score.sunshine_forecast_min)}
+                                    <span>{formatSunHours(escape.sun_score.sunshine_forecast_min)}</span>
+                                    {gainMin > 0 && (
+                                      <span className="text-[12px] text-emerald-600 font-semibold">
+                                        +{formatSunHours(gainMin)}
+                                      </span>
+                                    )}
                                   </p>
                                   {bestTravel && (
-                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-end gap-1 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
                                       <IconForMode mode={bestTravel.mode} />
-                                      {formatTravelClock(bestTravel.min / 60)}
+                                      <span>{formatTravelClock(bestTravel.min / 60)}</span>
                                     </p>
                                   )}
                                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
-                                {gainMin > 0 && (
-                                  <p className="mt-1 text-[11px] text-emerald-600 font-semibold">+{formatSunHours(gainMin)} vs {origin.name}</p>
-                                )}
+                                <p className="mt-1 text-[11px] text-slate-500 text-right" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                  net {formatSunHours(escape.net_sun_min)}
+                                </p>
                               </div>
                             </div>
                           </div>
                         </div>
                       </button>
-
-                      <div className="flex flex-col gap-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleSaved(escape.destination.id)}
-                          className={`w-8 h-8 rounded-full border inline-flex items-center justify-center transition ${
-                            savedIds.includes(escape.destination.id)
-                              ? 'border-emerald-300 bg-emerald-50 text-emerald-600'
-                              : 'border-slate-200 bg-white text-slate-500 hover:text-slate-700'
-                          }`}
-                          aria-label={savedIds.includes(escape.destination.id) ? 'Unsave escape' : 'Save escape'}
-                        >
-                          <Heart className="w-3.5 h-3.5" strokeWidth={1.9} fill={savedIds.includes(escape.destination.id) ? 'currentColor' : 'none'} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => dismissSuggestion(escape.destination.id)}
-                          className="w-8 h-8 rounded-full border border-slate-200 bg-white text-slate-500 inline-flex items-center justify-center hover:text-slate-700"
-                          aria-label="Don't suggest again"
-                        >
-                          <X className="w-3.5 h-3.5" strokeWidth={1.9} />
-                        </button>
-                      </div>
                     </div>
                   </div>
 
@@ -1202,17 +1235,38 @@ export default function Home() {
                         {escape.travel.train && (
                           <div className="rounded-xl border border-slate-200 bg-white p-2.5">
                             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Live train info</p>
-                            <div className="flex flex-wrap gap-2 text-[11px] text-slate-700">
-                              <span className="inline-flex items-center gap-1">
-                                <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                                {formatTravelClock(escape.travel.train.duration_min / 60)}
-                              </span>
-                              {typeof escape.travel.train.changes === 'number' && (
-                                <span className="text-slate-500">
-                                  {escape.travel.train.changes} change{escape.travel.train.changes === 1 ? '' : 's'}
+                            {trainPreviewById[escape.destination.id]?.loading ? (
+                              <p className="text-[11px] text-slate-500 inline-flex items-center gap-1">
+                                <Clock3 className="w-3.5 h-3.5 animate-spin" />
+                                Loading next departures
+                              </p>
+                            ) : trainPreviewById[escape.destination.id]?.rows?.length ? (
+                              <div className="space-y-1.5">
+                                {trainPreviewById[escape.destination.id].rows.slice(0, 3).map(conn => {
+                                  const transferText = conn.transfers > 0 ? `${conn.transfers}x` : 'direct'
+                                  return (
+                                    <p key={conn.id} className="text-[11px] text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                      dep {conn.departure_hhmm} → arr {conn.arrival_hhmm} ({formatTravelClock(conn.duration_min / 60)}, {transferText})
+                                    </p>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2 text-[11px] text-slate-700">
+                                <span className="inline-flex items-center gap-1">
+                                  <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                                  {formatTravelClock(escape.travel.train.duration_min / 60)}
                                 </span>
-                              )}
-                            </div>
+                                {typeof escape.travel.train.changes === 'number' && (
+                                  <span className="text-slate-500">
+                                    {escape.travel.train.changes} change{escape.travel.train.changes === 1 ? '' : 's'}
+                                  </span>
+                                )}
+                                {trainPreviewById[escape.destination.id]?.error && (
+                                  <span className="text-slate-500">Live departures unavailable</span>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
 
@@ -1239,6 +1293,7 @@ export default function Home() {
                           <div className="overflow-hidden">
                             <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
                               {([
+                                ['Net sun', scoreBreakdown.net_sun_pct],
                                 ['Sunshine', scoreBreakdown.sunshine_pct],
                                 ['Cloud', scoreBreakdown.cloud_pct],
                                 ['Altitude', scoreBreakdown.altitude_bonus_pct],
@@ -1278,8 +1333,7 @@ export default function Home() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1.5 h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 text-[11px] font-semibold hover:bg-slate-50"
                             >
-                              <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                              SBB timetable
+                              🚆 SBB Timetable
                             </a>
                           )}
                           <a

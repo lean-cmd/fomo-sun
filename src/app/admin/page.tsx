@@ -6,7 +6,7 @@ import { Activity, Download, RefreshCw } from 'lucide-react'
 import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 import { formatSunHours } from '@/lib/format'
 
-type SortMode = 'score' | 'sun' | 'name' | 'altitude'
+type SortMode = 'score' | 'sun' | 'net' | 'name' | 'altitude'
 type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
@@ -96,6 +96,15 @@ export default function AdminDiagnosticsPage() {
     headers: {} as Record<string, string>,
   })
   const [originMeta, setOriginMeta] = useState<{ name: string; lat: number; lon: number } | null>(null)
+  const [originSnapshot, setOriginSnapshot] = useState<{
+    name: string
+    sunTodayMin: number
+    sunTomorrowMin: number
+    score: number
+    tempC: number
+    summary: string
+    timeline: SunTimeline
+  } | null>(null)
   const [logs, setLogs] = useState<RequestLogRow[]>([])
 
   const fetchData = async () => {
@@ -111,6 +120,7 @@ export default function AdminDiagnosticsPage() {
         limit: '5000',
         demo: 'false',
         admin: 'true',
+        admin_all: 'true',
       })
       const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`API ${res.status}`)
@@ -132,6 +142,16 @@ export default function AdminDiagnosticsPage() {
 
       setRows(payload.escapes || [])
       setOriginMeta(payload._meta?.origin || null)
+      const tempMatch = payload.origin_conditions.description.match(/(-?\d+)\s*°c/i)
+      setOriginSnapshot({
+        name: payload._meta?.origin?.name || 'Origin',
+        sunTodayMin: payload.origin_conditions.sunshine_min,
+        sunTomorrowMin: Math.max(0, Math.round((payload.tomorrow_sun_hours || 0) * 60)),
+        score: payload.origin_conditions.sun_score,
+        tempC: tempMatch ? Number(tempMatch[1]) : 0,
+        summary: payload.origin_conditions.description,
+        timeline: payload.origin_timeline,
+      })
       setMeta({
         liveSource: res.headers.get('x-fomo-live-source') || '',
         debugPath: res.headers.get('x-fomo-debug-live-path') || '',
@@ -228,6 +248,7 @@ export default function AdminDiagnosticsPage() {
 
     filtered.sort((a, b) => {
       if (sortMode === 'sun') return daySunMin(b) - daySunMin(a)
+      if (sortMode === 'net') return b.net_sun_min - a.net_sun_min
       if (sortMode === 'name') return a.destination.name.localeCompare(b.destination.name, 'de-CH')
       if (sortMode === 'altitude') return b.destination.altitude_m - a.destination.altitude_m
       return b.sun_score.score - a.sun_score.score
@@ -292,7 +313,7 @@ export default function AdminDiagnosticsPage() {
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
 
-    const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'temp_c', 'condition']
+    const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'net_sun_min', 'temp_c', 'condition']
     const lines = filteredSorted.map(r => [
       r.destination.name,
       r.destination.country,
@@ -302,6 +323,7 @@ export default function AdminDiagnosticsPage() {
       r.destination.altitude_m,
       Math.round(r.sun_score.score * 100),
       daySunMin(r),
+      r.net_sun_min,
       Math.round(r.weather_now?.temp_c ?? 0),
       r.weather_now?.summary || r.conditions,
     ])
@@ -388,6 +410,7 @@ export default function AdminDiagnosticsPage() {
             <select value={sortMode} onChange={e => setSortMode(e.target.value as SortMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
               <option value="score">FOMO score</option>
               <option value="sun">Sunshine</option>
+              <option value="net">Net sun</option>
               <option value="name">Name</option>
               <option value="altitude">Altitude</option>
             </select>
@@ -521,6 +544,7 @@ export default function AdminDiagnosticsPage() {
                 <th className="text-left px-3 py-2 font-semibold">Quality</th>
                 <th className="text-right px-3 py-2 font-semibold">Altitude</th>
                 <th className="text-right px-3 py-2 font-semibold">Sun</th>
+                <th className="text-right px-3 py-2 font-semibold">Net sun</th>
                 <th className="text-right px-3 py-2 font-semibold">FOMO</th>
                 <th className="text-right px-3 py-2 font-semibold">Temp</th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
@@ -530,14 +554,30 @@ export default function AdminDiagnosticsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
+                  <td colSpan={11} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
                 </tr>
               ) : filteredSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
+                  <td colSpan={11} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
                 </tr>
               ) : (
-                pagedRows.map((row) => {
+                <>
+                  {originSnapshot && (
+                    <tr className="border-t border-amber-200 bg-amber-50/70">
+                      <td className="px-3 py-2.5 text-slate-500">-</td>
+                      <td className="px-3 py-2.5 font-semibold text-slate-900">{originSnapshot.name} (origin)</td>
+                      <td className="px-3 py-2.5 text-slate-600">CH</td>
+                      <td className="px-3 py-2.5 text-slate-600">origin</td>
+                      <td className="px-3 py-2.5 text-right text-slate-500">-</td>
+                      <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(forecastDay === 'today' ? originSnapshot.sunTodayMin : originSnapshot.sunTomorrowMin)}</td>
+                      <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(forecastDay === 'today' ? originSnapshot.sunTodayMin : originSnapshot.sunTomorrowMin)}</td>
+                      <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(originSnapshot.score)}`}>{Math.round(originSnapshot.score * 100)}%</td>
+                      <td className="px-3 py-2.5 text-right text-slate-700">{originSnapshot.tempC}°C</td>
+                      <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={originSnapshot.summary}>{originSnapshot.summary}</td>
+                      <td className="px-3 py-2.5"><MiniTimeline timeline={originSnapshot.timeline} day={forecastDay} /></td>
+                    </tr>
+                  )}
+                  {pagedRows.map((row) => {
                   const isExpanded = expandedId === row.destination.id
                   const daySunMin = forecastDay === 'today' ? row.sun_score.sunshine_forecast_min : Math.round((row.tomorrow_sun_hours || 0) * 60)
                   const dayPrefix = forecastDay === 'today'
@@ -567,6 +607,7 @@ export default function AdminDiagnosticsPage() {
                         <td className="px-3 py-2.5 text-slate-600">{row.destination.quality ?? 'generated'}</td>
                         <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(row.net_sun_min)}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
                         <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
@@ -577,7 +618,7 @@ export default function AdminDiagnosticsPage() {
 
                       {isExpanded && (
                         <tr className="bg-slate-50/70 border-t border-slate-100">
-                          <td colSpan={10} className="px-3 py-3">
+                          <td colSpan={11} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>
@@ -609,7 +650,8 @@ export default function AdminDiagnosticsPage() {
                       )}
                     </>
                   )
-                })
+                })}
+                </>
               )}
             </tbody>
           </table>
