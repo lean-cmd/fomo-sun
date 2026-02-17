@@ -31,6 +31,7 @@ type RankedEscapeRow = {
   travel_time_min: number
   net_gain_min: number
   combined_score: number
+  temperature_c: number
   in_window: boolean
   window_overflow_min: number
 }
@@ -97,6 +98,20 @@ function dayStringInZurich(date: Date): string {
     month: '2-digit',
     day: '2-digit',
   }).format(date)
+}
+
+function isNearMidnightZurich(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ZURICH_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const hour = Number(parts.find(p => p.type === 'hour')?.value || '0')
+  const minute = Number(parts.find(p => p.type === 'minute')?.value || '0')
+  if (hour === 23 && minute >= 55) return true
+  if (hour === 0 && minute <= 5) return true
+  return false
 }
 
 function demoTrainFactor(id: string): number {
@@ -341,6 +356,7 @@ function normalizeQueryCacheKey(input: {
   tripSpan: TripSpan
   originName: string
   originKind: 'manual' | 'gps' | 'default'
+  agentPrefsKey: string
 }) {
   const latKey = input.lat.toFixed(3)
   const lonKey = input.lon.toFixed(3)
@@ -364,6 +380,7 @@ function normalizeQueryCacheKey(input: {
     `span=${input.tripSpan}`,
     `origin=${input.originName.toLowerCase() || '-'}`,
     `origin_kind=${input.originKind}`,
+    `agent=${input.agentPrefsKey || '-'}`,
   ].join('&')
 }
 
@@ -619,7 +636,7 @@ export async function GET(request: NextRequest) {
   const maxSupportedH = 4.5
   const lat = parseFloat(sp.get('lat') || String(DEFAULT_ORIGIN.lat))
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
-  const maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
+  let maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
   const travelWindowH = Math.min(2, Math.max(0.5, parseFloat(sp.get('travel_window_h') || '0.5')))
   const travelMinParam = sp.get('travel_min_h')
   const travelMaxParam = sp.get('travel_max_h')
@@ -637,10 +654,50 @@ export async function GET(request: NextRequest) {
     travelMinH = travelMaxH
     travelMaxH = tmp
   }
-  const mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
+  let mode: TravelMode = (sp.get('mode') as TravelMode) || 'both'
   const hasGA = sp.get('ga') === 'true'
   const typesParam = sp.get('types')
-  const types = typesParam ? typesParam.split(',') : []
+  let types = typesParam ? typesParam.split(',') : []
+  const forceRefresh = sp.get('force') === 'true'
+  const agentPrefsRaw = request.headers.get('X-FOMO-Agent-Preferences')
+  let agentPrefs: Record<string, unknown> = {}
+  if (agentPrefsRaw) {
+    try {
+      const parsed = JSON.parse(agentPrefsRaw)
+      if (parsed && typeof parsed === 'object') {
+        agentPrefs = parsed as Record<string, unknown>
+      }
+    } catch {
+      // Ignore malformed preference headers.
+    }
+  }
+  const prefTravelMode = typeof agentPrefs.travel_mode === 'string' ? agentPrefs.travel_mode.toLowerCase() : ''
+  if (prefTravelMode === 'car' || prefTravelMode === 'train' || prefTravelMode === 'both') {
+    mode = prefTravelMode as TravelMode
+  }
+  const prefDestinationTypes = Array.isArray(agentPrefs.destination_types)
+    ? agentPrefs.destination_types.map(v => String(v).trim().toLowerCase()).filter(Boolean)
+    : []
+  if (prefDestinationTypes.length > 0) {
+    types = prefDestinationTypes
+  }
+  const prefAvoidTypes = Array.isArray(agentPrefs.avoid_types)
+    ? agentPrefs.avoid_types.map(v => String(v).trim().toLowerCase()).filter(Boolean)
+    : []
+  const prefMaxTravelRaw = Number(agentPrefs.max_travel_h)
+  if (Number.isFinite(prefMaxTravelRaw) && prefMaxTravelRaw > 0) {
+    maxTravelH = Math.min(maxSupportedH, Math.max(0.5, prefMaxTravelRaw))
+    if (travelMinH !== null) travelMinH = Math.min(travelMinH, maxTravelH)
+    if (travelMaxH !== null) travelMaxH = Math.min(travelMaxH, maxTravelH)
+  }
+  const preferWarm = String(agentPrefs.temperature_preference || '').toLowerCase() === 'warm'
+  const agentPrefsKey = JSON.stringify({
+    travel_mode: mode,
+    destination_types: prefDestinationTypes,
+    avoid_types: prefAvoidTypes,
+    max_travel_h: Number.isFinite(prefMaxTravelRaw) ? Math.round(maxTravelH * 100) / 100 : null,
+    temperature_preference: preferWarm ? 'warm' : '',
+  })
   const adminView = sp.get('admin') === 'true'
   const adminAll = adminView && sp.get('admin_all') === 'true'
   const rawLimit = parseInt(sp.get('limit') || '6')
@@ -692,29 +749,31 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind,
+    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, agentPrefsKey,
   })
-  const cached = queryResponseCache.get(cacheKey)
-  if (cached && cached.expires_at > Date.now()) {
-    const cachedSource = cached.headers['X-FOMO-Live-Source'] === 'open-meteo' ? 'open-meteo' : 'mock'
-    const cachedPath = cached.headers['X-FOMO-Debug-Live-Path'] || `${liveDebugPath}-cache-hit`
-    const cachedFallback = cached.headers['X-FOMO-Live-Fallback']
-    logRequest({
-      status: 200,
-      liveSource: cachedSource,
-      livePath: `${cachedPath}-cache-hit`,
-      fallback: cachedFallback || undefined,
-      cacheHit: true,
-    })
-    return NextResponse.json(cached.response, {
-      headers: {
-        ...cached.headers,
-        'X-FOMO-Response-Cache': 'HIT',
-        'X-FOMO-Request-Ms': String(Date.now() - startedAt),
-      },
-    })
+  if (!forceRefresh) {
+    const cached = queryResponseCache.get(cacheKey)
+    if (cached && cached.expires_at > Date.now()) {
+      const cachedSource = cached.headers['X-FOMO-Live-Source'] === 'open-meteo' ? 'open-meteo' : 'mock'
+      const cachedPath = cached.headers['X-FOMO-Debug-Live-Path'] || `${liveDebugPath}-cache-hit`
+      const cachedFallback = cached.headers['X-FOMO-Live-Fallback']
+      logRequest({
+        status: 200,
+        liveSource: cachedSource,
+        livePath: `${cachedPath}-cache-hit`,
+        fallback: cachedFallback || undefined,
+        cacheHit: true,
+      })
+      return NextResponse.json(cached.response, {
+        headers: {
+          ...cached.headers,
+          'X-FOMO-Response-Cache': 'HIT',
+          'X-FOMO-Request-Ms': String(Date.now() - startedAt),
+        },
+      })
+    }
+    if (cached) queryResponseCache.delete(cacheKey)
   }
-  if (cached) queryResponseCache.delete(cacheKey)
 
   const ip = clientIp(request)
   const liveRate = requestedDemo
@@ -753,6 +812,7 @@ export async function GET(request: NextRequest) {
     ? [...destinations]
     : preFilterByDistance(lat, lon, destinations, maxSupportedH)
   if (types.length > 0) candidates = candidates.filter(d => d.types.some(t => types.includes(t)))
+  if (prefAvoidTypes.length > 0) candidates = candidates.filter(d => !d.types.some(t => prefAvoidTypes.includes(t)))
   const prefilterCandidateCount = candidates.length
   let livePoolCount = 0
 
@@ -1031,7 +1091,8 @@ export async function GET(request: NextRequest) {
     .map(r => {
       const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
       const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
-      const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8
+      const tempBoost = preferWarm ? clamp((r.temp_c - 6) * 1.6, 0, 16) : 0
+      const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8 + tempBoost
       const inWindow = r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax
       const overflowMin = inWindow
         ? 0
@@ -1042,6 +1103,7 @@ export async function GET(request: NextRequest) {
         travel_time_min: r.bestTravelMin,
         net_gain_min: netGainMin,
         combined_score: combined,
+        temperature_c: r.temp_c,
         in_window: inWindow,
         window_overflow_min: overflowMin,
       }
@@ -1050,6 +1112,7 @@ export async function GET(request: NextRequest) {
       if (a.in_window !== b.in_window) return a.in_window ? -1 : 1
       if (a.window_overflow_min !== b.window_overflow_min) return a.window_overflow_min - b.window_overflow_min
       if (b.net_gain_min !== a.net_gain_min) return b.net_gain_min - a.net_gain_min
+      if (preferWarm && b.temperature_c !== a.temperature_c) return b.temperature_c - a.temperature_c
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       return a.travel_time_min - b.travel_time_min
     })
@@ -1302,8 +1365,11 @@ export async function GET(request: NextRequest) {
     escapes,
   }
 
+  const cacheControl = isNearMidnightZurich()
+    ? 'public, s-maxage=60, stale-while-revalidate=3600'
+    : 'public, s-maxage=300, stale-while-revalidate=3600'
   const headers: Record<string, string> = {
-    'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+    'Cache-Control': cacheControl,
     'X-FOMO-Sun-Version': '0.6.1',
     'X-FOMO-Live-Source': demoMode ? 'mock' : 'open-meteo',
     'X-FOMO-Trip-Span': tripSpan,
@@ -1323,12 +1389,14 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Trip-Horizon': tripSpan === 'plus1day' ? 'tomorrow-only' : 'next-3h',
     'X-FOMO-Travel-Window-Min': String(appliedWindowMin),
     'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
+    'X-FOMO-Agent-Prefs-Applied': Object.keys(agentPrefs).length > 0 ? '1' : '0',
+    'X-FOMO-Force-Refresh': forceRefresh ? '1' : '0',
     'X-FOMO-Request-Ms': String(Date.now() - startedAt),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason
   if (fallbackNotice) headers['X-FOMO-Fallback-Notice'] = fallbackNotice
 
-  if (!liveFallbackReason) {
+  if (!liveFallbackReason && !forceRefresh) {
     if (queryResponseCache.size > 600) {
       const now = Date.now()
       for (const [k, v] of Array.from(queryResponseCache.entries())) {

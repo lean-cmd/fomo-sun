@@ -434,6 +434,7 @@ export default function Home() {
   const [cardFlowTick, setCardFlowTick] = useState(0)
   const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * HEADER_TAGLINES.length))
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+  const [forceRefreshNonce, setForceRefreshNonce] = useState(0)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
@@ -457,6 +458,8 @@ export default function Home() {
   const previewRangeRef = useRef<number | null>(null)
   const joystickErrorTimerRef = useRef<number | null>(null)
   const autoGeoAttemptedRef = useRef(false)
+  const midnightRefreshDayRef = useRef<string>('')
+  const lastForceTokenRef = useRef(0)
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -670,6 +673,7 @@ export default function Home() {
       try {
         const useWideInitialWindow = !hasJoystickInteracted
         const reqMaxTravelH = useWideInitialWindow ? MAX_TRAVEL_H : activeBand.maxH
+        const shouldForceRefresh = forceRefreshNonce > lastForceTokenRef.current
         const p = new URLSearchParams({
           lat: String(origin.lat),
           lon: String(origin.lon),
@@ -681,6 +685,10 @@ export default function Home() {
           origin_kind: originMode,
           origin_name: origin.name,
         })
+        if (shouldForceRefresh) {
+          p.set('force', 'true')
+          lastForceTokenRef.current = forceRefreshNonce
+        }
         if (useWideInitialWindow) {
           p.set('travel_min_h', String(MIN_TRAVEL_H))
           p.set('travel_max_h', String(MAX_TRAVEL_H))
@@ -708,7 +716,7 @@ export default function Home() {
     }
 
     run()
-  }, [activeBand.maxH, activeBand.minH, hasJoystickInteracted, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
+  }, [activeBand.maxH, activeBand.minH, forceRefreshNonce, hasJoystickInteracted, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
@@ -964,6 +972,33 @@ export default function Home() {
     }
     setOpenCardId(displayRows[0]?.escape.destination.id ?? null)
   }, [displayRows])
+
+  useEffect(() => {
+    const triggerMidnightRefresh = () => {
+      const now = new Date()
+      const dayKey = now.toDateString()
+      if (now.getHours() === 0 && now.getMinutes() <= 1 && midnightRefreshDayRef.current !== dayKey) {
+        midnightRefreshDayRef.current = dayKey
+        setForceRefreshNonce(v => v + 1)
+      }
+    }
+
+    const nearMidnightTimer = window.setInterval(() => {
+      const now = new Date()
+      if ((now.getHours() === 23 && now.getMinutes() >= 55) || (now.getHours() === 0 && now.getMinutes() <= 5)) {
+        triggerMidnightRefresh()
+      }
+    }, 30_000)
+
+    const coarseTimer = window.setInterval(() => {
+      triggerMidnightRefresh()
+    }, 5 * 60_000)
+
+    return () => {
+      window.clearInterval(nearMidnightTimer)
+      window.clearInterval(coarseTimer)
+    }
+  }, [])
 
   const buildWhatsAppHref = (escape: EscapeCard, shareDay: DayFocus = dayFocus) => {
     const isTomorrowShare = shareDay === 'tomorrow'
