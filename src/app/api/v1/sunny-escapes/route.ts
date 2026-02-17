@@ -75,10 +75,18 @@ const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
 const LIVE_WEATHER_POOL_TARGET = 20
+const MIN_ESCAPE_SUN_MIN = 30
 const BUCKET_MERGE_MIN_RESULTS = 4
 const DIVERSITY_RADIUS_KM = 25
 const DIVERSITY_MAX_NEARBY_IN_TOP = 2
 const DIVERSITY_TOP_ROWS = 5
+const UI_TRAVEL_BUCKETS = [
+  { id: 'quick', min_h: 0, max_h: 1 },
+  { id: 'short-a', min_h: 1, max_h: 1.5 },
+  { id: 'short-b', min_h: 1.5, max_h: 2 },
+  { id: 'mid', min_h: 2, max_h: 3 },
+  { id: 'long', min_h: 3, max_h: 4.5 },
+] as const
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 const ZURICH_TZ = 'Europe/Zurich'
 
@@ -1060,6 +1068,10 @@ export async function GET(request: NextRequest) {
   const comparisonMetric = (row: ScoredWithTravel) => (
     tripSpan === 'plus1day' ? row.tomorrowNetAfterArrivalMin : row.netSunAfterArrivalMin
   )
+  const sunshineForSurfaceMin = (row: ScoredWithTravel) => (
+    tripSpan === 'plus1day' ? row.tomorrowSunMin : row.sun_score.sunshine_forecast_min
+  )
+  const meetsMinSunshine = (row: ScoredWithTravel) => sunshineForSurfaceMin(row) >= MIN_ESCAPE_SUN_MIN
   const isStrictBetterThanOrigin = (row: ScoredWithTravel) => {
     if (comparisonMetric(row) > comparisonOriginMin) return true
     // Tomorrow mode: allow clearly sunnier destinations even if travel erodes strict net lead.
@@ -1080,6 +1092,7 @@ export async function GET(request: NextRequest) {
       return a.bestTravelMin - b.bestTravelMin
     })
     .slice(0, topLimit)
+  const eligibleRows = adminAll ? withTravel : withTravel.filter(meetsMinSunshine)
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
@@ -1118,8 +1131,8 @@ export async function GET(request: NextRequest) {
     })
 
   const strictWindowRows = adminAll
-    ? withTravel
-    : withTravel.filter(r => r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax)
+    ? eligibleRows
+    : eligibleRows.filter(r => r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax)
   const strictBetterRows = adminAll
     ? strictWindowRows
     : strictWindowRows.filter(isStrictBetterThanOrigin)
@@ -1134,25 +1147,25 @@ export async function GET(request: NextRequest) {
   if (!adminAll && rankingPool.length < fallbackMinResults) {
     appliedWindowMin = Math.max(0, strictWindowMin - 15)
     appliedWindowMax = strictWindowMax + 15
-    const widenedRows = withTravel.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
+    const widenedRows = eligibleRows.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
     const widenedBetterRows = widenedRows.filter(isStrictBetterThanOrigin)
     const widenedAtLeastRows = widenedRows.filter(isAtLeastAsGoodAsOrigin)
     rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
   }
   if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
-    const atLeastGlobalRows = withTravel.filter(isAtLeastAsGoodAsOrigin)
+    const atLeastGlobalRows = eligibleRows.filter(isAtLeastAsGoodAsOrigin)
     if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
   }
   if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
-    rankingPool = withTravel
+    rankingPool = eligibleRows
   }
   if (!adminAll && hasExplicitTravelWindow && rankingPool.length < Math.min(BUCKET_MERGE_MIN_RESULTS, limit)) {
     const windowSpanMin = Math.max(15, strictWindowMax - strictWindowMin)
     const leftMin = Math.max(0, strictWindowMin - windowSpanMin)
     const rightMax = strictWindowMax + windowSpanMin
 
-    const leftRows = withTravel.filter(r => r.bestTravelMin >= leftMin && r.bestTravelMin < strictWindowMin)
-    const rightRows = withTravel.filter(r => r.bestTravelMin > strictWindowMax && r.bestTravelMin <= rightMax)
+    const leftRows = eligibleRows.filter(r => r.bestTravelMin >= leftMin && r.bestTravelMin < strictWindowMin)
+    const rightRows = eligibleRows.filter(r => r.bestTravelMin > strictWindowMax && r.bestTravelMin <= rightMax)
 
     const neighborPool = (rows: ScoredWithTravel[]) => {
       const better = rows.filter(isStrictBetterThanOrigin)
@@ -1184,6 +1197,15 @@ export async function GET(request: NextRequest) {
   }
 
   const rankedByNet = rankRowsByNet(rankingPool)
+
+  const bucketCounts = UI_TRAVEL_BUCKETS.map(bucket => {
+    const minMin = Math.round(bucket.min_h * 60)
+    const maxMin = Math.round(bucket.max_h * 60)
+    const count = eligibleRows.filter(
+      row => row.bestTravelMin >= minMin && row.bestTravelMin <= maxMin && isStrictBetterThanOrigin(row)
+    ).length
+    return { ...bucket, count }
+  })
 
   let pickedRanked = rankedByNet
   if (demoMode) {
@@ -1295,7 +1317,7 @@ export async function GET(request: NextRequest) {
     return toEscapeResult(full, i + 1)
   })
 
-  const fastestCandidate = withTravel
+  const fastestCandidate = eligibleRows
     .filter(r => Number.isFinite(r.bestTravelMin))
     .filter(r => r.bestTravelMin <= 75)
     .sort((a, b) => {
@@ -1308,7 +1330,7 @@ export async function GET(request: NextRequest) {
     })[0]
 
   const fastestEscape = fastestCandidate ? toEscapeResult(fastestCandidate, 0) : undefined
-  const warmestCandidate = withTravel
+  const warmestCandidate = eligibleRows
     .filter(r => Number.isFinite(r.temp_c))
     .sort((a, b) => {
       if (b.temp_c !== a.temp_c) return b.temp_c - a.temp_c
@@ -1348,6 +1370,7 @@ export async function GET(request: NextRequest) {
       demo_mode: demoMode,
       trip_span: tripSpan,
       fallback_notice: fallbackNotice || undefined,
+      bucket_counts: bucketCounts,
     },
     origin_conditions: {
       description: originDescription,

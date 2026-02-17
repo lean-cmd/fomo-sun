@@ -102,8 +102,9 @@ function renderFlag(country: 'CH' | 'DE' | 'FR' | 'IT') {
   if (country === 'CH') {
     return (
       <g>
-        <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#c84545" />
-        <path d="M81 12.2v7.6M77.2 16h7.6" stroke="#f8fafc" strokeWidth="1.7" strokeLinecap="round" />
+        <rect x="78" y="10" width="12" height="12" rx="1.2" fill="#da291c" />
+        <rect x="83" y="12.1" width="2" height="7.8" fill="#f8fafc" rx="0.3" />
+        <rect x="80.1" y="15" width="7.8" height="2" fill="#f8fafc" rx="0.3" />
       </g>
     )
   }

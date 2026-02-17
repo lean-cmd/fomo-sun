@@ -74,6 +74,12 @@ export interface SunnyEscapesResponse {
     attribution: string[]; demo_mode: boolean
     trip_span?: 'daytrip' | 'plus1day'
     fallback_notice?: string
+    bucket_counts?: Array<{
+      id: string
+      min_h: number
+      max_h: number
+      count: number
+    }>
   }
   origin_conditions: {
     description: string; sun_score: number; sunshine_min: number

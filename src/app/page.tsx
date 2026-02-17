@@ -41,6 +41,7 @@ type CitySeed = { name: string; lat: number; lon: number }
 
 const MIN_TRAVEL_H = 0
 const MAX_TRAVEL_H = 4.5
+const MIN_ESCAPE_SUN_MIN = 30
 const JOYSTICK_MAX_PX = 42
 
 const TRAVEL_BANDS = [
@@ -354,8 +355,9 @@ function SunTimelineBar({
         )}
       </div>
       {sunLabel && (
-        <span className="text-[11px] text-slate-600 mt-0.5 w-12 text-right tabular-nums">
-          {sunLabel}
+        <span className="mt-0.5 w-[66px] inline-flex items-center justify-end gap-1 text-right tabular-nums">
+          <Sun className="w-3 h-3 text-amber-500 shrink-0" strokeWidth={1.9} />
+          <span className="text-[11px] text-slate-600">{sunLabel}</span>
         </span>
       )}
     </div>
@@ -418,6 +420,7 @@ export default function Home() {
   const [isJoystickActive, setIsJoystickActive] = useState(false)
   const [joystickNudge, setJoystickNudge] = useState(true)
   const [joystickErrorShake, setJoystickErrorShake] = useState(false)
+  const [joystickNotice, setJoystickNotice] = useState('')
   const [hasJoystickInteracted, setHasJoystickInteracted] = useState(false)
 
   const [mode, setMode] = useState<TravelMode>('both')
@@ -449,6 +452,7 @@ export default function Home() {
   const [trainPreviewById, setTrainPreviewById] = useState<Record<string, { loading: boolean; rows: TrainConnectionPreview[]; error?: boolean }>>({})
 
   const requestCtrlRef = useRef<AbortController | null>(null)
+  const originSelectRef = useRef<HTMLSelectElement | null>(null)
   const resultsRef = useRef<HTMLElement | null>(null)
   const joystickZoneRef = useRef<HTMLDivElement | null>(null)
   const joyAnimRef = useRef<number | null>(null)
@@ -461,6 +465,7 @@ export default function Home() {
   const joyBaseRangeRef = useRef(2)
   const previewRangeRef = useRef<number | null>(null)
   const joystickErrorTimerRef = useRef<number | null>(null)
+  const joystickNoticeTimerRef = useRef<number | null>(null)
   const autoGeoAttemptedRef = useRef(false)
   const midnightRefreshDayRef = useRef<string>('')
   const lastForceTokenRef = useRef(0)
@@ -475,10 +480,23 @@ export default function Home() {
   const maxH = activeBand.maxH
 
   const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
-  const topEscapeCurrent = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
   const warmestEscape = data?.warmest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
+
+  const bucketCountMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const bucket of data?._meta?.bucket_counts || []) {
+      map.set(bucket.id, bucket.count)
+    }
+    return map
+  }, [data?._meta?.bucket_counts])
+
+  const isBandAvailable = useCallback((bandIndex: number) => {
+    const band = TRAVEL_BANDS[bandIndex]
+    const count = bucketCountMap.get(band.id)
+    return count === undefined ? true : count > 0
+  }, [bucketCountMap])
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
     const clamped = clamp(nextJoy, -1, 1)
@@ -545,6 +563,28 @@ export default function Home() {
     }, 16)
   }, [applyJoyPosition, startJoystickSpringBack, stopJoystickAnim])
 
+  const showJoystickNoResults = useCallback((bandLabel: string, dir: 'left' | 'right') => {
+    setHasJoystickInteracted(true)
+    setJoystickNudge(false)
+    setJoystickErrorShake(true)
+    pulseJoystick(dir, 0.56)
+    setJoystickNotice(`Unfortunately no sunny escapes in ${bandLabel}.`)
+    if (joystickErrorTimerRef.current !== null) {
+      window.clearTimeout(joystickErrorTimerRef.current)
+    }
+    joystickErrorTimerRef.current = window.setTimeout(() => {
+      setJoystickErrorShake(false)
+      joystickErrorTimerRef.current = null
+    }, 280)
+    if (joystickNoticeTimerRef.current !== null) {
+      window.clearTimeout(joystickNoticeTimerRef.current)
+    }
+    joystickNoticeTimerRef.current = window.setTimeout(() => {
+      setJoystickNotice('')
+      joystickNoticeTimerRef.current = null
+    }, 1800)
+  }, [pulseJoystick])
+
   const stepJoystickRange = useCallback((dir: 'left' | 'right') => {
     setHasJoystickInteracted(true)
     setJoystickNudge(false)
@@ -554,12 +594,16 @@ export default function Home() {
       pulseJoystick(dir, 0.58)
       return
     }
+    if (!isBandAvailable(next)) {
+      showJoystickNoResults(TRAVEL_BANDS[next].label, dir)
+      return
+    }
     joystickDirRef.current = dir
     previewRangeRef.current = null
     setPreviewRangeIndex(null)
     setRangeIndex(next)
     pulseJoystick(dir)
-  }, [pulseJoystick, rangeIndex])
+  }, [isBandAvailable, pulseJoystick, rangeIndex, showJoystickNoResults])
 
   const setJoystickRange = useCallback((targetIndex: number) => {
     setHasJoystickInteracted(true)
@@ -569,13 +613,17 @@ export default function Home() {
       return
     }
     const dir = next > rangeIndex ? 'right' : 'left'
+    if (!isBandAvailable(next)) {
+      showJoystickNoResults(TRAVEL_BANDS[next].label, dir)
+      return
+    }
     joystickDirRef.current = dir
     previewRangeRef.current = null
     setPreviewRangeIndex(null)
     setRangeIndex(next)
     setJoystickNudge(false)
     pulseJoystick(dir, 0.64)
-  }, [pulseJoystick, rangeIndex])
+  }, [isBandAvailable, pulseJoystick, rangeIndex, showJoystickNoResults])
 
   const joyFromPointerX = useCallback((clientX: number) => {
     const el = joystickZoneRef.current
@@ -621,6 +669,14 @@ export default function Home() {
     }
     joystickPointerRef.current = null
     const finalIndex = previewRangeRef.current ?? rangeIndex
+    if (finalIndex !== rangeIndex && !isBandAvailable(finalIndex)) {
+      const dir: 'left' | 'right' = finalIndex > rangeIndex ? 'right' : 'left'
+      showJoystickNoResults(TRAVEL_BANDS[finalIndex].label, dir)
+      previewRangeRef.current = null
+      setPreviewRangeIndex(null)
+      startJoystickSpringBack()
+      return
+    }
     if (finalIndex !== rangeIndex) {
       joystickDirRef.current = finalIndex > rangeIndex ? 'right' : 'left'
     }
@@ -676,7 +732,7 @@ export default function Home() {
     const run = async () => {
       try {
         const useWideInitialWindow = !hasJoystickInteracted
-        const reqMaxTravelH = useWideInitialWindow ? MAX_TRAVEL_H : activeBand.maxH
+        const reqMaxTravelH = MAX_TRAVEL_H
         const shouldForceRefresh = forceRefreshNonce > lastForceTokenRef.current
         const p = new URLSearchParams({
           lat: String(origin.lat),
@@ -736,6 +792,10 @@ export default function Home() {
     if (joystickErrorTimerRef.current !== null) {
       window.clearTimeout(joystickErrorTimerRef.current)
       joystickErrorTimerRef.current = null
+    }
+    if (joystickNoticeTimerRef.current !== null) {
+      window.clearTimeout(joystickNoticeTimerRef.current)
+      joystickNoticeTimerRef.current = null
     }
   }, [stopJoystickAnim])
 
@@ -822,16 +882,46 @@ export default function Home() {
     setOriginMode('manual')
   }
 
+  const openOriginPicker = useCallback(() => {
+    const el = originSelectRef.current
+    if (!el) return
+    el.focus()
+    try {
+      const withPicker = el as HTMLSelectElement & { showPicker?: () => void }
+      if (typeof withPicker.showPicker === 'function') {
+        withPicker.showPicker()
+      } else {
+        el.click()
+      }
+    } catch {
+      el.click()
+    }
+  }, [])
+
   const fallbackNotice = data?._meta?.fallback_notice || ''
   const resultRows = data?.escapes || []
   const heroDayFocus: DayFocus = 'tomorrow'
+  const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
+
+  const topEscapeCurrent = useMemo(() => {
+    return resultRows.find(row => (
+      row.sun_score.sunshine_forecast_min >= MIN_ESCAPE_SUN_MIN &&
+      row.sun_score.sunshine_forecast_min > originSunMin
+    )) ?? null
+  }, [originSunMin, resultRows])
 
   const topEscapeTomorrow = useMemo(() => {
     const candidates = resultRows.filter(row => {
       const tomorrowMin = Math.round((row.tomorrow_sun_hours ?? 0) * 60)
-      return tomorrowMin > 0 || row.sun_score.sunshine_forecast_min > 0
+      const effectiveTomorrowMin = tomorrowMin > 0 ? tomorrowMin : row.sun_score.sunshine_forecast_min
+      return effectiveTomorrowMin >= MIN_ESCAPE_SUN_MIN && effectiveTomorrowMin > originTomorrowMin
     })
-    if (!candidates.length) return fastestEscape ?? null
+    if (!candidates.length) {
+      if (!fastestEscape) return null
+      const fastTomorrowMin = Math.round((fastestEscape.tomorrow_sun_hours ?? 0) * 60)
+      const effectiveFastMin = fastTomorrowMin > 0 ? fastTomorrowMin : fastestEscape.sun_score.sunshine_forecast_min
+      return (effectiveFastMin >= MIN_ESCAPE_SUN_MIN && effectiveFastMin > originTomorrowMin) ? fastestEscape : null
+    }
     return [...candidates]
       .sort((a, b) => {
         const aTomorrow = Math.round((a.tomorrow_sun_hours ?? 0) * 60)
@@ -841,10 +931,17 @@ export default function Home() {
         const bTravel = getBestTravel(b)?.min ?? Infinity
         if (aTravel !== bTravel) return aTravel - bTravel
         return b.sun_score.score - a.sun_score.score
-      })[0] ?? fastestEscape ?? null
-  }, [resultRows, fastestEscape])
+      })[0] ?? null
+  }, [fastestEscape, originTomorrowMin, resultRows])
 
-  const heroEscape = topEscapeTomorrow ?? topEscapeCurrent ?? fastestEscape ?? null
+  const safeFastestEscape = useMemo(() => {
+    if (!fastestEscape) return null
+    const fastTomorrowMin = Math.round((fastestEscape.tomorrow_sun_hours ?? 0) * 60)
+    const effectiveFastMin = fastTomorrowMin > 0 ? fastTomorrowMin : fastestEscape.sun_score.sunshine_forecast_min
+    return effectiveFastMin >= MIN_ESCAPE_SUN_MIN && effectiveFastMin > originTomorrowMin ? fastestEscape : null
+  }, [fastestEscape, originTomorrowMin])
+
+  const heroEscape = topEscapeTomorrow ?? topEscapeCurrent ?? safeFastestEscape ?? null
   const heroOriginSunMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60) || originSunMin
 
   const topBestTravel = heroEscape ? getBestTravel(heroEscape) : null
@@ -895,16 +992,25 @@ export default function Home() {
     })
   }
 
+  const escapeSunMinutes = useCallback((escape: EscapeCard) => {
+    if (dayFocus === 'tomorrow') {
+      const tomorrowMin = Math.round((escape.tomorrow_sun_hours ?? 0) * 60)
+      if (tomorrowMin > 0) return tomorrowMin
+    }
+    return escape.sun_score.sunshine_forecast_min
+  }, [dayFocus])
+
+  const isQualifiedSunnyEscape = useCallback((escape: EscapeCard) => {
+    const sunMin = escapeSunMinutes(escape)
+    return sunMin >= MIN_ESCAPE_SUN_MIN && sunMin > originSunMin
+  }, [escapeSunMinutes, originSunMin])
+
   const filteredRows = useMemo(() => {
-    const strictBetter = resultRows.filter(escape => escape.sun_score.sunshine_forecast_min > originSunMin)
-    const baseline = strictBetter.length >= 5
-      ? strictBetter
-      : resultRows.filter(escape => escape.sun_score.sunshine_forecast_min >= originSunMin)
-    const positiveSun = baseline.filter(escape => escape.sun_score.sunshine_forecast_min > 0)
-    if (positiveSun.length === 0) return []
+    const strictBetter = resultRows.filter(isQualifiedSunnyEscape)
+    if (strictBetter.length === 0) return []
     const typed = activeTypeChips.length === 0
-      ? positiveSun
-      : positiveSun.filter((escape) => {
+      ? strictBetter
+      : strictBetter.filter((escape) => {
         const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
         return activeTypeChips.some((chip) => {
           if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
@@ -912,7 +1018,7 @@ export default function Home() {
         })
       })
     return typed
-  }, [activeTypeChips, resultRows, originSunMin])
+  }, [activeTypeChips, isQualifiedSunnyEscape, resultRows])
 
   const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
 
@@ -931,13 +1037,13 @@ export default function Home() {
     if (visibleRows.length > 0) {
       pushRow(visibleRows[0])
     }
-    if (fastestEscape && fastestEscape.sun_score.sunshine_forecast_min > 0) {
+    if (fastestEscape && isQualifiedSunnyEscape(fastestEscape)) {
       if (!pushRow(fastestEscape)) {
         const row = rows.find(r => r.escape.destination.id === fastestEscape.destination.id)
         if (row && !row.badges.includes('fastest')) row.badges.push('fastest')
       }
     }
-    if (warmestEscape && warmestEscape.sun_score.sunshine_forecast_min > 0) {
+    if (warmestEscape && isQualifiedSunnyEscape(warmestEscape)) {
       if (!pushRow(warmestEscape)) {
         const row = rows.find(r => r.escape.destination.id === warmestEscape.destination.id)
         if (row && !row.badges.includes('warmest')) row.badges.push('warmest')
@@ -950,9 +1056,9 @@ export default function Home() {
     }
 
     if (rows.length === 0) {
-      const fallback = (fastestEscape && fastestEscape.sun_score.sunshine_forecast_min > 0)
+      const fallback = (fastestEscape && isQualifiedSunnyEscape(fastestEscape))
         ? fastestEscape
-        : (warmestEscape && warmestEscape.sun_score.sunshine_forecast_min > 0 ? warmestEscape : null)
+        : (warmestEscape && isQualifiedSunnyEscape(warmestEscape) ? warmestEscape : null)
       pushRow(fallback)
     }
 
@@ -964,32 +1070,7 @@ export default function Home() {
       if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
       return { ...row, badges }
     })
-  }, [fastestEscape, visibleRows, warmestEscape])
-
-  const fastestTravelMin = fastestEscape ? (getBestTravel(fastestEscape)?.min ?? null) : null
-
-  useEffect(() => {
-    if (loading || activeTypeChips.length > 0 || visibleRows.length > 0 || fastestTravelMin === null) return
-    const targetIdx = TRAVEL_BANDS.findIndex((band) => fastestTravelMin >= band.minH * 60 && fastestTravelMin <= band.maxH * 60)
-    if (targetIdx < 0 || targetIdx === rangeIndex) return
-
-    const dir: 'left' | 'right' = targetIdx > rangeIndex ? 'right' : 'left'
-    joystickDirRef.current = dir
-    setJoystickErrorShake(true)
-    pulseJoystick(dir, 0.58)
-
-    if (joystickErrorTimerRef.current !== null) {
-      window.clearTimeout(joystickErrorTimerRef.current)
-    }
-    joystickErrorTimerRef.current = window.setTimeout(() => {
-      setJoystickErrorShake(false)
-      previewRangeRef.current = null
-      setPreviewRangeIndex(null)
-      setRangeIndex(targetIdx)
-      setJoystickNudge(false)
-      joystickErrorTimerRef.current = null
-    }, 260)
-  }, [activeTypeChips.length, fastestTravelMin, loading, pulseJoystick, rangeIndex, visibleRows.length])
+  }, [fastestEscape, isQualifiedSunnyEscape, visibleRows, warmestEscape])
 
   useEffect(() => {
     if (!displayRows.length) {
@@ -1111,32 +1192,40 @@ export default function Home() {
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
-        <div className="max-w-xl mx-auto px-3 h-[60px] relative flex items-center">
-          <div className="flex-1 min-w-0">
-            <label className="relative inline-flex items-center gap-1 pl-0 pr-3 min-w-0 max-w-[134px] text-slate-600">
+        <div className="max-w-xl mx-auto px-3 h-[62px] grid grid-cols-[1fr_auto_1fr] items-center">
+          <div className="min-w-0">
+            <div className="relative inline-flex items-center gap-1 min-w-0 max-w-[132px] text-slate-600">
               <MapPinned className="w-3 h-3 text-slate-400 flex-shrink-0" strokeWidth={1.8} />
               <select
+                ref={originSelectRef}
                 value={selectedCity}
                 onChange={e => selectManualCity(e.target.value)}
-                className="appearance-none bg-transparent text-[11px] text-slate-600 font-medium min-w-0 max-w-[110px] focus:outline-none"
+                className="appearance-none bg-transparent text-[11px] text-slate-600 font-medium min-w-0 max-w-[104px] pr-2.5 cursor-pointer focus:outline-none"
                 aria-label="Select origin city"
               >
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
               </select>
-              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
-            </label>
+              <button
+                type="button"
+                onClick={openOriginPicker}
+                className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-4 w-4 text-slate-400"
+                aria-label="Open city picker"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
           </div>
 
-          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-[5px] text-center w-[140px]">
-            <FomoWordmark className="w-[92px] h-[24px] mx-auto" />
-            <p className="mt-[1px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
+          <div className="relative justify-self-center flex items-center h-full">
+            <FomoWordmark className="w-[94px] h-[24px]" />
+            <p className="absolute left-1/2 -translate-x-1/2 top-[39px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
               {HEADER_TAGLINES[taglineIndex]}
             </p>
           </div>
 
-          <div className="flex-1 flex justify-end items-center">
+          <div className="flex justify-end items-center">
             <div className="inline-flex items-center gap-1 text-[10.5px]">
               <button
                 onClick={() => { setTripSpan('daytrip'); setTripSpanTouched(true) }}
@@ -1156,7 +1245,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-3 pt-2 sm:pt-3 pb-16">
+      <main className="max-w-xl mx-auto px-3 pt-3 sm:pt-4 pb-16">
 
         {fallbackNotice && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium px-3 py-2 mb-3 text-center">
@@ -1304,21 +1393,36 @@ export default function Home() {
           <div className="mt-2 grid grid-cols-5 gap-1.5 text-[10px]">
             {TRAVEL_BANDS.map((band, idx) => {
               const active = idx === effectiveRangeIndex
+              const available = isBandAvailable(idx)
+              const count = bucketCountMap.get(band.id)
+              const disabled = count !== undefined && !available
               return (
                 <button
                   key={band.id}
                   type="button"
-                  onClick={() => setJoystickRange(idx)}
+                  onClick={() => {
+                    if (disabled) return
+                    setJoystickRange(idx)
+                  }}
+                  disabled={disabled}
                   className={`h-7 rounded-full border inline-flex items-center justify-center ${
-                    active ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold' : 'border-slate-200 bg-white text-slate-500'
-                  } cursor-pointer hover:border-amber-200 active:scale-[0.98] transition`}
+                    active
+                      ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold'
+                      : disabled
+                        ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                        : 'border-slate-200 bg-white text-slate-500'
+                  } ${disabled ? '' : 'cursor-pointer hover:border-amber-200 active:scale-[0.98]'} transition`}
                   style={{ fontFamily: 'DM Mono, monospace' }}
+                  title={disabled ? `No sunny escapes in ${band.label}` : undefined}
                 >
                   {band.label}
                 </button>
               )
             })}
           </div>
+          {joystickNotice && (
+            <p className="mt-2 text-[11px] text-slate-500 text-center">{joystickNotice}</p>
+          )}
         </section>
 
         <section ref={resultsRef}>
@@ -1394,7 +1498,11 @@ export default function Home() {
               const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
-              const gainMin = Math.max(0, escape.sun_score.sunshine_forecast_min - originSunMin)
+              const gainMin = Math.max(0, escapeSunMinutes(escape) - originSunMin)
+              const originTimelineSunMin = dayFocus === 'tomorrow' ? heroOriginSunMin : originSunMin
+              const escapeTimelineSunMin = dayFocus === 'tomorrow'
+                ? (Math.round((escape.tomorrow_sun_hours ?? 0) * 60) || escape.sun_score.sunshine_forecast_min)
+                : escape.sun_score.sunshine_forecast_min
               const cardFlowAnimation = cardFlowDir === 'right'
                 ? 'cardFlowRight 320ms cubic-bezier(0.22, 1, 0.36, 1)'
                 : 'cardFlowLeft 320ms cubic-bezier(0.22, 1, 0.36, 1)'
@@ -1431,11 +1539,11 @@ export default function Home() {
                               </div>
 
                               <div className="shrink-0">
-                                <div className="inline-flex items-center gap-4 pr-0.5">
-                                  <p className="leading-none text-amber-600 inline-flex items-end gap-1 font-semibold py-1">
+                                <div className="inline-flex items-center gap-3 pr-0.5">
+                                  <p className="leading-none text-amber-600 inline-flex items-center gap-1 font-semibold py-1">
                                     <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                                     {(() => {
-                                      const sun = splitSunLabel(escape.sun_score.sunshine_forecast_min)
+                                      const sun = splitSunLabel(escapeSunMinutes(escape))
                                       return (
                                         <span className="inline-flex items-baseline gap-[1px] tracking-tight">
                                           <span className="text-[21px] leading-[0.95]">{sun.major}</span>
@@ -1453,12 +1561,12 @@ export default function Home() {
                                     )}
                                   </p>
                                   {bestTravel && (
-                                    <p className="text-[13px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium py-1">
+                                    <p className="text-[12px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-semibold py-1">
                                       <IconForMode mode={bestTravel.mode} />
                                       <span>{formatTravelClock(bestTravel.min / 60)}</span>
                                     </p>
                                   )}
-                                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                  <ChevronDown className={`w-4 h-4 text-slate-400 self-center transition-transform ${isOpen ? 'rotate-180' : ''}`} />
                                 </div>
                               </div>
                             </div>
@@ -1490,6 +1598,28 @@ export default function Home() {
                               <Mountain className="w-3.5 h-3.5" strokeWidth={1.8} />
                               {escape.destination.altitude_m.toLocaleString()}m
                             </span>
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+                          <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Timeline comparison</p>
+                          <div className="space-y-0.5">
+                            <SunTimelineBar
+                              timeline={data?.origin_timeline || escape.sun_timeline}
+                              dayFocus={dayFocus}
+                              sunWindow={data?.sun_window}
+                              label={origin.name}
+                              sunLabel={formatSunHours(originTimelineSunMin)}
+                              compact
+                            />
+                            <SunTimelineBar
+                              timeline={escape.sun_timeline}
+                              dayFocus={dayFocus}
+                              sunWindow={data?.sun_window}
+                              label={escape.destination.name}
+                              sunLabel={formatSunHours(escapeTimelineSunMin)}
+                              compact
+                            />
                           </div>
                         </div>
 
@@ -1628,7 +1758,7 @@ export default function Home() {
       </main>
 
       <footer className="px-3 pb-6 text-center text-[11px] text-slate-500">
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
           <button onClick={detectLocation} disabled={locating} className="hover:underline underline-offset-2 inline-flex items-center gap-1">
             <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
             {locating ? 'Locating...' : 'Use my location'}
@@ -1638,11 +1768,6 @@ export default function Home() {
               Back to city
             </button>
           )}
-          <a href="/admin" className="hover:underline underline-offset-2">Admin</a>
-          <a href="/blog" className="hover:underline underline-offset-2">Blog</a>
-          <a href="/about" className="hover:underline underline-offset-2">About</a>
-        </div>
-        <div className="mt-2 flex items-center justify-center">
           <button
             onClick={() => { setDemo(v => !v) }}
             className={`live-toggle scale-[0.9] origin-center ${demo ? 'is-demo' : 'is-live'}`}
