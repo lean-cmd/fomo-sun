@@ -4,8 +4,9 @@ import { computeSunScore, detectInversion, haversineDistance, preFilterByDistanc
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
 import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
-import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TravelMode } from '@/lib/types'
+import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TourismInfo, TravelMode } from '@/lib/types'
 import { addRequestLog } from '@/lib/request-log'
+import { enrichDestination } from '@/lib/tourism/enrichDestination'
 
 type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
 type TripSpan = 'daytrip' | 'plus1day'
@@ -1262,13 +1263,48 @@ export async function GET(request: NextRequest) {
     return ''
   }
 
-  const toEscapeResult = (
+  const tourismMemo = new Map<string, Promise<TourismInfo>>()
+  const getDestinationTourism = (destination: typeof destinations[number]) => {
+    const existing = tourismMemo.get(destination.id)
+    if (existing) return existing
+
+    const fallback: TourismInfo = {
+      description_short: `${destination.name} · ${destination.region}`,
+      description_long: destination.description || `${destination.name} is a curated sunny destination in ${destination.region}.`,
+      highlights: destination.plan_template.split(' | ').slice(0, 3),
+      tags: destination.types || [],
+      hero_image: `https://fomosun.com/api/og/${encodeURIComponent(destination.id)}`,
+      official_url: `https://www.myswitzerland.com/en-ch/search/?q=${encodeURIComponent(destination.name)}`,
+      pois_nearby: [],
+      source: 'fallback',
+    }
+
+    const pending = enrichDestination({
+      id: destination.id,
+      name: destination.name,
+      lat: destination.lat,
+      lon: destination.lon,
+      region: destination.region,
+      country: destination.country,
+      types: destination.types,
+      description: destination.description,
+      plan_template: destination.plan_template,
+      maps_name: destination.maps_name,
+    }, {
+      catalog: destinations,
+    }).catch(() => fallback)
+    tourismMemo.set(destination.id, pending)
+    return pending
+  }
+
+  const toEscapeResult = async (
     full: ScoredWithTravel,
     rank: number
-  ): EscapeResult => {
+  ): Promise<EscapeResult> => {
     const destSunMin = full.sun_score.sunshine_forecast_min
     const netSun = full.netSunAfterArrivalMin
     const cmp = formatComparison(destSunMin, originSunMin)
+    const tourism = await getDestinationTourism(full.destination)
 
     const liveTimeline = !demoMode && full.liveForecast ? timelineFromLive(full.liveForecast.hours, sunWindow) : null
     const liveTomorrowSun = !demoMode && full.liveForecast
@@ -1296,6 +1332,7 @@ export async function GET(request: NextRequest) {
         summary: full.conditions,
         temp_c: full.temp_c,
       },
+      tourism,
       travel: {
         car: full.carTravel ? { mode: 'car' as const, duration_min: full.carTravel.duration_min, distance_km: full.carTravel.distance_km } : undefined,
         train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
@@ -1312,11 +1349,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const escapes: EscapeResult[] = pickedRanked.slice(0, limit).map((r, i) => {
-    const full = withTravel.find(w => w.destination.id === r.destination.id)!
-    return toEscapeResult(full, i + 1)
-  })
-
   const fastestCandidate = eligibleRows
     .filter(r => Number.isFinite(r.bestTravelMin))
     .filter(r => r.bestTravelMin <= 75)
@@ -1329,7 +1361,6 @@ export async function GET(request: NextRequest) {
       return b.destination.altitude_m - a.destination.altitude_m
     })[0]
 
-  const fastestEscape = fastestCandidate ? toEscapeResult(fastestCandidate, 0) : undefined
   const warmestCandidate = eligibleRows
     .filter(r => Number.isFinite(r.temp_c))
     .sort((a, b) => {
@@ -1341,7 +1372,25 @@ export async function GET(request: NextRequest) {
       return a.bestTravelMin - b.bestTravelMin
     })
     .find(r => r.temp_c > originTempC + 3)
-  const warmestEscape = warmestCandidate ? toEscapeResult(warmestCandidate, 0) : undefined
+
+  const topRows = pickedRanked
+    .slice(0, limit)
+    .map(r => withTravel.find(w => w.destination.id === r.destination.id))
+    .filter((row): row is ScoredWithTravel => Boolean(row))
+  const tourismTargets = new Map<string, typeof destinations[number]>()
+  for (const row of topRows) tourismTargets.set(row.destination.id, row.destination)
+  if (fastestCandidate) tourismTargets.set(fastestCandidate.destination.id, fastestCandidate.destination)
+  if (warmestCandidate) tourismTargets.set(warmestCandidate.destination.id, warmestCandidate.destination)
+
+  const tourismSourceSet = new Set<TourismInfo['source']>()
+  await Promise.all(Array.from(tourismTargets.values()).map(async (destination) => {
+    const tourism = await getDestinationTourism(destination)
+    tourismSourceSet.add(tourism.source)
+  }))
+
+  const escapes: EscapeResult[] = await Promise.all(topRows.map((row, i) => toEscapeResult(row, i + 1)))
+  const fastestEscape = fastestCandidate ? await toEscapeResult(fastestCandidate, 0) : undefined
+  const warmestEscape = warmestCandidate ? await toEscapeResult(warmestCandidate, 0) : undefined
 
   const originName = originNameParam || (
     (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
@@ -1356,6 +1405,11 @@ export async function GET(request: NextRequest) {
     )
     : getMockMaxSunHours()
 
+  const tourismAttribution: string[] = []
+  if (tourismSourceSet.has('discover.swiss')) tourismAttribution.push('Tourism: discover.swiss API')
+  if (tourismSourceSet.has('geo.admin.ch')) tourismAttribution.push('Tourism context: geo.admin.ch Search API')
+  if (tourismSourceSet.has('fallback')) tourismAttribution.push('Tourism fallback: FOMO curated destination catalog')
+
   const response: SunnyEscapesResponse = {
     _meta: {
       request_id: reqId,
@@ -1365,6 +1419,7 @@ export async function GET(request: NextRequest) {
       attribution: [
         'Weather: Open-Meteo',
         'Routing: Open Journey Planner',
+        ...tourismAttribution,
         'FOMO Sun - fomosun.com',
       ],
       demo_mode: demoMode,
@@ -1393,7 +1448,7 @@ export async function GET(request: NextRequest) {
     : 'public, s-maxage=300, stale-while-revalidate=3600'
   const headers: Record<string, string> = {
     'Cache-Control': cacheControl,
-    'X-FOMO-Sun-Version': '0.6.1',
+    'X-FOMO-Sun-Version': '0.6.2',
     'X-FOMO-Live-Source': demoMode ? 'mock' : 'open-meteo',
     'X-FOMO-Trip-Span': tripSpan,
     'X-FOMO-Response-Cache': 'MISS',
@@ -1414,6 +1469,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
     'X-FOMO-Agent-Prefs-Applied': Object.keys(agentPrefs).length > 0 ? '1' : '0',
     'X-FOMO-Force-Refresh': forceRefresh ? '1' : '0',
+    'X-FOMO-Tourism-Sources': Array.from(tourismSourceSet).sort().join(',') || 'fallback',
     'X-FOMO-Request-Ms': String(Date.now() - startedAt),
   }
   if (liveFallbackReason) headers['X-FOMO-Live-Fallback'] = liveFallbackReason

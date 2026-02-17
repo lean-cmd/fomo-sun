@@ -40,6 +40,50 @@ Setup:
 
 Content refresh uses ISR (`revalidate: 300`), so changes in Notion appear on the site within a few minutes.
 
+## Tourism Enrichment (Swiss Tourism Layer)
+
+`/api/v1/sunny-escapes` now enriches each returned destination with a `tourism` object:
+
+- `description_short`
+- `description_long`
+- `highlights[]`
+- `tags[]`
+- `hero_image`
+- `official_url`
+- `pois_nearby[]`
+
+### Providers
+
+Provider order:
+
+1. `discover.swiss` (official, when configured)
+2. `geo.admin.ch` SearchServer enrichment (open government endpoint)
+3. Local curated fallback from destination catalog
+
+### Environment variables
+
+Set these in `.env.local` and Vercel (Project -> Settings -> Environment Variables):
+
+```bash
+# Optional official Swiss tourism provider
+SWISS_TOURISM_DISCOVER_SUBSCRIPTION_KEY=...
+SWISS_TOURISM_DISCOVER_SEARCH_URL=...
+SWISS_TOURISM_DISCOVER_DETAIL_URL=... # optional template
+
+# Optional KV cache backend (24h TTL)
+KV_REST_API_URL=...
+KV_REST_API_TOKEN=...
+```
+
+Template variables supported in search/detail URLs:
+
+- `{query}` / `{name}`
+- `{lat}` / `{lon}`
+- `{region}`
+- `{detail_id}` (detail template only)
+
+If provider keys are missing or upstream fails, the API does **not** fail. It returns cached/fallback tourism enrichment.
+
 ## Deploy
 
 ```bash

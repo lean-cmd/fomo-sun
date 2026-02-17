@@ -46,11 +46,30 @@ export interface TimelineSegment { condition: SkyCondition; pct: number }
 export interface SunTimeline { today: TimelineSegment[]; tomorrow: TimelineSegment[] }
 export interface DaylightWindow { start_hour: number; end_hour: number }
 
+export interface TourismPOI {
+  name: string
+  distance_km?: number
+  type?: string
+  url?: string
+}
+
+export interface TourismInfo {
+  description_short: string
+  description_long?: string
+  highlights: string[]
+  tags: string[]
+  hero_image: string
+  official_url: string
+  pois_nearby: TourismPOI[]
+  source: 'discover.swiss' | 'geo.admin.ch' | 'fallback'
+}
+
 export interface EscapeResult {
   rank: number; destination: Destination; sun_score: SunScore
   conditions: string  // human-friendly with comparison
   net_sun_min: number // sunshine minus round-trip travel time
   weather_now: { summary: string; temp_c: number }
+  tourism: TourismInfo
   travel: { car?: TravelResult; train?: TravelResult }
   plan: string[]; links: { google_maps?: string; sbb?: string; webcam?: string }
   sun_timeline: SunTimeline
