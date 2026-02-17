@@ -191,16 +191,16 @@ function extractTemp(summary?: string) {
 
 function FomoGlyph({ className = 'w-[42px] h-3.5' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 58 20" className={className} aria-label="FOMO logo" role="img">
+    <svg viewBox="0 0 38 16" className={className} aria-label="FOMO logo" role="img">
       <g fill="#334155" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 700, letterSpacing: 0.7 }}>
-        <text x="0" y="14" fontSize="13">F</text>
-        <text x="21.8" y="14" fontSize="13">M</text>
+        <text x="0.2" y="12.3" fontSize="11.6">F</text>
+        <text x="13.2" y="12.3" fontSize="11.6">M</text>
       </g>
-      <g fill="#f59e0b" stroke="#f59e0b" strokeLinecap="round" strokeWidth="1.15">
-        <circle cx="11.2" cy="9" r="3.2" />
-        <path d="M11.2 2.3v1.8M11.2 13.9v1.8M4.6 9h1.8M15.9 9h1.8M6.5 4.3l1.2 1.2M14.7 12.4l1.2 1.2M16 4.3l-1.2 1.2M7.7 12.4l-1.2 1.2" />
-        <circle cx="35.8" cy="9" r="3.2" />
-        <path d="M35.8 2.3v1.8M35.8 13.9v1.8M29.2 9H31M40.5 9h1.8M31.1 4.3l1.2 1.2M39.3 12.4l1.2 1.2M40.6 4.3l-1.2 1.2M32.3 12.4l-1.2 1.2" />
+      <g fill="#f59e0b" stroke="#f59e0b" strokeLinecap="round" strokeWidth="1">
+        <circle cx="7.8" cy="7.9" r="2.6" />
+        <path d="M7.8 2.2v1.4M7.8 12.2v1.4M2.5 7.9h1.4M11.7 7.9h1.4M4 4.2l0.9 0.9M10.7 10.9l0.9 0.9M11.6 4.2l-0.9 0.9M4.9 10.9l-0.9 0.9" />
+        <circle cx="24.4" cy="7.9" r="2.6" />
+        <path d="M24.4 2.2v1.4M24.4 12.2v1.4M19.1 7.9h1.4M28.3 7.9h1.4M20.6 4.2l0.9 0.9M27.3 10.9l0.9 0.9M28.2 4.2l-0.9 0.9M21.5 10.9l-0.9 0.9" />
       </g>
     </svg>
   )
@@ -342,17 +342,19 @@ function SunTimelineBar({
             <div className="tl-travel-overlay" style={{ left: `${nowPct}%`, width: `${travelWidthPct}%` }} />
           )}
         </div>
-        <div className="tl-hour-strip" aria-hidden="true">
-          {TIMELINE_TICKS.map(hour => (
-            <span key={hour} className="tl-hour-tick" style={{ left: `${(hour / 24) * 100}%` }}>
-              <i />
-              <em>{hour}</em>
-            </span>
-          ))}
-        </div>
+        {!compact && (
+          <div className="tl-hour-strip" aria-hidden="true">
+            {TIMELINE_TICKS.map(hour => (
+              <span key={hour} className="tl-hour-tick" style={{ left: `${(hour / 24) * 100}%` }}>
+                <i />
+                <em>{hour}</em>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
       {sunLabel && (
-        <span className="text-[11px] text-slate-600 mt-0.5" style={{ fontFamily: 'DM Mono, monospace' }}>
+        <span className="text-[11px] text-slate-600 mt-0.5 w-12 text-right tabular-nums">
           {sunLabel}
         </span>
       )}
@@ -434,6 +436,8 @@ export default function Home() {
   const [cardFlowTick, setCardFlowTick] = useState(0)
   const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * HEADER_TAGLINES.length))
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+  const [originDataSource, setOriginDataSource] = useState<'meteoswiss' | 'open-meteo' | 'mock' | ''>('')
+  const [liveDataSource, setLiveDataSource] = useState<'open-meteo' | 'mock' | ''>('')
   const [forceRefreshNonce, setForceRefreshNonce] = useState(0)
 
   const [selectedCity, setSelectedCity] = useState<string>('Basel')
@@ -697,8 +701,16 @@ export default function Home() {
           p.set('travel_max_h', String(activeBand.maxH))
         }
         const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { signal: ctrl.signal })
+        const originSourceHeader = (res.headers.get('X-FOMO-Origin-Source') || '').toLowerCase()
+        const liveSourceHeader = (res.headers.get('X-FOMO-Live-Source') || '').toLowerCase()
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
+        setOriginDataSource(
+          originSourceHeader === 'meteoswiss' || originSourceHeader === 'open-meteo' || originSourceHeader === 'mock'
+            ? (originSourceHeader as 'meteoswiss' | 'open-meteo' | 'mock')
+            : ''
+        )
+        setLiveDataSource(liveSourceHeader === 'open-meteo' || liveSourceHeader === 'mock' ? (liveSourceHeader as 'open-meteo' | 'mock') : '')
         setLastUpdatedAt(new Date())
         if (joystickDirRef.current) {
           const dir = joystickDirRef.current
@@ -815,8 +827,12 @@ export default function Home() {
   const heroDayFocus: DayFocus = 'tomorrow'
 
   const topEscapeTomorrow = useMemo(() => {
-    if (!resultRows.length) return fastestEscape ?? null
-    return [...resultRows]
+    const candidates = resultRows.filter(row => {
+      const tomorrowMin = Math.round((row.tomorrow_sun_hours ?? 0) * 60)
+      return tomorrowMin > 0 || row.sun_score.sunshine_forecast_min > 0
+    })
+    if (!candidates.length) return fastestEscape ?? null
+    return [...candidates]
       .sort((a, b) => {
         const aTomorrow = Math.round((a.tomorrow_sun_hours ?? 0) * 60)
         const bTomorrow = Math.round((b.tomorrow_sun_hours ?? 0) * 60)
@@ -841,6 +857,11 @@ export default function Home() {
     if (deltaMin <= 1) return 'just now'
     return `${deltaMin} min ago`
   }, [lastUpdatedAt, loading, data])
+  const dataSourceLabel = useMemo(() => {
+    if (demo || data?._meta?.demo_mode || liveDataSource === 'mock') return 'Demo forecast model'
+    if (originDataSource === 'meteoswiss') return 'MeteoSwiss origin + Open-Meteo destinations'
+    return 'Open-Meteo live forecast'
+  }, [data?._meta?.demo_mode, demo, liveDataSource, originDataSource])
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
@@ -879,9 +900,11 @@ export default function Home() {
     const baseline = strictBetter.length >= 5
       ? strictBetter
       : resultRows.filter(escape => escape.sun_score.sunshine_forecast_min >= originSunMin)
+    const positiveSun = baseline.filter(escape => escape.sun_score.sunshine_forecast_min > 0)
+    if (positiveSun.length === 0) return []
     const typed = activeTypeChips.length === 0
-      ? baseline
-      : baseline.filter((escape) => {
+      ? positiveSun
+      : positiveSun.filter((escape) => {
         const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
         return activeTypeChips.some((chip) => {
           if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
@@ -908,13 +931,13 @@ export default function Home() {
     if (visibleRows.length > 0) {
       pushRow(visibleRows[0])
     }
-    if (fastestEscape) {
+    if (fastestEscape && fastestEscape.sun_score.sunshine_forecast_min > 0) {
       if (!pushRow(fastestEscape)) {
         const row = rows.find(r => r.escape.destination.id === fastestEscape.destination.id)
         if (row && !row.badges.includes('fastest')) row.badges.push('fastest')
       }
     }
-    if (warmestEscape) {
+    if (warmestEscape && warmestEscape.sun_score.sunshine_forecast_min > 0) {
       if (!pushRow(warmestEscape)) {
         const row = rows.find(r => r.escape.destination.id === warmestEscape.destination.id)
         if (row && !row.badges.includes('warmest')) row.badges.push('warmest')
@@ -927,7 +950,10 @@ export default function Home() {
     }
 
     if (rows.length === 0) {
-      pushRow(fastestEscape || warmestEscape || null)
+      const fallback = (fastestEscape && fastestEscape.sun_score.sunshine_forecast_min > 0)
+        ? fastestEscape
+        : (warmestEscape && warmestEscape.sun_score.sunshine_forecast_min > 0 ? warmestEscape : null)
+      pushRow(fallback)
     }
 
     const fastestId = fastestEscape?.destination.id
@@ -1085,41 +1111,43 @@ export default function Home() {
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
-        <div className="max-w-xl mx-auto px-3 h-[58px] relative flex items-center">
+        <div className="max-w-xl mx-auto px-3 h-[60px] relative flex items-center">
           <div className="flex-1 min-w-0">
-            <label className="inline-flex items-center gap-1 rounded-full border border-slate-200/75 bg-white/70 px-2 h-7 min-w-0">
-              <MapPinned className="w-3 h-3 text-slate-400" strokeWidth={1.8} />
+            <label className="relative inline-flex items-center gap-1 pl-0 pr-3 min-w-0 max-w-[134px] text-slate-600">
+              <MapPinned className="w-3 h-3 text-slate-400 flex-shrink-0" strokeWidth={1.8} />
               <select
                 value={selectedCity}
                 onChange={e => selectManualCity(e.target.value)}
-                className="bg-transparent text-[11px] text-slate-600 font-medium min-w-0 focus:outline-none"
+                className="appearance-none bg-transparent text-[11px] text-slate-600 font-medium min-w-0 max-w-[110px] focus:outline-none"
                 aria-label="Select origin city"
               >
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
               </select>
+              <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
             </label>
           </div>
 
-          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-[6px] text-center">
-            <FomoWordmark className="w-[96px] h-[24px]" />
-            <p className="mt-[1px] text-[9px] leading-none text-slate-500 whitespace-nowrap">
+          <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 top-[5px] text-center w-[140px]">
+            <FomoWordmark className="w-[92px] h-[24px] mx-auto" />
+            <p className="mt-[1px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
               {HEADER_TAGLINES[taglineIndex]}
             </p>
           </div>
 
-          <div className="flex-1 flex justify-end">
-            <div className="inline-flex p-0.5 rounded-full border border-slate-200/75 bg-white/70">
+          <div className="flex-1 flex justify-end items-center">
+            <div className="inline-flex items-center gap-1 text-[10.5px]">
               <button
                 onClick={() => { setTripSpan('daytrip'); setTripSpanTouched(true) }}
-                className={`px-2 h-6 rounded-full text-[10px] font-medium transition ${tripSpan === 'daytrip' ? 'bg-white text-slate-800' : 'text-slate-500'}`}
+                className={`px-1 py-0.5 transition ${tripSpan === 'daytrip' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
               >
                 Today
               </button>
+              <span className="text-slate-300">/</span>
               <button
                 onClick={() => { setTripSpan('plus1day'); setTripSpanTouched(true) }}
-                className={`px-2 h-6 rounded-full text-[10px] font-medium transition ${tripSpan === 'plus1day' ? 'bg-white text-slate-800' : 'text-slate-500'}`}
+                className={`px-1 py-0.5 transition ${tripSpan === 'plus1day' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
               >
                 Tomorrow
               </button>
@@ -1128,7 +1156,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="max-w-xl mx-auto px-3 pb-16">
+      <main className="max-w-xl mx-auto px-3 pt-2 sm:pt-3 pb-16">
 
         {fallbackNotice && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-700 text-xs font-medium px-3 py-2 mb-3 text-center">
@@ -1144,7 +1172,6 @@ export default function Home() {
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
                 name={heroEscape.destination.name}
-                altitude={heroEscape.destination.altitude_m}
                 region={heroEscape.destination.region}
                 type={stampTypeFromDestination(heroEscape.destination)}
                 country={heroEscape.destination.country}
@@ -1180,14 +1207,14 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-1">
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-0.5">
               <SunTimelineBar
                 timeline={data?.origin_timeline || heroEscape.sun_timeline}
                 dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
                 showNowMarker
                 label={origin.name}
-                sunLabel={`☀️ ${formatSunHours(heroOriginSunMin)}`}
+                sunLabel={formatSunHours(heroOriginSunMin)}
                 compact
               />
               <SunTimelineBar
@@ -1195,7 +1222,7 @@ export default function Home() {
                 dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
                 label={heroEscape.destination.name}
-                sunLabel={`☀️ ${formatSunHours(resolvedTopSunMin)}`}
+                sunLabel={formatSunHours(resolvedTopSunMin)}
                 travelMin={topBestTravel?.min}
                 compact
               />
@@ -1327,7 +1354,6 @@ export default function Home() {
                   <option value="train">Train</option>
                 </select>
               </label>
-              <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>{displayRows.length}</span>
             </div>
           </div>
 
@@ -1357,8 +1383,8 @@ export default function Home() {
 
           {displayRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
-              <p className="text-[14px] text-slate-700">No better escapes than {origin.name} in this joystick range.</p>
-              <p className="text-[12px] text-slate-500 mt-1">Push the joystick right for broader options.</p>
+              <p className="text-[14px] text-slate-700">Cloud jackpot. Even the escapes are sulking.</p>
+              <p className="text-[12px] text-slate-500 mt-1">Try tomorrow or push the joystick right for longer-range sun.</p>
             </div>
           )}
 
@@ -1406,28 +1432,28 @@ export default function Home() {
 
                               <div className="shrink-0">
                                 <div className="inline-flex items-center gap-4 pr-0.5">
-                                  <p className="leading-none text-amber-600 inline-flex items-end gap-1.5 font-semibold py-1" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                  <p className="leading-none text-amber-600 inline-flex items-end gap-1 font-semibold py-1">
                                     <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
                                     {(() => {
                                       const sun = splitSunLabel(escape.sun_score.sunshine_forecast_min)
                                       return (
-                                        <>
-                                          <span className="text-[22px] leading-[0.95]">{sun.major}</span>
+                                        <span className="inline-flex items-baseline gap-[1px] tracking-tight">
+                                          <span className="text-[21px] leading-[0.95]">{sun.major}</span>
                                           {sun.fraction ? (
-                                            <sup className="text-[13px] leading-none text-amber-500 font-semibold relative -top-[0.15em]">{sun.fraction}</sup>
+                                            <sup className="text-[12px] leading-none text-amber-500 font-semibold relative -top-[0.08em]">{sun.fraction}</sup>
                                           ) : null}
-                                          <span className="text-[13px] leading-none text-amber-500 font-medium">{sun.unit}</span>
-                                        </>
+                                          <span className="text-[12px] leading-none text-amber-500 font-medium">{sun.unit}</span>
+                                        </span>
                                       )
                                     })()}
                                     {gainMin > 0 && (
-                                      <span className="text-[13px] text-emerald-500 font-semibold">
+                                      <span className="text-[12px] text-emerald-500 font-semibold ml-0.5">
                                         +{formatSunHours(gainMin)}
                                       </span>
                                     )}
                                   </p>
                                   {bestTravel && (
-                                    <p className="text-[13px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium py-1" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <p className="text-[13px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium py-1">
                                       <IconForMode mode={bestTravel.mode} />
                                       <span>{formatTravelClock(bestTravel.min / 60)}</span>
                                     </p>
@@ -1480,7 +1506,7 @@ export default function Home() {
                                 {trainPreviewById[escape.destination.id].rows.slice(0, 3).map(conn => {
                                   const transferText = conn.transfers > 0 ? `${conn.transfers}x` : 'direct'
                                   return (
-                                    <p key={conn.id} className="text-[11px] text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <p key={conn.id} className="text-[11px] text-slate-700">
                                       dep {conn.departure_hhmm} → arr {conn.arrival_hhmm} ({formatTravelClock(conn.duration_min / 60)}, {transferText})
                                     </p>
                                   )
@@ -1594,25 +1620,29 @@ export default function Home() {
             </p>
           )}
 
-          <p className="mt-2 text-[10px] text-slate-400">
-            Data: {demo ? 'Demo forecast model' : 'Open-Meteo live forecast'} · Updated {dataUpdatedText}
+          <p className="mt-2 text-[10px] text-slate-500 inline-flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${dataUpdatedText === 'just now' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+            Data: {dataSourceLabel} · Updated {dataUpdatedText}
           </p>
         </section>
       </main>
 
       <footer className="px-3 pb-6 text-center text-[11px] text-slate-500">
-        <div className="inline-flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
           <button onClick={detectLocation} disabled={locating} className="hover:underline underline-offset-2 inline-flex items-center gap-1">
             <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
             {locating ? 'Locating...' : 'Use my location'}
           </button>
           {originMode === 'gps' && (
             <button onClick={() => setOriginMode('manual')} className="hover:underline underline-offset-2">
-              Use selected city
+              Back to city
             </button>
           )}
-          <span className="opacity-35">•</span>
           <a href="/admin" className="hover:underline underline-offset-2">Admin</a>
+          <a href="/blog" className="hover:underline underline-offset-2">Blog</a>
+          <a href="/about" className="hover:underline underline-offset-2">About</a>
+        </div>
+        <div className="mt-2 flex items-center justify-center">
           <button
             onClick={() => { setDemo(v => !v) }}
             className={`live-toggle scale-[0.9] origin-center ${demo ? 'is-demo' : 'is-live'}`}
@@ -1622,10 +1652,6 @@ export default function Home() {
             <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
             <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
           </button>
-          <span className="opacity-35">•</span>
-          <a href="/blog" className="hover:underline underline-offset-2">Blog</a>
-          <span className="opacity-35">•</span>
-          <a href="/about" className="hover:underline underline-offset-2">About</a>
         </div>
       </footer>
     </div>

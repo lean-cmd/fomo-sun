@@ -21,13 +21,6 @@ const TYPE_PALETTE: Record<StampType, Palette> = {
   default: { silhouette: '#334155', accent: '#F59E0B' },
 }
 
-const COUNTRY_LABEL: Record<'CH' | 'DE' | 'FR' | 'IT', string> = {
-  CH: 'SCHWEIZ',
-  DE: 'DEUTSCHLAND',
-  FR: 'FRANCE',
-  IT: 'ITALIA',
-}
-
 function sanitizeId(v: string) {
   return v
     .toLowerCase()
@@ -105,11 +98,46 @@ function renderSilhouette(type: StampType, palette: Palette) {
   }
 }
 
+function renderFlag(country: 'CH' | 'DE' | 'FR' | 'IT') {
+  if (country === 'CH') {
+    return (
+      <g>
+        <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#c84545" />
+        <path d="M81 12.2v7.6M77.2 16h7.6" stroke="#f8fafc" strokeWidth="1.7" strokeLinecap="round" />
+      </g>
+    )
+  }
+  if (country === 'DE') {
+    return (
+      <g>
+        <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#101418" />
+        <rect x="72" y="14" width="18" height="4" fill="#a53a3a" />
+        <rect x="72" y="18" width="18" height="4" fill="#c79a4a" />
+      </g>
+    )
+  }
+  if (country === 'FR') {
+    return (
+      <g>
+        <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#f8fafc" />
+        <rect x="72" y="10" width="6" height="12" fill="#5b84b9" />
+        <rect x="84" y="10" width="6" height="12" fill="#c56262" />
+      </g>
+    )
+  }
+  return (
+    <g>
+      <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#f8fafc" />
+      <rect x="72" y="10" width="6" height="12" fill="#5a9f7a" />
+      <rect x="84" y="10" width="6" height="12" fill="#c76262" />
+    </g>
+  )
+}
+
 export type { StampProps, StampType }
 
 export function DestinationStamp({
   name,
-  altitude,
   region,
   type,
   country = 'CH',
@@ -120,8 +148,6 @@ export function DestinationStamp({
   const style = stampNameStyle(safeName)
   const palette = TYPE_PALETTE[type] ?? TYPE_PALETTE.default
   const grainId = `grain-${sanitizeId(`${safeName}-${type}-${country}`)}`
-  const countryLabel = COUNTRY_LABEL[country] ?? 'SCHWEIZ'
-  const stampTypeLabel = country === 'CH' ? countryLabel : `${countryLabel} · CH`
 
   return (
     <svg
@@ -139,6 +165,7 @@ export function DestinationStamp({
       </defs>
 
       <rect x="1.5" y="1.5" width="97" height="137" rx="5" fill="#F5F0E8" stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray="4 3" />
+      {renderFlag(country)}
 
       <g transform="translate(8,8)">
         {renderSilhouette(type, palette)}
@@ -158,23 +185,10 @@ export function DestinationStamp({
         {safeName}
       </text>
 
-      {typeof altitude === 'number' && Number.isFinite(altitude) && (
-        <text
-          x="50"
-          y="92"
-          fill="#64748B"
-          textAnchor="middle"
-          fontSize="10.5"
-          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 300, letterSpacing: '0.35px' }}
-        >
-          {Math.round(altitude)} m
-        </text>
-      )}
-
       {safeRegion && (
         <text
           x="50"
-          y="104"
+          y="96"
           fill="#64748B"
           textAnchor="middle"
           fontSize="9.5"
@@ -183,19 +197,6 @@ export function DestinationStamp({
           · {safeRegion} ·
         </text>
       )}
-
-      <line x1="12" y1="122" x2="31" y2="122" stroke="#94A3B8" strokeWidth="0.9" />
-      <line x1="69" y1="122" x2="88" y2="122" stroke="#94A3B8" strokeWidth="0.9" />
-      <text
-        x="50"
-        y="125"
-        fill="#64748B"
-        textAnchor="middle"
-        fontSize="8.6"
-        style={{ fontFamily: '"Jost", sans-serif', fontWeight: 300, letterSpacing: '0.95px' }}
-      >
-        {stampTypeLabel}
-      </text>
 
       <rect
         x="3"
