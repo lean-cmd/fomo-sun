@@ -57,6 +57,8 @@ export interface LiveBatchWeatherResult extends LiveHourlyForecastResult {
   current: LiveWeatherResult
 }
 
+export type WeatherSourcePolicy = 'auto' | 'meteoswiss' | 'openmeteo'
+
 const BASE = 'https://api.open-meteo.com/v1'
 const SWISS_MODEL = 'meteoswiss_seamless'
 const CURRENT_FIELDS = 'temperature_2m,cloud_cover,cloud_cover_low,relative_humidity_2m,visibility,sunshine_duration,wind_speed_10m,precipitation,snowfall'
@@ -74,15 +76,25 @@ let currentCache = new Map<string, { expires_at: number; data: LiveWeatherResult
 let hourlyCache = new Map<string, { expires_at: number; data: LiveHourlyForecastResult }>()
 let sunCache = new Map<string, { expires_at: number; data: LiveSunTimes }>()
 
-function cacheKey(lat: number, lon: number) {
-  return `${lat.toFixed(3)},${lon.toFixed(3)}`
+function normalizeWeatherSourcePolicy(policy?: string | null): WeatherSourcePolicy {
+  const raw = String(policy || 'auto').toLowerCase()
+  if (raw === 'openmeteo' || raw === 'open-meteo') return 'openmeteo'
+  if (raw === 'meteoswiss') return 'meteoswiss'
+  return 'auto'
+}
+
+function cacheKey(lat: number, lon: number, policy: WeatherSourcePolicy) {
+  return `${lat.toFixed(3)},${lon.toFixed(3)}|${policy}`
 }
 
 function inSwissModelBounds(lat: number, lon: number) {
   return lat >= 45.6 && lat <= 47.95 && lon >= 5.6 && lon <= 10.7
 }
 
-function modelForPoint(lat: number, lon: number) {
+function modelForPoint(lat: number, lon: number, policy: WeatherSourcePolicy) {
+  if (policy === 'openmeteo') return null
+  if (policy === 'meteoswiss') return inSwissModelBounds(lat, lon) ? SWISS_MODEL : null
+  // auto: MeteoSwiss for CH points, Open-Meteo default elsewhere
   return inSwissModelBounds(lat, lon) ? SWISS_MODEL : null
 }
 
@@ -288,15 +300,20 @@ async function fetchOpenMeteoForecast(
 /**
  * Get current conditions for a location
  */
-export async function getCurrentWeather(lat: number, lon: number): Promise<LiveWeatherResult> {
-  const key = cacheKey(lat, lon)
+export async function getCurrentWeather(
+  lat: number,
+  lon: number,
+  options?: { weather_source?: WeatherSourcePolicy | string }
+): Promise<LiveWeatherResult> {
+  const policy = normalizeWeatherSourcePolicy(options?.weather_source)
+  const key = cacheKey(lat, lon, policy)
   const now = Date.now()
   const cached = currentCache.get(key)
   if (cached && cached.expires_at > now) return cached.data
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&current=${CURRENT_FIELDS}&timezone=Europe%2FZurich`
 
-  const data = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon))
+  const data = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon, policy))
   const result = parseCurrent(data)
 
   currentCache.set(key, { expires_at: now + CURRENT_TTL_MS, data: result })
@@ -306,15 +323,20 @@ export async function getCurrentWeather(lat: number, lon: number): Promise<LiveW
 /**
  * Get hourly forecast for a destination (next 48h)
  */
-export async function getHourlyForecast(lat: number, lon: number): Promise<LiveHourlyForecastResult> {
-  const key = cacheKey(lat, lon)
+export async function getHourlyForecast(
+  lat: number,
+  lon: number,
+  options?: { weather_source?: WeatherSourcePolicy | string }
+): Promise<LiveHourlyForecastResult> {
+  const policy = normalizeWeatherSourcePolicy(options?.weather_source)
+  const key = cacheKey(lat, lon, policy)
   const now = Date.now()
   const cached = hourlyCache.get(key)
   if (cached && cached.expires_at > now) return cached.data
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
 
-  const payload = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon))
+  const payload = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon, policy))
 
   const hours = parseHourly(payload)
   const result: LiveHourlyForecastResult = {
@@ -329,15 +351,20 @@ export async function getHourlyForecast(lat: number, lon: number): Promise<LiveH
 /**
  * Get sunrise/sunset times
  */
-export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTimes> {
-  const key = cacheKey(lat, lon)
+export async function getSunTimes(
+  lat: number,
+  lon: number,
+  options?: { weather_source?: WeatherSourcePolicy | string }
+): Promise<LiveSunTimes> {
+  const policy = normalizeWeatherSourcePolicy(options?.weather_source)
+  const key = cacheKey(lat, lon, policy)
   const now = Date.now()
   const cached = sunCache.get(key)
   if (cached && cached.expires_at > now) return cached.data
 
   const url = `${BASE}/forecast?latitude=${lat}&longitude=${lon}&daily=sunrise,sunset&forecast_days=2&timezone=Europe%2FZurich`
 
-  const data = await fetchOpenMeteoForecast(url, 3600, modelForPoint(lat, lon))
+  const data = await fetchOpenMeteoForecast(url, 3600, modelForPoint(lat, lon, policy))
 
   const sunrise = data.daily.sunrise[0]
   const sunset = data.daily.sunset[0]
@@ -364,7 +391,11 @@ export async function getSunTimes(lat: number, lon: number): Promise<LiveSunTime
  * Uses Open-Meteo multi-point calls with chunking. If a batch parse/fetch fails,
  * falls back to per-point cached helpers for reliability.
  */
-export async function batchGetWeather(locations: { lat: number; lon: number }[]): Promise<LiveBatchWeatherResult[]> {
+export async function batchGetWeather(
+  locations: { lat: number; lon: number }[],
+  options?: { weather_source?: WeatherSourcePolicy | string }
+): Promise<LiveBatchWeatherResult[]> {
+  const policy = normalizeWeatherSourcePolicy(options?.weather_source)
   const deduped: { lat: number; lon: number }[] = []
   const seen = new Set<string>()
 
@@ -378,8 +409,10 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
   if (deduped.length === 0) return []
 
   const outByKey = new Map<string, LiveBatchWeatherResult>()
-  const swiss = deduped.filter(p => inSwissModelBounds(p.lat, p.lon))
-  const crossBorder = deduped.filter(p => !inSwissModelBounds(p.lat, p.lon))
+  const swiss = policy === 'openmeteo' ? [] : deduped.filter(p => inSwissModelBounds(p.lat, p.lon))
+  const crossBorder = policy === 'openmeteo'
+    ? deduped
+    : deduped.filter(p => !inSwissModelBounds(p.lat, p.lon))
 
   const processGroup = async (
     group: { lat: number; lon: number }[],
@@ -396,8 +429,8 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
         const key = batchPointKey(point.lat, point.lon)
         if (outByKey.has(key)) continue
         const [current, hourly] = await Promise.all([
-          getCurrentWeather(point.lat, point.lon),
-          getHourlyForecast(point.lat, point.lon),
+          getCurrentWeather(point.lat, point.lon, { weather_source: policy }),
+          getHourlyForecast(point.lat, point.lon, { weather_source: policy }),
         ])
         outByKey.set(key, {
           lat: point.lat,
@@ -410,8 +443,8 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
       const fallbackRows = await Promise.all(
         group.map(async point => {
           const [current, hourly] = await Promise.all([
-            getCurrentWeather(point.lat, point.lon),
-            getHourlyForecast(point.lat, point.lon),
+            getCurrentWeather(point.lat, point.lon, { weather_source: policy }),
+            getHourlyForecast(point.lat, point.lon, { weather_source: policy }),
           ])
           return {
             lat: point.lat,
@@ -425,7 +458,8 @@ export async function batchGetWeather(locations: { lat: number; lon: number }[])
     }
   }
 
-  const swissGroups = chunk(swiss, BATCH_CHUNK_SIZE).map(group => ({ group, model: SWISS_MODEL as string | null }))
+  const swissModel = modelForPoint(46.8, 8.2, policy)
+  const swissGroups = chunk(swiss, BATCH_CHUNK_SIZE).map(group => ({ group, model: swissModel as string | null }))
   const crossBorderGroups = chunk(crossBorder, BATCH_CHUNK_SIZE).map(group => ({ group, model: null as string | null }))
   const groups = [...swissGroups, ...crossBorderGroups]
 

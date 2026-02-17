@@ -1264,7 +1264,7 @@ export default function Home() {
                 region={heroEscape.destination.region}
                 type={stampTypeFromDestination(heroEscape.destination)}
                 country={heroEscape.destination.country}
-                className="h-[112px] w-[80px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"
+                className="h-[98px] w-[86px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"
               />
             </div>
 

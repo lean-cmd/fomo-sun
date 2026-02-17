@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, detectInversion, haversineDistance, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
-import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes } from '@/lib/open-meteo'
+import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes, WeatherSourcePolicy } from '@/lib/open-meteo'
 import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TourismInfo, TravelMode } from '@/lib/types'
 import { addRequestLog } from '@/lib/request-log'
@@ -107,6 +107,18 @@ function dayStringInZurich(date: Date): string {
     month: '2-digit',
     day: '2-digit',
   }).format(date)
+}
+
+function hourInZurich(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ZURICH_TZ,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const hour = Number(parts.find(p => p.type === 'hour')?.value || '0')
+  const minute = Number(parts.find(p => p.type === 'minute')?.value || '0')
+  return hour + minute / 60
 }
 
 function isNearMidnightZurich(date = new Date()) {
@@ -365,6 +377,7 @@ function normalizeQueryCacheKey(input: {
   tripSpan: TripSpan
   originName: string
   originKind: 'manual' | 'gps' | 'default'
+  weatherSource: WeatherSourcePolicy
   agentPrefsKey: string
 }) {
   const latKey = input.lat.toFixed(3)
@@ -389,6 +402,7 @@ function normalizeQueryCacheKey(input: {
     `span=${input.tripSpan}`,
     `origin=${input.originName.toLowerCase() || '-'}`,
     `origin_kind=${input.originKind}`,
+    `weather_source=${input.weatherSource}`,
     `agent=${input.agentPrefsKey || '-'}`,
   ].join('&')
 }
@@ -508,13 +522,37 @@ function diversifyTopRows(rows: RankedEscapeRow[]) {
   return [...selected, ...deferred]
 }
 
-function computeLiveWeatherWindow(hours: LiveForecastBundle['hours'], inversionLikely: boolean) {
-  const now = Date.now()
-  const next3 = hours.filter(h => {
-    const t = new Date(h.time).getTime()
-    return t >= now && t <= now + 3 * 60 * 60 * 1000
+function computeLiveWeatherWindow(
+  hours: LiveForecastBundle['hours'],
+  inversionLikely: boolean,
+  daylightToday: DaylightWindow
+) {
+  const now = new Date()
+  const todayStr = dayStringInZurich(now)
+  const nowHour = hourInZurich(now)
+
+  const dayRows = hours.filter(h => h.time.startsWith(todayStr))
+  const next3Rows = dayRows.filter(h => {
+    const hh = Number(h.time.slice(11, 13)) + Number(h.time.slice(14, 16)) / 60
+    return hh >= nowHour && hh < nowHour + 3
   })
-  const window = next3.length >= 2 ? next3 : hours.slice(0, 3)
+
+  const dayStart = Math.max(0, daylightToday.start_hour)
+  const dayEnd = Math.min(24, daylightToday.end_hour)
+  const morningFocusRows = dayRows.filter(h => {
+    const hh = Number(h.time.slice(11, 13)) + Number(h.time.slice(14, 16)) / 60
+    return hh >= dayStart && hh < Math.min(dayEnd, dayStart + 3)
+  })
+
+  const daylightNowRows = dayRows.filter(h => {
+    const hh = Number(h.time.slice(11, 13)) + Number(h.time.slice(14, 16)) / 60
+    return hh >= Math.max(nowHour, dayStart) && hh < Math.min(dayEnd, nowHour + 3)
+  })
+
+  const isPreSunrise = nowHour < dayStart
+  const window = isPreSunrise
+    ? (morningFocusRows.length >= 2 ? morningFocusRows : (next3Rows.length >= 2 ? next3Rows : dayRows.slice(0, 3)))
+    : (daylightNowRows.length >= 2 ? daylightNowRows : (next3Rows.length >= 2 ? next3Rows : dayRows.slice(0, 3)))
 
   const sunshineMin = Math.round(window.reduce((s, h) => s + h.sunshine_duration_min, 0))
   const lowCloud = Math.round(avg(window.map(h => h.low_cloud_cover_pct)))
@@ -668,6 +706,14 @@ export async function GET(request: NextRequest) {
   const typesParam = sp.get('types')
   let types = typesParam ? typesParam.split(',') : []
   const forceRefresh = sp.get('force') === 'true'
+  const weatherSourceRaw = (sp.get('weather_source') || '').toLowerCase()
+  const weatherSource: WeatherSourcePolicy = (
+    weatherSourceRaw === 'openmeteo' || weatherSourceRaw === 'open-meteo'
+      ? 'openmeteo'
+      : weatherSourceRaw === 'meteoswiss'
+        ? 'meteoswiss'
+        : 'auto'
+  )
   const agentPrefsRaw = request.headers.get('X-FOMO-Agent-Preferences')
   let agentPrefs: Record<string, unknown> = {}
   if (agentPrefsRaw) {
@@ -758,7 +804,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, agentPrefsKey,
+    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, weatherSource, agentPrefsKey,
   })
   if (!forceRefresh) {
     const cached = queryResponseCache.get(cacheKey)
@@ -814,7 +860,9 @@ export async function GET(request: NextRequest) {
   let inversionLikely = true
   let originDataSource: 'open-meteo' | 'meteoswiss' | 'mock' = demoMode ? 'mock' : 'open-meteo'
   let fogHeuristicApplied = false
-  const liveModelPolicy = 'CH:meteoswiss_seamless|DE/FR/IT:default'
+  const liveModelPolicy = weatherSource === 'openmeteo'
+    ? 'all:open-meteo-default'
+    : 'CH:meteoswiss_seamless|DE/FR/IT:default'
 
   // Pre-filter by rough distance and user filters
   let candidates = adminAll
@@ -914,10 +962,13 @@ export async function GET(request: NextRequest) {
     try {
       livePoolCount = liveCandidatesWithTravel.length
       const [originCurrent, originHourly, sunTimes, destinationWeather, swissOrigin] = await Promise.all([
-        getCurrentWeather(lat, lon),
-        getHourlyForecast(lat, lon),
-        getSunTimes(lat, lon),
-        batchGetWeather(liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon }))),
+        getCurrentWeather(lat, lon, { weather_source: weatherSource }),
+        getHourlyForecast(lat, lon, { weather_source: weatherSource }),
+        getSunTimes(lat, lon, { weather_source: weatherSource }),
+        batchGetWeather(
+          liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon })),
+          { weather_source: weatherSource }
+        ),
         getSwissMeteoOriginSnapshot(lat, lon),
       ])
       weatherFreshness = new Date().toISOString()
@@ -975,7 +1026,7 @@ export async function GET(request: NextRequest) {
           throw new Error(`Missing live weather for ${c.destination.id}`)
         }
 
-        const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely)
+        const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely, sunWindow.today)
         const tomorrowSunMinRaw = Math.round(live.total_sunshine_tomorrow_min)
         const tomorrowStats = dayAverages(live.hours, tomorrowDay)
         const tomorrowFogAdjusted = applyFogAltitudeAdjustment({
@@ -1462,6 +1513,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
     'X-FOMO-Origin-Source': originDataSource,
+    'X-FOMO-Weather-Source': weatherSource,
     'X-FOMO-Weather-Model-Policy': liveModelPolicy,
     'X-FOMO-Fog-Heuristic': fogHeuristicApplied ? 'applied' : 'off',
     'X-FOMO-Trip-Horizon': tripSpan === 'plus1day' ? 'tomorrow-only' : 'next-3h',

@@ -31,10 +31,10 @@ function sanitizeId(v: string) {
 
 function stampNameStyle(name: string) {
   const len = name.length
-  if (len >= 18) return { size: 13, spacing: 0.8 }
-  if (len >= 14) return { size: 15, spacing: 1.1 }
-  if (len >= 11) return { size: 17, spacing: 1.4 }
-  return { size: 20, spacing: 1.8 }
+  if (len >= 18) return { size: 14, spacing: 1.0 }
+  if (len >= 14) return { size: 16, spacing: 1.25 }
+  if (len >= 11) return { size: 18, spacing: 1.55 }
+  return { size: 21, spacing: 1.9 }
 }
 
 function renderSilhouette(type: StampType, palette: Palette) {
@@ -102,9 +102,9 @@ function renderFlag(country: 'CH' | 'DE' | 'FR' | 'IT') {
   if (country === 'CH') {
     return (
       <g>
-        <rect x="78" y="10" width="12" height="12" rx="1.2" fill="#da291c" />
-        <rect x="83" y="12.1" width="2" height="7.8" fill="#f8fafc" rx="0.3" />
-        <rect x="80.1" y="15" width="7.8" height="2" fill="#f8fafc" rx="0.3" />
+        <rect x="76" y="9" width="14" height="14" rx="1" fill="#da291c" />
+        <rect x="81.35" y="11.2" width="3.3" height="9.6" fill="#f8fafc" rx="0.45" />
+        <rect x="78.2" y="14.35" width="9.6" height="3.3" fill="#f8fafc" rx="0.45" />
       </g>
     )
   }
@@ -152,7 +152,7 @@ export function DestinationStamp({
 
   return (
     <svg
-      viewBox="0 0 100 140"
+      viewBox="0 0 100 124"
       className={className}
       role="img"
       aria-label={`${safeName} destination stamp`}
@@ -165,19 +165,21 @@ export function DestinationStamp({
         </filter>
       </defs>
 
-      <rect x="1.5" y="1.5" width="97" height="137" rx="5" fill="#F5F0E8" stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray="4 3" />
+      <rect x="1.5" y="1.5" width="97" height="121" rx="5" fill="#F5F0E8" stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray="4 3" />
       {renderFlag(country)}
 
-      <g transform="translate(8,8)">
+      <g transform="translate(6,4) scale(1.12)">
         {renderSilhouette(type, palette)}
       </g>
 
       <text
         x="50"
-        y="76"
+        y="71"
         fill="#1E293B"
         textAnchor="middle"
         fontSize={style.size}
+        lengthAdjust="spacingAndGlyphs"
+        textLength="84"
         style={{
           fontFamily: '"Bebas Neue", sans-serif',
           letterSpacing: `${style.spacing}px`,
@@ -189,7 +191,7 @@ export function DestinationStamp({
       {safeRegion && (
         <text
           x="50"
-          y="96"
+          y="88"
           fill="#64748B"
           textAnchor="middle"
           fontSize="9.5"
@@ -203,7 +205,7 @@ export function DestinationStamp({
         x="3"
         y="3"
         width="94"
-        height="134"
+        height="118"
         rx="4"
         fill="#000"
         opacity="0.08"

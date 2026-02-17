@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Download, RefreshCw } from 'lucide-react'
 import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 import { formatSunHours } from '@/lib/format'
@@ -11,6 +11,7 @@ type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
+type WeatherSourceMode = 'auto' | 'openmeteo'
 
 const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
   { id: 'mountain', label: '⛰️ Mountain' },
@@ -85,6 +86,8 @@ export default function AdminDiagnosticsPage() {
     generated: true,
   })
   const [page, setPage] = useState(1)
+  const [weatherSource, setWeatherSource] = useState<WeatherSourceMode>('auto')
+  const weatherSourceInitRef = useRef(false)
   const [meta, setMeta] = useState({
     liveSource: '',
     debugPath: '',
@@ -93,6 +96,8 @@ export default function AdminDiagnosticsPage() {
     requestMs: '',
     responseAt: '',
     weatherFreshness: '',
+    weatherSource: '',
+    modelPolicy: '',
     headers: {} as Record<string, string>,
   })
   const [originMeta, setOriginMeta] = useState<{ name: string; lat: number; lon: number } | null>(null)
@@ -121,6 +126,7 @@ export default function AdminDiagnosticsPage() {
         demo: 'false',
         admin: 'true',
         admin_all: 'true',
+        weather_source: weatherSource,
       })
       const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`API ${res.status}`)
@@ -134,6 +140,8 @@ export default function AdminDiagnosticsPage() {
         'x-fomo-live-fallback',
         'x-fomo-candidate-count',
         'x-fomo-live-pool-count',
+        'x-fomo-weather-source',
+        'x-fomo-weather-model-policy',
         'x-fomo-request-ms',
       ].forEach(h => {
         const val = res.headers.get(h)
@@ -160,6 +168,8 @@ export default function AdminDiagnosticsPage() {
         requestMs: res.headers.get('x-fomo-request-ms') || '',
         responseAt: payload._meta?.generated_at || '',
         weatherFreshness: payload._meta?.weather_data_freshness || '',
+        weatherSource: res.headers.get('x-fomo-weather-source') || '',
+        modelPolicy: res.headers.get('x-fomo-weather-model-policy') || '',
         headers: headersObj,
       })
     } catch (err) {
@@ -186,6 +196,14 @@ export default function AdminDiagnosticsPage() {
     const timer = window.setInterval(fetchLogs, 6000)
     return () => window.clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    if (!weatherSourceInitRef.current) {
+      weatherSourceInitRef.current = true
+      return
+    }
+    fetchData()
+  }, [weatherSource])
 
   const byCountryCount = useMemo(() => {
     const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
@@ -404,7 +422,7 @@ export default function AdminDiagnosticsPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
           <div className="flex flex-wrap gap-2 items-center">
             {(['CH', 'DE', 'FR', 'IT'] as const).map(c => (
               <button
@@ -441,6 +459,14 @@ export default function AdminDiagnosticsPage() {
               <option value="100">100</option>
               <option value="200">200</option>
               <option value="all">All rows</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Weather source
+            <select value={weatherSource} onChange={e => setWeatherSource(e.target.value as WeatherSourceMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+              <option value="auto">Swiss-first (CH MeteoSwiss)</option>
+              <option value="openmeteo">Open-Meteo only</option>
             </select>
           </label>
 
@@ -501,6 +527,8 @@ export default function AdminDiagnosticsPage() {
             <p className="text-xs text-slate-500 mb-2">
               Origin: <strong>{originMeta?.name || 'Basel'}</strong> ({(originMeta?.lat ?? 47.5596).toFixed(2)}, {(originMeta?.lon ?? 7.5886).toFixed(2)})
               {meta.requestMs && <span> · request {meta.requestMs}ms</span>}
+              {meta.weatherSource && <span> · source {meta.weatherSource}</span>}
+              {meta.modelPolicy && <span> · model {meta.modelPolicy}</span>}
             </p>
             <details>
               <summary className="text-xs font-semibold text-slate-700 cursor-pointer">Response headers</summary>
