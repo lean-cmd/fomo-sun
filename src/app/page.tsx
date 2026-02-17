@@ -249,6 +249,41 @@ function compactLabel(name: string, max = 14) {
   return first.length > 2 ? first : name.slice(0, max)
 }
 
+function splitSunLabel(minutes: number): { major: string; fraction: string; unit: 'h' | 'min' } {
+  const formatted = formatSunHours(minutes)
+  if (formatted.endsWith('min')) {
+    return {
+      major: formatted.replace('min', ''),
+      fraction: '',
+      unit: 'min',
+    }
+  }
+  const match = formatted.match(/^(\d+)([¼½¾]?)(h)$/)
+  if (match) {
+    return {
+      major: match[1],
+      fraction: match[2] || '',
+      unit: 'h',
+    }
+  }
+  return { major: formatted.replace('h', ''), fraction: '', unit: 'h' }
+}
+
+function EscapeBadge({ kind }: { kind: 'fastest' | 'warmest' }) {
+  if (kind === 'fastest') {
+    return (
+      <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-amber-800 font-semibold">
+        ⚡ Fastest
+      </span>
+    )
+  }
+  return (
+    <span className="shrink-0 rounded-full border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-orange-800 font-semibold">
+      🌡️ Warmest
+    </span>
+  )
+}
+
 function SunTimelineBar({
   timeline,
   dayFocus,
@@ -377,6 +412,7 @@ export default function Home() {
   const [isJoystickActive, setIsJoystickActive] = useState(false)
   const [joystickNudge, setJoystickNudge] = useState(true)
   const [joystickErrorShake, setJoystickErrorShake] = useState(false)
+  const [hasJoystickInteracted, setHasJoystickInteracted] = useState(false)
 
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
@@ -429,6 +465,7 @@ export default function Home() {
   const dayFocus: DayFocus = tripSpan === 'plus1day' ? 'tomorrow' : 'today'
   const topEscapeCurrent = data?.escapes?.[0] ?? null
   const fastestEscape = data?.fastest_escape ?? null
+  const warmestEscape = data?.warmest_escape ?? null
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
@@ -497,6 +534,7 @@ export default function Home() {
   }, [applyJoyPosition, startJoystickSpringBack, stopJoystickAnim])
 
   const stepJoystickRange = useCallback((dir: 'left' | 'right') => {
+    setHasJoystickInteracted(true)
     setJoystickNudge(false)
     const delta = dir === 'left' ? -1 : 1
     const next = clamp(rangeIndex + delta, 0, TRAVEL_BANDS.length - 1)
@@ -512,6 +550,7 @@ export default function Home() {
   }, [pulseJoystick, rangeIndex])
 
   const setJoystickRange = useCallback((targetIndex: number) => {
+    setHasJoystickInteracted(true)
     const next = clamp(targetIndex, 0, TRAVEL_BANDS.length - 1)
     if (next === rangeIndex) {
       pulseJoystick(next === 0 ? 'right' : 'left', 0.5)
@@ -535,6 +574,7 @@ export default function Home() {
   }, [])
 
   const onJoystickPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    setHasJoystickInteracted(true)
     joystickPointerRef.current = e.pointerId
     joystickZoneRef.current?.setPointerCapture(e.pointerId)
     setJoystickNudge(false)
@@ -623,12 +663,12 @@ export default function Home() {
 
     const run = async () => {
       try {
+        const useWideInitialWindow = !hasJoystickInteracted
+        const reqMaxTravelH = useWideInitialWindow ? MAX_TRAVEL_H : activeBand.maxH
         const p = new URLSearchParams({
           lat: String(origin.lat),
           lon: String(origin.lon),
-          max_travel_h: String(activeBand.maxH),
-          travel_min_h: String(activeBand.minH),
-          travel_max_h: String(activeBand.maxH),
+          max_travel_h: String(reqMaxTravelH),
           mode,
           limit: '15',
           demo: String(demo),
@@ -636,6 +676,13 @@ export default function Home() {
           origin_kind: originMode,
           origin_name: origin.name,
         })
+        if (useWideInitialWindow) {
+          p.set('travel_min_h', String(MIN_TRAVEL_H))
+          p.set('travel_max_h', String(MAX_TRAVEL_H))
+        } else {
+          p.set('travel_min_h', String(activeBand.minH))
+          p.set('travel_max_h', String(activeBand.maxH))
+        }
         const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { signal: ctrl.signal })
         const payload: SunnyEscapesResponse = await res.json()
         setData(payload)
@@ -656,7 +703,7 @@ export default function Home() {
     }
 
     run()
-  }, [activeBand.maxH, activeBand.minH, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
+  }, [activeBand.maxH, activeBand.minH, hasJoystickInteracted, mode, demo, tripSpan, origin.lat, origin.lon, origin.name, originMode])
 
   useEffect(() => () => {
     requestCtrlRef.current?.abort()
@@ -803,22 +850,51 @@ export default function Home() {
   const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
 
   const displayRows = useMemo(() => {
-    const base = visibleRows.map(escape => ({ escape, isFastest: false }))
-    if (!fastestEscape) return base
+    type Row = { escape: EscapeCard; badges: Array<'fastest' | 'warmest'> }
+    const rows: Row[] = []
+    const seen = new Set<string>()
 
-    const existingIdx = base.findIndex(row => row.escape.destination.id === fastestEscape.destination.id)
-    if (existingIdx >= 0) {
-      return base.map((row, idx) => idx === existingIdx ? { ...row, isFastest: true } : row)
+    const pushRow = (escape: EscapeCard | null | undefined) => {
+      if (!escape || seen.has(escape.destination.id)) return false
+      rows.push({ escape, badges: [] })
+      seen.add(escape.destination.id)
+      return true
     }
 
-    // Only use fastest as a hard fallback when the selected bucket has no rows.
-    if (base.length > 0) return base
+    if (visibleRows.length > 0) {
+      pushRow(visibleRows[0])
+    }
+    if (fastestEscape) {
+      if (!pushRow(fastestEscape)) {
+        const row = rows.find(r => r.escape.destination.id === fastestEscape.destination.id)
+        if (row && !row.badges.includes('fastest')) row.badges.push('fastest')
+      }
+    }
+    if (warmestEscape) {
+      if (!pushRow(warmestEscape)) {
+        const row = rows.find(r => r.escape.destination.id === warmestEscape.destination.id)
+        if (row && !row.badges.includes('warmest')) row.badges.push('warmest')
+      }
+    }
 
-    const merged = [...base]
-    const insertAt = Math.min(1, merged.length)
-    merged.splice(insertAt, 0, { escape: fastestEscape, isFastest: true })
-    return merged.slice(0, 5)
-  }, [fastestEscape, visibleRows])
+    for (const escape of visibleRows) {
+      if (rows.length >= 5) break
+      pushRow(escape)
+    }
+
+    if (rows.length === 0) {
+      pushRow(fastestEscape || warmestEscape || null)
+    }
+
+    const fastestId = fastestEscape?.destination.id
+    const warmestId = warmestEscape?.destination.id
+    return rows.slice(0, 5).map(row => {
+      const badges = [...row.badges]
+      if (fastestId && row.escape.destination.id === fastestId && !badges.includes('fastest')) badges.push('fastest')
+      if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
+      return { ...row, badges }
+    })
+  }, [fastestEscape, visibleRows, warmestEscape])
 
   const fastestTravelMin = fastestEscape ? (getBestTravel(fastestEscape)?.min ?? null) : null
 
@@ -1214,7 +1290,7 @@ export default function Home() {
           )}
 
           <div className={`space-y-2.5 transition-opacity duration-200 ${loading ? 'opacity-65' : 'opacity-100'}`}>
-            {displayRows.map(({ escape, isFastest }, index) => {
+            {displayRows.map(({ escape, badges }, index) => {
               const bestTravel = getBestTravel(escape)
               const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
@@ -1227,7 +1303,7 @@ export default function Home() {
               return (
                 <article
                   key={`${escape.destination.id}-${cardFlowTick}`}
-                  className={`fomo-card overflow-hidden ${isFastest ? 'border-l-[3px] border-l-amber-400' : ''}`}
+                  className={`fomo-card overflow-hidden ${badges.length > 0 ? 'border-l-[3px] border-l-amber-400' : ''}`}
                   style={{ animation: `${cardFlowAnimation} ${Math.min(index * 30, 120)}ms both` }}
                 >
                   <div className="px-3.5 pt-3.5 pb-2.5">
@@ -1242,14 +1318,10 @@ export default function Home() {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
+                              <div className="min-w-0 pt-1.5">
                                 <div className="flex items-center gap-1.5 min-w-0">
                                   <h3 className="text-[15px] font-semibold text-slate-900 truncate">{escape.destination.name}</h3>
-                                  {isFastest && (
-                                    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] uppercase tracking-[0.08em] text-amber-800 font-semibold">
-                                      ⚡ Fastest
-                                    </span>
-                                  )}
+                                  {badges.map(kind => <EscapeBadge key={kind} kind={kind} />)}
                                 </div>
                                 <p className="text-[11px] text-slate-500 mt-0.5">{escape.destination.region} · {escape.destination.altitude_m.toLocaleString()}m · {FLAG[escape.destination.country]}</p>
                                 <div className="mt-1.5 text-[11px] text-slate-500 inline-flex items-center gap-1">
@@ -1260,18 +1332,29 @@ export default function Home() {
                               </div>
 
                               <div className="shrink-0">
-                                <div className="inline-flex items-center gap-4">
-                                  <p className="text-[20px] leading-none text-amber-600 inline-flex items-center gap-2 font-semibold" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                <div className="inline-flex items-center gap-4 pr-0.5">
+                                  <p className="leading-none text-amber-600 inline-flex items-end gap-1.5 font-semibold py-1" style={{ fontFamily: 'DM Mono, monospace' }}>
                                     <Sun className="w-4 h-4 text-amber-500" strokeWidth={1.9} />
-                                    <span>{formatSunHours(escape.sun_score.sunshine_forecast_min)}</span>
+                                    {(() => {
+                                      const sun = splitSunLabel(escape.sun_score.sunshine_forecast_min)
+                                      return (
+                                        <>
+                                          <span className="text-[22px] leading-[0.95]">{sun.major}</span>
+                                          {sun.fraction ? (
+                                            <sup className="text-[13px] leading-none text-amber-500 font-semibold relative -top-[0.15em]">{sun.fraction}</sup>
+                                          ) : null}
+                                          <span className="text-[13px] leading-none text-amber-500 font-medium">{sun.unit}</span>
+                                        </>
+                                      )
+                                    })()}
                                     {gainMin > 0 && (
-                                      <span className="text-[12px] text-emerald-500 font-semibold -ml-0.5">
+                                      <span className="text-[13px] text-emerald-500 font-semibold">
                                         +{formatSunHours(gainMin)}
                                       </span>
                                     )}
                                   </p>
                                   {bestTravel && (
-                                    <p className="text-[15px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    <p className="text-[13px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-medium py-1" style={{ fontFamily: 'DM Mono, monospace' }}>
                                       <IconForMode mode={bestTravel.mode} />
                                       <span>{formatTravelClock(bestTravel.min / 60)}</span>
                                     </p>

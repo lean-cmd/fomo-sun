@@ -85,6 +85,7 @@ export interface SunnyEscapesResponse {
   tomorrow_sun_hours: number
   optimal_travel_h: number // best net-sun travel radius
   fastest_escape?: EscapeResult
+  warmest_escape?: EscapeResult
   escapes: EscapeResult[]
 }
 

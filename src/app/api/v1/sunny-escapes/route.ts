@@ -252,6 +252,13 @@ function dayAverages(hours: LiveForecastBundle['hours'], dayStr: string) {
   }
 }
 
+function extractTempCFromText(text: string) {
+  const m = text.match(/(-?\d+)\s*°\s*c/i)
+  if (!m) return null
+  const parsed = Number(m[1])
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function detectOriginFogRisk(input: {
   isFoggy: boolean
   visibilityM: number
@@ -727,6 +734,7 @@ export async function GET(request: NextRequest) {
   let originDescription = mockOrigin.description
   let originSunScore = mockOrigin.sun_score
   let originSunMin = mockOrigin.sunshine_min
+  let originTempC = extractTempCFromText(mockOrigin.description) ?? 0
   let originTimeline: SunTimeline = getMockOriginTimeline()
   let sunWindow = { today: getMockDaylightWindow(0), tomorrow: getMockDaylightWindow(1) }
   let sunsetInfo = getMockSunset(demoMode)
@@ -849,6 +857,7 @@ export async function GET(request: NextRequest) {
       originDescription = swissOrigin?.description ?? originCurrent.conditions_text
       originSunMin = swissOrigin?.sunshine_min ?? originCurrent.sunshine_duration_min
       originSunScore = swissOrigin?.sun_score ?? originSunScoreFromCurrent(originCurrent)
+      originTempC = Math.round(swissOrigin?.temp_c ?? originCurrent.temperature_c)
       const originFogRisk = detectOriginFogRisk({
         isFoggy: originCurrent.is_foggy,
         visibilityM: originCurrent.visibility_m,
@@ -972,6 +981,7 @@ export async function GET(request: NextRequest) {
       originDescription = `${fallbackNotice} · ${mockOrigin.description}`
       originSunScore = mockOrigin.sun_score
       originSunMin = mockOrigin.sunshine_min
+      originTempC = extractTempCFromText(mockOrigin.description) ?? 0
       originTimeline = getMockOriginTimeline()
       sunWindow = { today: getMockDaylightWindow(0), tomorrow: getMockDaylightWindow(1) }
       sunsetInfo = getMockSunset(true)
@@ -1235,6 +1245,18 @@ export async function GET(request: NextRequest) {
     })[0]
 
   const fastestEscape = fastestCandidate ? toEscapeResult(fastestCandidate, 0) : undefined
+  const warmestCandidate = withTravel
+    .filter(r => Number.isFinite(r.temp_c))
+    .sort((a, b) => {
+      if (b.temp_c !== a.temp_c) return b.temp_c - a.temp_c
+      const bMetric = comparisonMetric(b)
+      const aMetric = comparisonMetric(a)
+      if (bMetric !== aMetric) return bMetric - aMetric
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      return a.bestTravelMin - b.bestTravelMin
+    })
+    .find(r => r.temp_c > originTempC + 3)
+  const warmestEscape = warmestCandidate ? toEscapeResult(warmestCandidate, 0) : undefined
 
   const originName = originNameParam || (
     (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
@@ -1276,6 +1298,7 @@ export async function GET(request: NextRequest) {
     tomorrow_sun_hours: originTomorrowHours,
     optimal_travel_h: bestOptH,
     fastest_escape: fastestEscape,
+    warmest_escape: warmestEscape,
     escapes,
   }
 
