@@ -74,7 +74,8 @@ const LIVE_RATE_MAX_PER_WINDOW = 90
 const liveReqCounter = new Map<string, { reset_at: number; count: number }>()
 const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
-const LIVE_WEATHER_POOL_TARGET = 20
+const LIVE_WEATHER_POOL_TARGET = 36
+const LIVE_WEATHER_POOL_EXPLICIT_MAX = 140
 const MIN_ESCAPE_SUN_MIN = 30
 const BUCKET_MERGE_MIN_RESULTS = 4
 const DIVERSITY_RADIUS_KM = 25
@@ -414,7 +415,6 @@ function selectLiveWeatherPool(candidates: Array<{
 }>, maxTravelMin: number, windowMinMin?: number | null, windowMaxMin?: number | null) {
   if (candidates.length <= LIVE_WEATHER_POOL_TARGET) return candidates
 
-  const target = LIVE_WEATHER_POOL_TARGET
   const hasExplicitWindow = Number.isFinite(windowMinMin ?? NaN) || Number.isFinite(windowMaxMin ?? NaN)
   const resolvedWindowMin = Number.isFinite(windowMinMin ?? NaN)
     ? Math.max(0, windowMinMin as number)
@@ -424,6 +424,27 @@ function selectLiveWeatherPool(candidates: Array<{
     : maxTravelMin + 45
   const windowCenter = (resolvedWindowMin + resolvedWindowMax) / 2
 
+  if (hasExplicitWindow) {
+    const widenedMin = Math.max(0, resolvedWindowMin - 15)
+    const widenedMax = resolvedWindowMax + 15
+    const explicitPool = candidates
+      .filter(c => c.bestTravelMin >= widenedMin && c.bestTravelMin <= widenedMax)
+      .sort((a, b) => {
+        const da = Math.abs(a.bestTravelMin - windowCenter)
+        const db = Math.abs(b.bestTravelMin - windowCenter)
+        if (da !== db) return da - db
+        if (a.destination.country !== b.destination.country) {
+          // Keep a healthier CH/non-CH mix in long-range windows.
+          if (a.destination.country === 'CH') return 1
+          if (b.destination.country === 'CH') return -1
+        }
+        return b.destination.altitude_m - a.destination.altitude_m
+      })
+    if (explicitPool.length <= LIVE_WEATHER_POOL_EXPLICIT_MAX) return explicitPool
+    return explicitPool.slice(0, LIVE_WEATHER_POOL_EXPLICIT_MAX)
+  }
+
+  const target = LIVE_WEATHER_POOL_TARGET
   const inWindowCandidates = candidates
     .filter(c => c.bestTravelMin >= resolvedWindowMin && c.bestTravelMin <= resolvedWindowMax)
     .sort((a, b) => {

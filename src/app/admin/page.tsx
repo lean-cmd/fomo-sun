@@ -68,6 +68,15 @@ function scoreColor(score: number) {
   return 'text-slate-500'
 }
 
+function formatTravelHm(durationMin?: number | null) {
+  if (!Number.isFinite(durationMin ?? NaN)) return '-'
+  const rounded = Math.max(0, Math.round(durationMin as number))
+  const h = Math.floor(rounded / 60)
+  const m = rounded % 60
+  if (h <= 0) return `${m}m`
+  return `${h}h ${m}m`
+}
+
 export default function AdminDiagnosticsPage() {
   const [rows, setRows] = useState<Escape[]>([])
   const [loading, setLoading] = useState(true)
@@ -352,7 +361,7 @@ export default function AdminDiagnosticsPage() {
       return Math.max(0, daySunMin(r) - Math.round(bestTravelMin))
     }
 
-    const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'net_sun_min', 'temp_c', 'condition']
+    const header = ['name', 'country', 'quality', 'lat', 'lon', 'altitude_m', 'fomo_score_pct', 'sunshine_min', 'net_sun_min', 'travel_car_min', 'travel_train_min', 'temp_c', 'condition']
     const lines = filteredSorted.map(r => [
       r.destination.name,
       r.destination.country,
@@ -363,6 +372,8 @@ export default function AdminDiagnosticsPage() {
       Math.round(r.sun_score.score * 100),
       daySunMin(r),
       dayNetSunMin(r),
+      Number.isFinite(r.travel?.car?.duration_min) ? Math.round(r.travel?.car?.duration_min as number) : '',
+      Number.isFinite(r.travel?.train?.duration_min) ? Math.round(r.travel?.train?.duration_min as number) : '',
       Math.round(r.weather_now?.temp_c ?? 0),
       r.weather_now?.summary || r.conditions,
     ])
@@ -584,7 +595,7 @@ export default function AdminDiagnosticsPage() {
         {error && <div className="mb-3 rounded-lg border border-red-200 bg-red-50 text-red-700 text-sm px-3 py-2">{error}</div>}
 
         <div className="rounded-xl border border-slate-200 bg-white overflow-auto">
-          <table className="w-full min-w-[1180px] text-xs">
+          <table className="w-full min-w-[1320px] text-xs">
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">Compare</th>
@@ -594,6 +605,8 @@ export default function AdminDiagnosticsPage() {
                 <th className="text-right px-3 py-2 font-semibold">Altitude</th>
                 <th className="text-right px-3 py-2 font-semibold">Sun</th>
                 <th className="text-right px-3 py-2 font-semibold">Net sun</th>
+                <th className="text-right px-3 py-2 font-semibold">Car (from origin)</th>
+                <th className="text-right px-3 py-2 font-semibold">Train (from origin)</th>
                 <th className="text-right px-3 py-2 font-semibold">FOMO</th>
                 <th className="text-right px-3 py-2 font-semibold">Temp</th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
@@ -603,11 +616,11 @@ export default function AdminDiagnosticsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
+                  <td colSpan={13} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
                 </tr>
               ) : filteredSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
+                  <td colSpan={13} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
                 </tr>
               ) : (
                 <>
@@ -620,6 +633,8 @@ export default function AdminDiagnosticsPage() {
                       <td className="px-3 py-2.5 text-right text-slate-500">-</td>
                       <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(forecastDay === 'today' ? originSnapshot.sunTodayMin : originSnapshot.sunTomorrowMin)}</td>
                       <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(forecastDay === 'today' ? originSnapshot.sunTodayMin : originSnapshot.sunTomorrowMin)}</td>
+                      <td className="px-3 py-2.5 text-right text-slate-500">-</td>
+                      <td className="px-3 py-2.5 text-right text-slate-500">-</td>
                       <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(originSnapshot.score)}`}>{Math.round(originSnapshot.score * 100)}%</td>
                       <td className="px-3 py-2.5 text-right text-slate-700">{originSnapshot.tempC}°C</td>
                       <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={originSnapshot.summary}>{originSnapshot.summary}</td>
@@ -666,6 +681,8 @@ export default function AdminDiagnosticsPage() {
                         <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(dayNetSunMin)}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.car?.duration_min)}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.train?.duration_min)}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
                         <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
@@ -676,7 +693,7 @@ export default function AdminDiagnosticsPage() {
 
                       {isExpanded && (
                         <tr className="bg-slate-50/70 border-t border-slate-100">
-                          <td colSpan={11} className="px-3 py-3">
+                          <td colSpan={13} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>
