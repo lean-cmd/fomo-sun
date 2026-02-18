@@ -13,6 +13,21 @@ type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 type WeatherSourceMode = 'meteoswiss' | 'openmeteo' | 'meteoswiss_api'
 type AdminTravelMode = 'both' | 'car' | 'train'
+type DataCheckSampleRow = {
+  destination: string
+  bucket: string
+  sun_hours: number
+  net_sun_min: number
+  score: number
+  data_age_min: number
+  flags: string[]
+}
+type BucketHealthRow = {
+  day: ForecastDay
+  bucket: string
+  valid_count: number
+  warn: boolean
+}
 
 const ADMIN_ORIGIN_CITIES = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
@@ -29,6 +44,14 @@ const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
   { id: 'thermal', label: '♨️ Thermal' },
   { id: 'lake', label: '🌊 Lake' },
 ]
+
+const ADMIN_TRAVEL_BUCKETS = [
+  { id: 'quick', label: '0-1h', min_h: 0, max_h: 1 },
+  { id: 'short-a', label: '1-1.5h', min_h: 1, max_h: 1.5 },
+  { id: 'short-b', label: '1.5-2h', min_h: 1.5, max_h: 2 },
+  { id: 'mid', label: '2-3h', min_h: 2, max_h: 3 },
+  { id: 'long', label: '3-6.5h', min_h: 3, max_h: 6.5 },
+] as const
 
 type Escape = SunnyEscapesResponse['escapes'][number]
 
@@ -104,6 +127,26 @@ function dayStringInZurich(offsetDays = 0) {
   }).format(d)
 }
 
+function bestTravelMin(row: Escape) {
+  return Math.min(
+    row.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
+    row.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+  )
+}
+
+function sunMinutesForDay(row: Escape, day: ForecastDay) {
+  return day === 'today'
+    ? row.sun_score.sunshine_forecast_min
+    : Math.max(0, Math.round((row.tomorrow_sun_hours || 0) * 60))
+}
+
+function netSunMinutesForDay(row: Escape, day: ForecastDay) {
+  if (day === 'today' && Number.isFinite(row.net_sun_min)) return Math.max(0, row.net_sun_min)
+  const travelMin = bestTravelMin(row)
+  if (!Number.isFinite(travelMin)) return 0
+  return Math.max(0, sunMinutesForDay(row, day) - Math.round(travelMin))
+}
+
 export default function AdminDiagnosticsPage() {
   const [rows, setRows] = useState<Escape[]>([])
   const [loading, setLoading] = useState(true)
@@ -154,6 +197,10 @@ export default function AdminDiagnosticsPage() {
   } | null>(null)
   const [logs, setLogs] = useState<RequestLogRow[]>([])
   const [bucketCounts, setBucketCounts] = useState<NonNullable<SunnyEscapesResponse['_meta']['bucket_counts']>>([])
+  const [dataChecksRunning, setDataChecksRunning] = useState(false)
+  const [dataCheckRows, setDataCheckRows] = useState<DataCheckSampleRow[]>([])
+  const [bucketHealthChecks, setBucketHealthChecks] = useState<BucketHealthRow[]>([])
+  const [dataCheckWarnings, setDataCheckWarnings] = useState<string[]>([])
 
   const handleSortChange = (next: SortMode) => {
     if (sortMode === next) {
@@ -165,31 +212,41 @@ export default function AdminDiagnosticsPage() {
   }
   const sortArrow = (mode: SortMode) => (sortMode === mode ? (sortDesc ? '↓' : '↑') : '')
 
+  const buildAdminQuery = (day: ForecastDay) => {
+    const selectedOrigin = ADMIN_ORIGIN_CITIES.find(city => city.name === adminOrigin) || ADMIN_ORIGIN_CITIES[0]
+    const p = new URLSearchParams({
+      lat: String(selectedOrigin.lat),
+      lon: String(selectedOrigin.lon),
+      origin_name: selectedOrigin.name,
+      origin_kind: 'manual',
+      max_travel_h: '6.5',
+      travel_min_h: '0',
+      travel_max_h: '6.5',
+      mode: adminMode,
+      ga: 'false',
+      limit: '5000',
+      demo: 'false',
+      admin: 'true',
+      admin_all: 'true',
+      trip_span: day === 'tomorrow' ? 'plus1day' : 'daytrip',
+      weather_source: weatherSource,
+    })
+    return p.toString()
+  }
+
+  const fetchAdminPayload = async (day: ForecastDay) => {
+    const query = buildAdminQuery(day)
+    const res = await fetch(`/api/v1/sunny-escapes?${query}`, { cache: 'no-store' })
+    if (!res.ok) throw new Error(`API ${res.status}`)
+    const payload: SunnyEscapesResponse = await res.json()
+    return { payload, res }
+  }
+
   const fetchData = async () => {
     setLoading(true)
     setError('')
     try {
-      const selectedOrigin = ADMIN_ORIGIN_CITIES.find(city => city.name === adminOrigin) || ADMIN_ORIGIN_CITIES[0]
-      const p = new URLSearchParams({
-        lat: String(selectedOrigin.lat),
-        lon: String(selectedOrigin.lon),
-        origin_name: selectedOrigin.name,
-        origin_kind: 'manual',
-        max_travel_h: '6.5',
-        travel_min_h: '0',
-        travel_max_h: '6.5',
-        mode: adminMode,
-        ga: 'false',
-        limit: '5000',
-        demo: 'false',
-        admin: 'true',
-        admin_all: 'true',
-        trip_span: forecastDay === 'tomorrow' ? 'plus1day' : 'daytrip',
-        weather_source: weatherSource,
-      })
-      const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error(`API ${res.status}`)
-      const payload: SunnyEscapesResponse = await res.json()
+      const { payload, res } = await fetchAdminPayload(forecastDay)
 
       const headersObj: Record<string, string> = {}
       ;[
@@ -240,6 +297,120 @@ export default function AdminDiagnosticsPage() {
       setError(String((err as Error)?.message || err))
     } finally {
       setLoading(false)
+    }
+  }
+
+  const runDataChecks = async () => {
+    setDataChecksRunning(true)
+    setDataCheckWarnings([])
+    try {
+      const [todayRes, tomorrowRes] = await Promise.all([
+        fetchAdminPayload('today'),
+        fetchAdminPayload('tomorrow'),
+      ])
+
+      const buildBucketHealth = (rows: Escape[], day: ForecastDay): BucketHealthRow[] => (
+        ADMIN_TRAVEL_BUCKETS.map(bucket => {
+          const minMin = Math.round(bucket.min_h * 60)
+          const maxMin = Math.round(bucket.max_h * 60)
+          const validCount = rows.filter((row) => {
+            const travel = bestTravelMin(row)
+            if (!Number.isFinite(travel)) return false
+            if (travel < minMin || travel > maxMin) return false
+            return sunMinutesForDay(row, day) > 0 && netSunMinutesForDay(row, day) > 0
+          }).length
+          return {
+            day,
+            bucket: bucket.label,
+            valid_count: validCount,
+            warn: validCount < 3,
+          }
+        })
+      )
+
+      const allHealth = [
+        ...buildBucketHealth(todayRes.payload.escapes || [], 'today'),
+        ...buildBucketHealth(tomorrowRes.payload.escapes || [], 'tomorrow'),
+      ]
+      setBucketHealthChecks(allHealth)
+
+      const activePayload = forecastDay === 'tomorrow' ? tomorrowRes.payload : todayRes.payload
+      const freshnessIso = activePayload._meta?.weather_data_freshness || activePayload._meta?.generated_at || ''
+      const ageMin = freshnessIso
+        ? Math.max(0, Math.round((Date.now() - new Date(freshnessIso).getTime()) / 60000))
+        : 0
+
+      const byBucket: Escape[] = []
+      const seen = new Set<string>()
+      for (const bucket of ADMIN_TRAVEL_BUCKETS) {
+        const minMin = Math.round(bucket.min_h * 60)
+        const maxMin = Math.round(bucket.max_h * 60)
+        const picks = (activePayload.escapes || [])
+          .filter((row) => {
+            const travel = bestTravelMin(row)
+            return Number.isFinite(travel) && travel >= minMin && travel <= maxMin
+          })
+          .sort((a, b) => b.sun_score.score - a.sun_score.score)
+          .slice(0, 3)
+        for (const row of picks) {
+          if (seen.has(row.destination.id)) continue
+          seen.add(row.destination.id)
+          byBucket.push(row)
+          if (byBucket.length >= 15) break
+        }
+        if (byBucket.length >= 15) break
+      }
+
+      if (byBucket.length < 10) {
+        for (const row of (activePayload.escapes || [])) {
+          if (seen.has(row.destination.id)) continue
+          seen.add(row.destination.id)
+          byBucket.push(row)
+          if (byBucket.length >= 15) break
+        }
+      }
+
+      const checks: DataCheckSampleRow[] = byBucket.map((row) => {
+        const travel = bestTravelMin(row)
+        const bucket = ADMIN_TRAVEL_BUCKETS.find((b) => {
+          const minMin = Math.round(b.min_h * 60)
+          const maxMin = Math.round(b.max_h * 60)
+          return Number.isFinite(travel) && travel >= minMin && travel <= maxMin
+        })?.label || 'out-of-range'
+        const sunMin = sunMinutesForDay(row, forecastDay)
+        const netMin = netSunMinutesForDay(row, forecastDay)
+        const flags: string[] = []
+        if (netMin === 0 && row.sun_score.score > 0.3) {
+          flags.push('net=0 with score>0.3')
+        }
+        if (ageMin > 120) {
+          flags.push('stale data >2h')
+        }
+        return {
+          destination: row.destination.name,
+          bucket,
+          sun_hours: Math.round((sunMin / 60) * 10) / 10,
+          net_sun_min: netMin,
+          score: row.sun_score.score,
+          data_age_min: ageMin,
+          flags,
+        }
+      })
+
+      const warnings: string[] = []
+      for (const h of allHealth) {
+        if (h.warn) warnings.push(`${h.day} ${h.bucket}: only ${h.valid_count} valid non-zero rows`)
+      }
+      if (checks.some(c => c.flags.length > 0)) {
+        warnings.push('Potential scoring anomalies found in sampled destinations.')
+      }
+
+      setDataCheckRows(checks)
+      setDataCheckWarnings(warnings)
+    } catch (err) {
+      setDataCheckWarnings([`Data checks failed: ${String((err as Error)?.message || err)}`])
+    } finally {
+      setDataChecksRunning(false)
     }
   }
 
@@ -548,6 +719,80 @@ export default function AdminDiagnosticsPage() {
             </div>
           </section>
         )}
+
+        <section className="rounded-xl border border-slate-200 bg-white p-3 mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold">Data quality checks</p>
+              <p className="text-[11px] text-slate-500">Sample 10-15 destinations across buckets and flag suspicious live values.</p>
+            </div>
+            <button
+              onClick={runDataChecks}
+              disabled={dataChecksRunning}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {dataChecksRunning ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+              Run data checks
+            </button>
+          </div>
+
+          {dataCheckWarnings.length > 0 && (
+            <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2">
+              {dataCheckWarnings.map((warning) => (
+                <p key={warning} className="text-[11px] text-amber-800">• {warning}</p>
+              ))}
+            </div>
+          )}
+
+          {bucketHealthChecks.length > 0 && (
+            <div className="mb-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-1.5">Bucket health (&gt;=3 valid non-zero results)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {bucketHealthChecks.map((row) => (
+                  <span
+                    key={`${row.day}-${row.bucket}`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                      row.warn ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {row.day} {row.bucket}: {row.valid_count}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {dataCheckRows.length > 0 && (
+            <div className="overflow-auto rounded-lg border border-slate-200">
+              <table className="w-full min-w-[720px] text-[11px]">
+                <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-2.5 py-1.5 font-semibold">Destination</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold">Bucket</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold">Raw sun h</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold">Net sun min</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold">Score</th>
+                    <th className="text-right px-2.5 py-1.5 font-semibold">Data age</th>
+                    <th className="text-left px-2.5 py-1.5 font-semibold">Flag</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataCheckRows.map((row) => (
+                    <tr key={`${row.destination}-${row.bucket}`} className="border-t border-slate-100">
+                      <td className="px-2.5 py-1.5 text-slate-700">{row.destination}</td>
+                      <td className="px-2.5 py-1.5 text-slate-600">{row.bucket}</td>
+                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{row.sun_hours.toFixed(1)}h</td>
+                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{row.net_sun_min}</td>
+                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{Math.round(row.score * 100)}%</td>
+                      <td className="px-2.5 py-1.5 text-right text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>{row.data_age_min}m</td>
+                      <td className="px-2.5 py-1.5 text-slate-600">{row.flags.length ? row.flags.join(' · ') : 'ok'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
           <div className="flex flex-wrap gap-2 items-center">

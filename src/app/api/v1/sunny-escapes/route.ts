@@ -347,6 +347,30 @@ function hourToHHMM(hour: number) {
   return `${hh}:${mm}`
 }
 
+function roundHourToQuarter(hour: number) {
+  return Math.round(hour * 4) / 4
+}
+
+function firstSignificantSunHour(input: {
+  hours: LiveForecastBundle['hours']
+  dayStr: string
+  daylight: DaylightWindow
+  thresholdMin?: number
+}) {
+  const thresholdMin = input.thresholdMin ?? 15
+  const rows = input.hours
+    .filter(h => h.time.startsWith(input.dayStr))
+    .map(h => ({ ...h, hour: hourFromIso(h.time) }))
+    .filter(h => h.hour >= input.daylight.start_hour && h.hour < input.daylight.end_hour)
+    .sort((a, b) => a.hour - b.hour)
+
+  const significant = rows.find(h => h.sunshine_duration_min >= thresholdMin)
+  if (significant) return significant.hour
+  const anySun = rows.find(h => h.sunshine_duration_min > 0)
+  if (anySun) return anySun.hour
+  return Math.max(0, input.daylight.start_hour)
+}
+
 function sunnyMinutesLostDuringTravel(input: {
   hours: LiveForecastBundle['hours']
   dayStr: string
@@ -1109,8 +1133,7 @@ export async function GET(request: NextRequest) {
       ? Math.round(originTomorrowHours * 60)
       : originSunMin
     const demoTomorrowDaylight = getMockDaylightWindow(1)
-    const demoSunriseHour = Math.max(0, demoTomorrowDaylight.start_hour + 1)
-    const targetArrivalHour = Math.max(7, demoSunriseHour)
+    const firstSignificantTomorrowHour = Math.max(7, demoTomorrowDaylight.start_hour + 1)
     const earliestDepartureHour = 5.5
     return candidatesWithTravel.map(c => {
       const w = getMockWeather(c.destination, true)
@@ -1120,10 +1143,10 @@ export async function GET(request: NextRequest) {
         : w.sunshine_forecast_min
       const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
       const travelHours = c.bestTravelMin / 60
-      const idealDepartureHour = targetArrivalHour - travelHours
-      const cappedDepartureHour = Math.max(earliestDepartureHour, idealDepartureHour)
+      const idealDepartureHour = roundHourToQuarter(firstSignificantTomorrowHour - travelHours)
+      const cappedDepartureHour = roundHourToQuarter(Math.max(earliestDepartureHour, idealDepartureHour))
       const arrivalHour = cappedDepartureHour + travelHours
-      const missedEarlyHours = Math.max(0, arrivalHour - targetArrivalHour)
+      const missedEarlyHours = Math.max(0, arrivalHour - firstSignificantTomorrowHour)
       const daylightHours = Math.max(1, demoTomorrowDaylight.end_hour - demoTomorrowDaylight.start_hour)
       const missedEarlySunMin = Math.round((missedEarlyHours / daylightHours) * tomorrowMin)
       const tomorrowNetAfterArrivalMin = Math.max(0, Math.round(tomorrowMin - missedEarlySunMin))
@@ -1301,20 +1324,25 @@ export async function GET(request: NextRequest) {
           ? daytripFogAdjusted.sunMin / todayRemainingRawMin
           : 1
         const lostTodaySunAdjustedMin = Math.max(0, Math.round(lostTodaySunRawMin * todayAdjustmentRatio))
-        const destinationSunriseTomorrowHour = live.sunrise_tomorrow_iso
-          ? hourFromIso(live.sunrise_tomorrow_iso)
-          : Math.max(0, destinationDaylightTomorrow.start_hour + 1)
-        const targetArrivalHourTomorrow = Math.max(7, destinationSunriseTomorrowHour)
+        const firstSignificantTomorrowHour = Math.max(
+          7,
+          firstSignificantSunHour({
+            hours: live.hours,
+            dayStr: tomorrowDay,
+            daylight: destinationDaylightTomorrow,
+            thresholdMin: 15,
+          })
+        )
         const travelHours = c.bestTravelMin / 60
-        const idealDepartureTomorrowHour = targetArrivalHourTomorrow - travelHours
-        const cappedDepartureTomorrowHour = Math.max(5.5, idealDepartureTomorrowHour)
+        const idealDepartureTomorrowHour = roundHourToQuarter(firstSignificantTomorrowHour - travelHours)
+        const cappedDepartureTomorrowHour = roundHourToQuarter(Math.max(5.5, idealDepartureTomorrowHour))
         const arrivalTomorrowHour = cappedDepartureTomorrowHour + travelHours
-        const missedEarlySunTomorrowMin = idealDepartureTomorrowHour < 5.5 && arrivalTomorrowHour > targetArrivalHourTomorrow
+        const missedEarlySunTomorrowMin = idealDepartureTomorrowHour < 5.5 && arrivalTomorrowHour > firstSignificantTomorrowHour
           ? sunnyMinutesLostDuringTravel({
             hours: live.hours,
             dayStr: tomorrowDay,
-            departureHour: targetArrivalHourTomorrow,
-            travelMin: Math.max(0, (arrivalTomorrowHour - targetArrivalHourTomorrow) * 60),
+            departureHour: firstSignificantTomorrowHour,
+            travelMin: Math.max(0, (arrivalTomorrowHour - firstSignificantTomorrowHour) * 60),
             daylight: destinationDaylightTomorrow,
           })
           : 0

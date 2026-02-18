@@ -21,6 +21,19 @@ const TYPE_PALETTE: Record<StampType, Palette> = {
   default: { silhouette: '#334155', accent: '#F59E0B' },
 }
 
+const STAMP_REGION_ALIAS: Record<string, string> = {
+  'BERNESE OBERLAND': 'OBERLAND',
+  'EASTERN SWITZERLAND': 'EAST CH',
+  'LAKE LUCERNE': 'LUCERNE',
+  'LAKE MAGGIORE': 'MAGGIORE',
+  'LAKE COMO': 'COMO',
+  'BLACK FOREST': 'SCHWARZWALD',
+  'FRENCH ALPS': 'ALPES FR',
+  'LOWER ENGINADIN': 'ENGADIN',
+  'LOWER ENGADIN': 'ENGADIN',
+  'GRISONS': 'GRAUBUENDEN',
+}
+
 function sanitizeId(v: string) {
   return v
     .toLowerCase()
@@ -35,6 +48,24 @@ function stampNameStyle(name: string) {
   if (len >= 14) return { size: 15, spacing: 1.1 }
   if (len >= 11) return { size: 17, spacing: 1.35 }
   return { size: 19, spacing: 1.7 }
+}
+
+function stampRegionLabel(region?: string, maxChars = 20) {
+  const raw = (region || '').trim().toUpperCase()
+  if (!raw) return ''
+  const alias = STAMP_REGION_ALIAS[raw]
+  if (alias) return alias
+  if (raw.length <= maxChars) return raw
+
+  const words = raw.split(/\s+/).filter(Boolean)
+  if (words.length >= 2) {
+    const firstTwo = `${words[0]} ${words[1]}`
+    if (firstTwo.length <= maxChars) return firstTwo
+    if (words[0].length <= maxChars) return words[0]
+    return words[0].slice(0, maxChars)
+  }
+
+  return words[0].slice(0, maxChars)
 }
 
 function renderSilhouette(type: StampType, palette: Palette) {
@@ -145,7 +176,7 @@ export function DestinationStamp({
   className = '',
 }: StampProps) {
   const safeName = (name || 'DESTINATION').toUpperCase().slice(0, 24)
-  const safeRegion = region ? region.toUpperCase().slice(0, 24) : ''
+  const safeRegion = stampRegionLabel(region)
   const style = stampNameStyle(safeName)
   const palette = TYPE_PALETTE[type] ?? TYPE_PALETTE.default
   const grainId = `grain-${sanitizeId(`${safeName}-${type}-${country}`)}`
@@ -168,13 +199,13 @@ export function DestinationStamp({
       <rect x="1.5" y="1.5" width="97" height="121" rx="5" fill="#F5F0E8" stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray="4 3" />
       {renderFlag(country)}
 
-      <g transform="translate(10,7) scale(0.98)">
+      <g transform="translate(-2,9) scale(1.2)">
         {renderSilhouette(type, palette)}
       </g>
 
       <text
         x="50"
-        y="83"
+        y="92"
         fill="#1E293B"
         textAnchor="middle"
         fontSize={style.size}
@@ -191,7 +222,7 @@ export function DestinationStamp({
       {safeRegion && (
         <text
           x="50"
-          y="98"
+          y="106"
           fill="#64748B"
           textAnchor="middle"
           fontSize="8.2"
