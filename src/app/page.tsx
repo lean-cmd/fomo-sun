@@ -11,6 +11,7 @@ import {
   Mountain,
   SlidersHorizontal,
   Sun,
+  Plus,
   Thermometer,
   TrainFront,
 } from 'lucide-react'
@@ -514,6 +515,15 @@ function IconForMode({ mode, className = 'w-4 h-4' }: { mode: 'car' | 'train'; c
   return mode === 'car'
     ? <Car className={className} strokeWidth={1.8} />
     : <TrainFront className={className} strokeWidth={1.8} />
+}
+
+function SunPlusIcon({ className = 'w-[13px] h-[13px]' }: { className?: string }) {
+  return (
+    <span className={`relative inline-flex shrink-0 ${className}`} aria-hidden="true">
+      <Sun className="w-full h-full text-emerald-600" strokeWidth={1.9} />
+      <Plus className="absolute -right-[3px] -top-[3px] w-[8px] h-[8px] text-emerald-600 bg-white rounded-full" strokeWidth={2.4} />
+    </span>
+  )
 }
 
 function stampTypeFromDestination(destination: EscapeCard['destination']): StampType {
@@ -1437,8 +1447,8 @@ export default function Home() {
 
         <section className="fomo-card p-3.5 sm:p-4 mb-3">
           <div className="text-center mb-2">
-            <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick</p>
-            <p className="text-[22px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
+            <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick™</p>
+            <p className="text-[15px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
               Max travel {activeBand.maxLabel}
             </p>
             <p className="text-[11px] text-slate-500 sm:hidden">Range {rangeLabel} · flick left or right</p>
@@ -1653,10 +1663,10 @@ export default function Home() {
                           </div>
 
                           <div className="shrink-0 pt-1 pr-0.5 text-right">
-                            <div className="inline-flex w-[78px] flex-col items-end gap-1.5">
-                              <div className="inline-flex w-full items-start justify-end gap-1">
-                                <Sun className="w-[13px] h-[13px] text-amber-500 mt-[1px] shrink-0" strokeWidth={1.9} />
-                                <div className="w-[56px] text-right">
+                            <div className="inline-flex w-[86px] flex-col items-end gap-1">
+                              <div className="inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5">
+                                <Sun className="w-[13px] h-[13px] text-amber-500 shrink-0" strokeWidth={1.9} />
+                                <div className="text-right">
                                   {(() => {
                                     const sun = splitSunLabel(escapeSunMinutes(escape))
                                     return (
@@ -1669,15 +1679,18 @@ export default function Home() {
                                       </span>
                                     )
                                   })()}
-                                  <span className="block text-[11px] leading-none text-emerald-600 font-semibold mt-1">
-                                    {gainMin > 0 ? `+${formatSunHours(gainMin)}` : ' '}
-                                  </span>
                                 </div>
                               </div>
+                              <div className="inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5">
+                                <SunPlusIcon className="w-[13px] h-[13px]" />
+                                <span className="text-[11px] leading-none text-emerald-600 font-semibold text-right">
+                                  +{formatSunHours(gainMin)}
+                                </span>
+                              </div>
                               {bestTravel && (
-                                <p className="text-[12px] leading-none text-slate-600 inline-flex w-full items-center justify-end gap-1 font-semibold">
+                                <p className="text-[12px] leading-none text-slate-600 inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5 font-semibold">
                                   <IconForMode mode={bestTravel.mode} className="w-[13px] h-[13px]" />
-                                  <span className="inline-flex items-baseline">{formatTravelClock(bestTravel.min / 60)}</span>
+                                  <span className="inline-flex items-baseline justify-end">{formatTravelClock(bestTravel.min / 60)}</span>
                                 </p>
                               )}
                             </div>
