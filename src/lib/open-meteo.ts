@@ -117,6 +117,12 @@ function dayStringInZurich(date: Date): string {
 }
 
 function hourFromIso(iso: string): number {
+  const m = iso.match(/T(\d{2}):(\d{2})/)
+  if (m) {
+    const hh = Number(m[1])
+    const mm = Number(m[2])
+    if (Number.isFinite(hh) && Number.isFinite(mm)) return hh + mm / 60
+  }
   const d = new Date(iso)
   return d.getHours() + d.getMinutes() / 60
 }

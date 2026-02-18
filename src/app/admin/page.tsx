@@ -1,17 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Download, RefreshCw } from 'lucide-react'
 import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 import { formatSunHours } from '@/lib/format'
 
-type SortMode = 'score' | 'sun' | 'net' | 'name' | 'altitude'
+type SortMode = 'score' | 'sun' | 'net' | 'name' | 'country' | 'quality' | 'altitude' | 'temp' | 'car' | 'train'
 type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
-type WeatherSourceMode = 'meteoswiss' | 'openmeteo'
+type WeatherSourceMode = 'meteoswiss' | 'openmeteo' | 'meteoswiss_api'
 
 const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
   { id: 'mountain', label: '⛰️ Mountain' },
@@ -77,11 +77,23 @@ function formatTravelHm(durationMin?: number | null) {
   return `${h}h ${m}m`
 }
 
+function dayStringInZurich(offsetDays = 0) {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Zurich',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d)
+}
+
 export default function AdminDiagnosticsPage() {
   const [rows, setRows] = useState<Escape[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [sortMode, setSortMode] = useState<SortMode>('score')
+  const [sortDesc, setSortDesc] = useState(true)
   const [pageSizeMode, setPageSizeMode] = useState<PageSizeMode>('50')
   const [forecastDay, setForecastDay] = useState<ForecastDay>('today')
   const [search, setSearch] = useState('')
@@ -120,6 +132,16 @@ export default function AdminDiagnosticsPage() {
     timeline: SunTimeline
   } | null>(null)
   const [logs, setLogs] = useState<RequestLogRow[]>([])
+
+  const handleSortChange = (next: SortMode) => {
+    if (sortMode === next) {
+      setSortDesc(prev => !prev)
+      return
+    }
+    setSortMode(next)
+    setSortDesc(!(next === 'name' || next === 'country' || next === 'quality' || next === 'car' || next === 'train'))
+  }
+  const sortArrow = (mode: SortMode) => (sortMode === mode ? (sortDesc ? '↓' : '↑') : '')
 
   const fetchData = async () => {
     setLoading(true)
@@ -285,16 +307,30 @@ export default function AdminDiagnosticsPage() {
         )
       })
 
-    filtered.sort((a, b) => {
-      if (sortMode === 'sun') return daySunMin(b) - daySunMin(a)
-      if (sortMode === 'net') return dayNetSunMin(b) - dayNetSunMin(a)
+    const rowSort = (a: Escape, b: Escape) => {
+      const aCar = a.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY
+      const bCar = b.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY
+      const aTrain = a.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+      const bTrain = b.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+      if (sortMode === 'sun') return daySunMin(a) - daySunMin(b)
+      if (sortMode === 'net') return dayNetSunMin(a) - dayNetSunMin(b)
       if (sortMode === 'name') return a.destination.name.localeCompare(b.destination.name, 'de-CH')
-      if (sortMode === 'altitude') return b.destination.altitude_m - a.destination.altitude_m
-      return b.sun_score.score - a.sun_score.score
+      if (sortMode === 'country') return a.destination.country.localeCompare(b.destination.country, 'de-CH')
+      if (sortMode === 'quality') return String(a.destination.quality ?? 'generated').localeCompare(String(b.destination.quality ?? 'generated'), 'de-CH')
+      if (sortMode === 'altitude') return a.destination.altitude_m - b.destination.altitude_m
+      if (sortMode === 'temp') return (a.weather_now?.temp_c ?? 0) - (b.weather_now?.temp_c ?? 0)
+      if (sortMode === 'car') return aCar - bCar
+      if (sortMode === 'train') return aTrain - bTrain
+      return a.sun_score.score - b.sun_score.score
+    }
+
+    filtered.sort((a, b) => {
+      const cmp = rowSort(a, b)
+      return sortDesc ? -cmp : cmp
     })
 
     return filtered
-  }, [rows, activeCountries, activeQualities, activeTypeChips, sortMode, forecastDay, search])
+  }, [rows, activeCountries, activeQualities, activeTypeChips, sortMode, sortDesc, forecastDay, search])
 
   const pageSize = pageSizeMode === 'all' ? filteredSorted.length : Number(pageSizeMode)
   const totalPages = Math.max(1, Math.ceil(filteredSorted.length / Math.max(1, pageSize)))
@@ -306,7 +342,7 @@ export default function AdminDiagnosticsPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, forecastDay, sortMode, activeCountries, activeQualities, activeTypeChips, pageSizeMode])
+  }, [search, forecastDay, sortMode, sortDesc, activeCountries, activeQualities, activeTypeChips, pageSizeMode])
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
@@ -457,12 +493,17 @@ export default function AdminDiagnosticsPage() {
 
           <label className="flex items-center gap-2 text-xs text-slate-600">
             Sort
-            <select value={sortMode} onChange={e => setSortMode(e.target.value as SortMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+            <select value={sortMode} onChange={e => handleSortChange(e.target.value as SortMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
               <option value="score">FOMO score</option>
               <option value="sun">Sunshine</option>
               <option value="net">Net sun</option>
               <option value="name">Name</option>
+              <option value="country">Country</option>
+              <option value="quality">Quality</option>
               <option value="altitude">Altitude</option>
+              <option value="temp">Temperature</option>
+              <option value="car">Car travel</option>
+              <option value="train">Train travel</option>
             </select>
           </label>
 
@@ -481,6 +522,7 @@ export default function AdminDiagnosticsPage() {
             <select value={weatherSource} onChange={e => setWeatherSource(e.target.value as WeatherSourceMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
               <option value="openmeteo">Open-Meteo only</option>
               <option value="meteoswiss">MeteoSwiss model for CH</option>
+              <option value="meteoswiss_api">MeteoSwiss OGD origin + model forecast</option>
             </select>
           </label>
 
@@ -599,16 +641,56 @@ export default function AdminDiagnosticsPage() {
             <thead className="bg-slate-50 border-b border-slate-200 text-slate-600">
               <tr>
                 <th className="text-left px-3 py-2 font-semibold">Compare</th>
-                <th className="text-left px-3 py-2 font-semibold">Name</th>
-                <th className="text-left px-3 py-2 font-semibold">Country</th>
-                <th className="text-left px-3 py-2 font-semibold">Quality</th>
-                <th className="text-right px-3 py-2 font-semibold">Altitude</th>
-                <th className="text-right px-3 py-2 font-semibold">Sun</th>
-                <th className="text-right px-3 py-2 font-semibold">Net sun</th>
-                <th className="text-right px-3 py-2 font-semibold">Car (from origin)</th>
-                <th className="text-right px-3 py-2 font-semibold">Train (from origin)</th>
-                <th className="text-right px-3 py-2 font-semibold">FOMO</th>
-                <th className="text-right px-3 py-2 font-semibold">Temp</th>
+                <th className="text-left px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('name')} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    Name {sortArrow('name')}
+                  </button>
+                </th>
+                <th className="text-left px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('country')} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    Country {sortArrow('country')}
+                  </button>
+                </th>
+                <th className="text-left px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('quality')} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    Quality {sortArrow('quality')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('altitude')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Altitude {sortArrow('altitude')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('sun')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Sun {sortArrow('sun')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('net')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Net sun {sortArrow('net')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('car')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Car (from origin) {sortArrow('car')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('train')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Train (from origin) {sortArrow('train')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('score')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    FOMO {sortArrow('score')}
+                  </button>
+                </th>
+                <th className="text-right px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('temp')} className="w-full inline-flex items-center justify-end gap-1 hover:text-slate-900">
+                    Temp {sortArrow('temp')}
+                  </button>
+                </th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
                 <th className="text-left px-3 py-2 font-semibold">Timeline</th>
               </tr>
@@ -653,16 +735,13 @@ export default function AdminDiagnosticsPage() {
                     if (!Number.isFinite(bestTravelMin)) return 0
                     return Math.max(0, daySunMin - Math.round(bestTravelMin))
                   })()
-                  const dayPrefix = forecastDay === 'today'
-                    ? new Date().toISOString().slice(0, 10)
-                    : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10) })()
+                  const dayPrefix = dayStringInZurich(forecastDay === 'today' ? 0 : 1)
                   const hourly = (row.admin_hourly || []).filter(h => h.time.startsWith(dayPrefix)).slice(0, 24)
                   const selected = selectedCompare.includes(row.destination.id)
 
                   return (
-                    <>
+                    <Fragment key={row.destination.id}>
                       <tr
-                        key={row.destination.id}
                         className="border-t border-slate-100 hover:bg-slate-50/60 cursor-pointer"
                         onClick={() => setExpandedId(prev => prev === row.destination.id ? null : row.destination.id)}
                       >
@@ -723,7 +802,7 @@ export default function AdminDiagnosticsPage() {
                           </td>
                         </tr>
                       )}
-                    </>
+                    </Fragment>
                   )
                 })}
                 </>

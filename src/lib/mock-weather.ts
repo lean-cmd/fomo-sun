@@ -250,15 +250,45 @@ export function getMockOriginTimeline(): SunTimeline {
 }
 
 export function getMockTravelTime(
-  oLat: number, oLon: number, dLat: number, dLon: number, mode: 'car' | 'train'
+  oLat: number,
+  oLon: number,
+  dLat: number,
+  dLon: number,
+  mode: 'car' | 'train',
+  profile?: {
+    country?: string
+    altitude_m?: number
+    has_sbb?: boolean
+  }
 ): { duration_min: number; distance_km?: number; changes?: number } {
   const R = 6371
   const dLa = (dLat - oLat) * Math.PI / 180, dLo = (dLon - oLon) * Math.PI / 180
   const a = Math.sin(dLa/2)**2 + Math.cos(oLat*Math.PI/180)*Math.cos(dLat*Math.PI/180)*Math.sin(dLo/2)**2
-  const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 1.3
-  if (mode === 'car') return { duration_min: Math.round(km/60*60), distance_km: Math.round(km) }
+  const airKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+  const altitude = profile?.altitude_m ?? 500
+  const isCrossBorder = profile?.country && profile.country !== 'CH'
+  const roadFactorBase = airKm > 190 ? 1.38 : airKm > 110 ? 1.33 : 1.28
+  const roadFactor = roadFactorBase
+    + (isCrossBorder ? 0.03 : 0)
+    + (altitude > 1200 ? 0.04 : 0)
+    + (altitude > 1700 ? 0.04 : 0)
+  const roadKm = airKm * roadFactor
+
+  const carSpeedKmh = roadKm < 35 ? 45 : roadKm < 95 ? 56 : roadKm < 230 ? 66 : 72
+  const carPenaltyMin = (isCrossBorder ? 8 : 0) + (altitude > 1400 ? 10 : 0) + (altitude > 1800 ? 8 : 0)
+  const carMin = Math.max(8, Math.round((roadKm / carSpeedKmh) * 60 + carPenaltyMin))
+
+  if (mode === 'car') return { duration_min: carMin, distance_km: Math.round(roadKm) }
+
+  const hasSbb = Boolean(profile?.has_sbb)
+  const trainBase = hasSbb
+    ? (isCrossBorder ? carMin * 1.22 : carMin * 1.02)
+    : carMin * 1.46
+  const trainPenalty = hasSbb ? (isCrossBorder ? 18 : 8) : 26
+  const trainMin = Math.max(12, Math.round(trainBase + trainPenalty))
   seed = Math.round(dLat * 1000 + dLon * 100)
-  return { duration_min: Math.round(km/55*60*1.4), changes: 1 + Math.round(srand()) }
+  const changes = hasSbb ? 1 + Math.round(srand() * 2) : 2 + Math.round(srand() * 2)
+  return { duration_min: trainMin, changes }
 }
 
 // v15: More diverse timeline bars with varied cloud burst patterns

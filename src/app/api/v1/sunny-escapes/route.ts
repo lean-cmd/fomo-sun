@@ -3,6 +3,7 @@ import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
 import { computeSunScore, detectInversion, haversineDistance, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes, WeatherSourcePolicy } from '@/lib/open-meteo'
+import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TourismInfo, TravelMode } from '@/lib/types'
 import { addRequestLog } from '@/lib/request-log'
 import { enrichDestination } from '@/lib/tourism/enrichDestination'
@@ -109,6 +110,24 @@ function dayStringInZurich(date: Date): string {
   }).format(date)
 }
 
+function zurichDateTimeParts(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: ZURICH_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+  const year = parts.find(p => p.type === 'year')?.value || '1970'
+  const month = parts.find(p => p.type === 'month')?.value || '01'
+  const day = parts.find(p => p.type === 'day')?.value || '01'
+  const hour = parts.find(p => p.type === 'hour')?.value || '00'
+  const minute = parts.find(p => p.type === 'minute')?.value || '00'
+  return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}` }
+}
+
 function hourInZurich(date: Date) {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: ZURICH_TZ,
@@ -176,11 +195,10 @@ function buildSbbDateTime(tripSpan: TripSpan) {
   if (tripSpan === 'plus1day') {
     const next = new Date(now)
     next.setDate(next.getDate() + 1)
-    return { date: next.toISOString().slice(0, 10), time: '08:00' }
+    const tomorrowDate = dayStringInZurich(next)
+    return { date: tomorrowDate, time: '08:00' }
   }
-  const hh = String(now.getHours()).padStart(2, '0')
-  const mm = String(now.getMinutes()).padStart(2, '0')
-  return { date: now.toISOString().slice(0, 10), time: `${hh}:${mm}` }
+  return zurichDateTimeParts(now)
 }
 
 function buildSbbTimetableUrl(sbbName?: string | null, originName = 'Basel', tripSpan: TripSpan = 'daytrip') {
@@ -377,7 +395,7 @@ function normalizeQueryCacheKey(input: {
   tripSpan: TripSpan
   originName: string
   originKind: 'manual' | 'gps' | 'default'
-  weatherSource: WeatherSourcePolicy
+  weatherSource: WeatherSourcePolicy | 'meteoswiss_api'
   agentPrefsKey: string
 }) {
   const latKey = input.lat.toFixed(3)
@@ -500,11 +518,19 @@ function selectLiveWeatherPool(candidates: Array<{
 }
 
 function diversifyTopRows(rows: RankedEscapeRow[]) {
-  if (rows.length <= DIVERSITY_TOP_ROWS) return rows
+  const uniqueRows: RankedEscapeRow[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    if (seen.has(row.destination.id)) continue
+    seen.add(row.destination.id)
+    uniqueRows.push(row)
+  }
+
+  if (uniqueRows.length <= DIVERSITY_TOP_ROWS) return uniqueRows
 
   const selected: RankedEscapeRow[] = []
   const deferred: RankedEscapeRow[] = []
-  for (const row of rows) {
+  for (const row of uniqueRows) {
     let nearbyCount = 0
     for (const picked of selected) {
       const d = haversineDistance(
@@ -526,14 +552,14 @@ function diversifyTopRows(rows: RankedEscapeRow[]) {
   }
 
   if (selected.length < DIVERSITY_TOP_ROWS) {
-    for (const row of rows) {
+    for (const row of uniqueRows) {
       if (selected.some(s => s.destination.id === row.destination.id)) continue
       selected.push(row)
       if (selected.length >= DIVERSITY_TOP_ROWS) break
     }
   }
 
-  for (const row of rows) {
+  for (const row of uniqueRows) {
     if (selected.some(s => s.destination.id === row.destination.id)) continue
     if (deferred.some(d => d.destination.id === row.destination.id)) continue
     deferred.push(row)
@@ -727,13 +753,17 @@ export async function GET(request: NextRequest) {
   let types = typesParam ? typesParam.split(',') : []
   const forceRefresh = sp.get('force') === 'true'
   const weatherSourceRaw = (sp.get('weather_source') || '').toLowerCase()
-  const weatherSource: WeatherSourcePolicy = (
+  const weatherSource = (
     weatherSourceRaw === 'openmeteo' || weatherSourceRaw === 'open-meteo'
       ? 'openmeteo'
       : weatherSourceRaw === 'meteoswiss'
         ? 'meteoswiss'
-        : 'openmeteo'
-  )
+        : weatherSourceRaw === 'meteoswiss_api' || weatherSourceRaw === 'meteoswiss-ogd'
+          ? 'meteoswiss_api'
+          : 'openmeteo'
+  ) as 'openmeteo' | 'meteoswiss' | 'meteoswiss_api'
+  const forecastWeatherSource: WeatherSourcePolicy = weatherSource === 'openmeteo' ? 'openmeteo' : 'meteoswiss'
+  const useMeteoSwissOriginApi = weatherSource === 'meteoswiss_api'
   const agentPrefsRaw = request.headers.get('X-FOMO-Agent-Preferences')
   let agentPrefs: Record<string, unknown> = {}
   if (agentPrefsRaw) {
@@ -878,11 +908,13 @@ export async function GET(request: NextRequest) {
   }
   let weatherFreshness = new Date().toISOString()
   let inversionLikely = true
-  let originDataSource: 'open-meteo' | 'mock' = demoMode ? 'mock' : 'open-meteo'
+  let originDataSource: 'open-meteo' | 'meteoswiss' | 'mock' = demoMode ? 'mock' : 'open-meteo'
   let fogHeuristicApplied = false
-  const liveModelPolicy = weatherSource === 'meteoswiss'
-    ? 'CH:meteoswiss_seamless|DE/FR/IT:default'
-    : 'all:open-meteo-default'
+  const liveModelPolicy = weatherSource === 'openmeteo'
+    ? 'all:open-meteo-default'
+    : weatherSource === 'meteoswiss'
+      ? 'forecast:CH:meteoswiss_seamless|DE/FR/IT:default'
+      : 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:default'
 
   // Pre-filter by rough distance and user filters
   let candidates = adminAll
@@ -894,8 +926,17 @@ export async function GET(request: NextRequest) {
   let livePoolCount = 0
 
   const candidatesWithTravel = candidates.map(dest => {
-    const car = (mode === 'car' || mode === 'both') ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'car') : undefined
-    let train = (mode === 'train' || mode === 'both') ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'train') : undefined
+    const travelProfile = {
+      country: dest.country,
+      altitude_m: dest.altitude_m,
+      has_sbb: Boolean(dest.sbb_name),
+    }
+    const car = (mode === 'car' || mode === 'both')
+      ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'car', travelProfile)
+      : undefined
+    let train = (mode === 'train' || mode === 'both')
+      ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'train', travelProfile)
+      : undefined
 
     if (demoMode && car && train) {
       if (DEMO_TRAIN_FAST_IDS.has(dest.id)) {
@@ -981,14 +1022,15 @@ export async function GET(request: NextRequest) {
   } else {
     try {
       livePoolCount = liveCandidatesWithTravel.length
-      const [originCurrent, originHourly, sunTimes, destinationWeather] = await Promise.all([
-        getCurrentWeather(lat, lon, { weather_source: weatherSource }),
-        getHourlyForecast(lat, lon, { weather_source: weatherSource }),
-        getSunTimes(lat, lon, { weather_source: weatherSource }),
+      const [originCurrent, originHourly, sunTimes, destinationWeather, swissOriginSnapshot] = await Promise.all([
+        getCurrentWeather(lat, lon, { weather_source: forecastWeatherSource }),
+        getHourlyForecast(lat, lon, { weather_source: forecastWeatherSource }),
+        getSunTimes(lat, lon, { weather_source: forecastWeatherSource }),
         batchGetWeather(
           liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon })),
-          { weather_source: weatherSource }
+          { weather_source: forecastWeatherSource }
         ),
+        useMeteoSwissOriginApi ? getSwissMeteoOriginSnapshot(lat, lon) : Promise.resolve(null),
       ])
       weatherFreshness = new Date().toISOString()
       originDataSource = 'open-meteo'
@@ -997,7 +1039,14 @@ export async function GET(request: NextRequest) {
       originSunMin = originCurrent.sunshine_duration_min
       originSunScore = originSunScoreFromCurrent(originCurrent)
       originTempC = Math.round(originCurrent.temperature_c)
-      const originFogRisk = detectOriginFogRisk({
+      if (swissOriginSnapshot) {
+        originDataSource = 'meteoswiss'
+        originDescription = `${swissOriginSnapshot.description} · ${swissOriginSnapshot.station_name}`
+        originSunMin = Math.max(0, Math.round(swissOriginSnapshot.sunshine_min))
+        originSunScore = clamp(swissOriginSnapshot.sun_score, 0, 1)
+        originTempC = Math.round(swissOriginSnapshot.temp_c)
+      }
+      const originFogRiskOpenMeteo = detectOriginFogRisk({
         isFoggy: originCurrent.is_foggy,
         visibilityM: originCurrent.visibility_m,
         lowCloudPct: originCurrent.low_cloud_cover_pct,
@@ -1006,6 +1055,12 @@ export async function GET(request: NextRequest) {
         windKmh: originCurrent.wind_speed_kmh,
         precipitationMm: originCurrent.precipitation_mm,
       })
+      const originFogRiskSwiss = Boolean(
+        swissOriginSnapshot
+        && swissOriginSnapshot.humidity_pct >= 88
+        && swissOriginSnapshot.sunshine_min <= 6
+      )
+      const originFogRisk = originFogRiskOpenMeteo || originFogRiskSwiss
       inversionLikely = originFogRisk || detectInversion({
         visibility_m: originCurrent.visibility_m,
         humidity_pct: originCurrent.relative_humidity_pct,
@@ -1211,59 +1266,29 @@ export async function GET(request: NextRequest) {
 
   let rankingPool = strictBetterRows
 
-  // v69: keep a full 5-card experience by progressively relaxing filters.
-  if (!adminAll && rankingPool.length < fallbackMinResults) {
-    rankingPool = strictAtLeastRows
-  }
-  if (!adminAll && rankingPool.length < fallbackMinResults) {
-    appliedWindowMin = Math.max(0, strictWindowMin - 15)
-    appliedWindowMax = strictWindowMax + 15
-    const widenedRows = eligibleRows.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
-    const widenedBetterRows = widenedRows.filter(isStrictBetterThanOrigin)
-    const widenedAtLeastRows = widenedRows.filter(isAtLeastAsGoodAsOrigin)
-    rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
-  }
-  if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
-    const atLeastGlobalRows = eligibleRows.filter(isAtLeastAsGoodAsOrigin)
-    if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
-  }
-  if (!adminAll && !hasExplicitTravelWindow && rankingPool.length < fallbackMinResults) {
-    rankingPool = eligibleRows
-  }
-  if (!adminAll && hasExplicitTravelWindow && rankingPool.length < Math.min(BUCKET_MERGE_MIN_RESULTS, limit)) {
-    const windowSpanMin = Math.max(15, strictWindowMax - strictWindowMin)
-    const leftMin = Math.max(0, strictWindowMin - windowSpanMin)
-    const rightMax = strictWindowMax + windowSpanMin
-
-    const leftRows = eligibleRows.filter(r => r.bestTravelMin >= leftMin && r.bestTravelMin < strictWindowMin)
-    const rightRows = eligibleRows.filter(r => r.bestTravelMin > strictWindowMax && r.bestTravelMin <= rightMax)
-
-    const neighborPool = (rows: ScoredWithTravel[]) => {
-      const better = rows.filter(isStrictBetterThanOrigin)
-      if (better.length > 0) return better
-      const atLeast = rows.filter(isAtLeastAsGoodAsOrigin)
-      if (atLeast.length > 0) return atLeast
-      return rows
+  // Explicit joystick windows should stay strict: never leak far-out travel times.
+  if (!adminAll && hasExplicitTravelWindow) {
+    if (rankingPool.length < fallbackMinResults) rankingPool = strictAtLeastRows
+    if (rankingPool.length === 0) rankingPool = strictWindowRows
+  } else {
+    // v69: keep a full 5-card experience by progressively relaxing filters.
+    if (!adminAll && rankingPool.length < fallbackMinResults) {
+      rankingPool = strictAtLeastRows
     }
-    const leftPool = neighborPool(leftRows)
-    const rightPool = neighborPool(rightRows)
-
-    const useRight = rightPool.length > leftPool.length
-    const chosenNeighbor = useRight ? rightPool : leftPool
-    if (chosenNeighbor.length > 0) {
-      const seen = new Set(rankingPool.map(r => r.destination.id))
-      const merged = [...rankingPool]
-      for (const row of chosenNeighbor) {
-        if (seen.has(row.destination.id)) continue
-        merged.push(row)
-        seen.add(row.destination.id)
-        if (merged.length >= fallbackMinResults) break
-      }
-      if (merged.length > rankingPool.length) {
-        rankingPool = merged
-        if (useRight) appliedWindowMax = rightMax
-        else appliedWindowMin = leftMin
-      }
+    if (!adminAll && rankingPool.length < fallbackMinResults) {
+      appliedWindowMin = Math.max(0, strictWindowMin - 15)
+      appliedWindowMax = strictWindowMax + 15
+      const widenedRows = eligibleRows.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
+      const widenedBetterRows = widenedRows.filter(isStrictBetterThanOrigin)
+      const widenedAtLeastRows = widenedRows.filter(isAtLeastAsGoodAsOrigin)
+      rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
+    }
+    if (!adminAll && rankingPool.length < fallbackMinResults) {
+      const atLeastGlobalRows = eligibleRows.filter(isAtLeastAsGoodAsOrigin)
+      if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
+    }
+    if (!adminAll && rankingPool.length < fallbackMinResults) {
+      rankingPool = eligibleRows
     }
   }
 
@@ -1293,6 +1318,14 @@ export async function GET(request: NextRequest) {
   if (!adminAll) {
     pickedRanked = diversifyTopRows(pickedRanked)
   }
+  const dedupedPicked: RankedEscapeRow[] = []
+  const seenPicked = new Set<string>()
+  for (const row of pickedRanked) {
+    if (seenPicked.has(row.destination.id)) continue
+    seenPicked.add(row.destination.id)
+    dedupedPicked.push(row)
+  }
+  pickedRanked = dedupedPicked
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
   let bestOptH = 2
@@ -1372,7 +1405,7 @@ export async function GET(request: NextRequest) {
     rank: number
   ): Promise<EscapeResult> => {
     const destSunMin = full.sun_score.sunshine_forecast_min
-    const netSun = full.netSunAfterArrivalMin
+    const netSun = tripSpan === 'plus1day' ? full.tomorrowNetAfterArrivalMin : full.netSunAfterArrivalMin
     const cmp = formatComparison(destSunMin, originSunMin)
     const tourism = await getDestinationTourism(full.destination)
 
