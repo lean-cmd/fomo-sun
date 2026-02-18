@@ -11,7 +11,7 @@ type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
-type WeatherSourceMode = 'auto' | 'openmeteo'
+type WeatherSourceMode = 'meteoswiss' | 'openmeteo'
 
 const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
   { id: 'mountain', label: '⛰️ Mountain' },
@@ -86,7 +86,7 @@ export default function AdminDiagnosticsPage() {
     generated: true,
   })
   const [page, setPage] = useState(1)
-  const [weatherSource, setWeatherSource] = useState<WeatherSourceMode>('auto')
+  const [weatherSource, setWeatherSource] = useState<WeatherSourceMode>('openmeteo')
   const weatherSourceInitRef = useRef(false)
   const [meta, setMeta] = useState({
     liveSource: '',
@@ -120,12 +120,15 @@ export default function AdminDiagnosticsPage() {
         lat: '47.5596',
         lon: '7.5886',
         max_travel_h: '4.5',
+        travel_min_h: '0',
+        travel_max_h: '4.5',
         mode: 'both',
         ga: 'false',
         limit: '5000',
         demo: 'false',
         admin: 'true',
         admin_all: 'true',
+        trip_span: forecastDay === 'tomorrow' ? 'plus1day' : 'daytrip',
         weather_source: weatherSource,
       })
       const res = await fetch(`/api/v1/sunny-escapes?${p.toString()}`, { cache: 'no-store' })
@@ -203,7 +206,7 @@ export default function AdminDiagnosticsPage() {
       return
     }
     fetchData()
-  }, [weatherSource])
+  }, [weatherSource, forecastDay])
 
   const byCountryCount = useMemo(() => {
     const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
@@ -240,7 +243,7 @@ export default function AdminDiagnosticsPage() {
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
     const dayNetSunMin = (r: Escape) => {
-      if (forecastDay === 'today') return Math.max(0, r.net_sun_min)
+      if (Number.isFinite(r.net_sun_min)) return Math.max(0, r.net_sun_min)
       const bestTravelMin = Math.min(
         r.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
         r.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
@@ -340,7 +343,7 @@ export default function AdminDiagnosticsPage() {
         : Math.max(0, Math.round((r.tomorrow_sun_hours || 0) * 60))
     )
     const dayNetSunMin = (r: Escape) => {
-      if (forecastDay === 'today') return Math.max(0, r.net_sun_min)
+      if (Number.isFinite(r.net_sun_min)) return Math.max(0, r.net_sun_min)
       const bestTravelMin = Math.min(
         r.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
         r.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
@@ -465,8 +468,8 @@ export default function AdminDiagnosticsPage() {
           <label className="flex items-center gap-2 text-xs text-slate-600">
             Weather source
             <select value={weatherSource} onChange={e => setWeatherSource(e.target.value as WeatherSourceMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
-              <option value="auto">Swiss-first (CH MeteoSwiss)</option>
               <option value="openmeteo">Open-Meteo only</option>
+              <option value="meteoswiss">MeteoSwiss model for CH</option>
             </select>
           </label>
 
