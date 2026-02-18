@@ -1297,10 +1297,20 @@ export async function GET(request: NextRequest) {
   const bucketCounts = UI_TRAVEL_BUCKETS.map(bucket => {
     const minMin = Math.round(bucket.min_h * 60)
     const maxMin = Math.round(bucket.max_h * 60)
-    const count = eligibleRows.filter(
-      row => row.bestTravelMin >= minMin && row.bestTravelMin <= maxMin && isStrictBetterThanOrigin(row)
-    ).length
-    return { ...bucket, count }
+    const rowsInBucket = eligibleRows.filter(
+      row => row.bestTravelMin >= minMin && row.bestTravelMin <= maxMin
+    )
+    const strictCount = rowsInBucket.filter(isStrictBetterThanOrigin).length
+    const atLeastCount = rowsInBucket.filter(isAtLeastAsGoodAsOrigin).length
+    const rawCount = rowsInBucket.length
+    const count = strictCount > 0 ? strictCount : (atLeastCount > 0 ? atLeastCount : rawCount)
+    return {
+      ...bucket,
+      count,
+      strict_count: strictCount,
+      at_least_count: atLeastCount,
+      raw_count: rawCount,
+    }
   })
 
   let pickedRanked = rankedByNet

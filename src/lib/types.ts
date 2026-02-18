@@ -98,6 +98,9 @@ export interface SunnyEscapesResponse {
       min_h: number
       max_h: number
       count: number
+      strict_count?: number
+      at_least_count?: number
+      raw_count?: number
     }>
   }
   origin_conditions: {

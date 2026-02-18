@@ -132,6 +132,7 @@ export default function AdminDiagnosticsPage() {
     timeline: SunTimeline
   } | null>(null)
   const [logs, setLogs] = useState<RequestLogRow[]>([])
+  const [bucketCounts, setBucketCounts] = useState<NonNullable<SunnyEscapesResponse['_meta']['bucket_counts']>>([])
 
   const handleSortChange = (next: SortMode) => {
     if (sortMode === next) {
@@ -183,6 +184,7 @@ export default function AdminDiagnosticsPage() {
       })
 
       setRows(payload.escapes || [])
+      setBucketCounts(payload._meta?.bucket_counts || [])
       setOriginMeta(payload._meta?.origin || null)
       const tempMatch = payload.origin_conditions.description.match(/(-?\d+)\s*°c/i)
       setOriginSnapshot({
@@ -356,6 +358,21 @@ export default function AdminDiagnosticsPage() {
     return { total, sunny, avgTemp }
   }, [filteredSorted])
 
+  const bucketSummary = useMemo(() => {
+    return bucketCounts.map((bucket) => {
+      const label = bucket.max_h >= 4.5
+        ? `${bucket.min_h}-${bucket.max_h}h`
+        : `${bucket.min_h}-${bucket.max_h}h`
+      return {
+        ...bucket,
+        label,
+        strict: bucket.strict_count ?? bucket.count,
+        atLeast: bucket.at_least_count ?? bucket.count,
+        raw: bucket.raw_count ?? bucket.count,
+      }
+    })
+  }, [bucketCounts])
+
   const healthState = useMemo(() => {
     if (!meta.liveSource) return { ok: false, label: 'Unknown' }
     if (meta.liveSource === 'open-meteo' && !meta.fallback) return { ok: true, label: 'Open-Meteo live' }
@@ -448,7 +465,7 @@ export default function AdminDiagnosticsPage() {
         </div>
 
         <p className="text-xs text-slate-600 mb-3" style={{ fontFamily: 'DM Mono, monospace' }}>
-          Showing {filteredSorted.length} destinations
+          API rows: {rows.length} · visible after filters: {filteredSorted.length}
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
@@ -471,6 +488,25 @@ export default function AdminDiagnosticsPage() {
             </p>
           </div>
         </div>
+
+        {bucketSummary.length > 0 && (
+          <section className="rounded-xl border border-slate-200 bg-white p-3 mb-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Bucket coverage (API)</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              {bucketSummary.map((bucket) => (
+                <div key={bucket.id} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <p className="text-[11px] font-semibold text-slate-800" style={{ fontFamily: 'DM Mono, monospace' }}>{bucket.label}</p>
+                  <p className="text-base font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
+                    {bucket.count}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    strict {bucket.strict} · ≥origin {bucket.atLeast} · raw {bucket.raw}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
           <div className="flex flex-wrap gap-2 items-center">

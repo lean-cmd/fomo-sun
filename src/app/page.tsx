@@ -99,9 +99,40 @@ const HEADER_TAGLINES = [
 
 const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR', IT: 'IT' }
 const TIMELINE_TICKS = [8, 10, 12, 14, 16, 18] as const
+const ZURICH_TZ = 'Europe/Zurich'
+const ZURICH_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {
+  timeZone: ZURICH_TZ,
+  hour12: false,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+})
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
+}
+
+function zurichClockParts(date = new Date()) {
+  const parts = ZURICH_CLOCK_FORMATTER.formatToParts(date)
+  const lookup: Record<string, string> = {}
+  for (const part of parts) {
+    if (part.type === 'literal') continue
+    lookup[part.type] = part.value
+  }
+  return {
+    year: Number(lookup.year || '0'),
+    month: Number(lookup.month || '1'),
+    day: Number(lookup.day || '1'),
+    hour: Number(lookup.hour || '0'),
+    minute: Number(lookup.minute || '0'),
+  }
+}
+
+function zurichDayKey(date = new Date()) {
+  const p = zurichClockParts(date)
+  return `${String(p.year).padStart(4, '0')}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
 }
 
 function normalizeWindow(win?: DaylightWindow): DaylightWindow {
@@ -492,11 +523,14 @@ export default function Home() {
     return map
   }, [data?._meta?.bucket_counts])
 
+  const bucketCountsReady = bucketCountMap.size >= TRAVEL_BANDS.length
+
   const isBandAvailable = useCallback((bandIndex: number) => {
+    if (!hasJoystickInteracted || !bucketCountsReady) return true
     const band = TRAVEL_BANDS[bandIndex]
     const count = bucketCountMap.get(band.id)
     return count === undefined ? true : count > 0
-  }, [bucketCountMap])
+  }, [bucketCountMap, bucketCountsReady, hasJoystickInteracted])
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
     const clamped = clamp(nextJoy, -1, 1)
@@ -807,7 +841,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!data || tripSpanTouched) return
-    const hour = new Date().getHours()
+    const { hour } = zurichClockParts()
     if (hour >= 20) {
       setTripSpan('plus1day')
       return
@@ -1083,16 +1117,17 @@ export default function Home() {
   useEffect(() => {
     const triggerMidnightRefresh = () => {
       const now = new Date()
-      const dayKey = now.toDateString()
-      if (now.getHours() === 0 && now.getMinutes() <= 1 && midnightRefreshDayRef.current !== dayKey) {
+      const dayKey = zurichDayKey(now)
+      const clock = zurichClockParts(now)
+      if (clock.hour === 0 && clock.minute <= 1 && midnightRefreshDayRef.current !== dayKey) {
         midnightRefreshDayRef.current = dayKey
         setForceRefreshNonce(v => v + 1)
       }
     }
 
     const nearMidnightTimer = window.setInterval(() => {
-      const now = new Date()
-      if ((now.getHours() === 23 && now.getMinutes() >= 55) || (now.getHours() === 0 && now.getMinutes() <= 5)) {
+      const clock = zurichClockParts()
+      if ((clock.hour === 23 && clock.minute >= 55) || (clock.hour === 0 && clock.minute <= 5)) {
         triggerMidnightRefresh()
       }
     }, 30_000)
