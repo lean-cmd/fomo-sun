@@ -31,10 +31,10 @@ function sanitizeId(v: string) {
 
 function stampNameStyle(name: string) {
   const len = name.length
-  if (len >= 18) return { size: 14, spacing: 1.0 }
-  if (len >= 14) return { size: 16, spacing: 1.25 }
-  if (len >= 11) return { size: 18, spacing: 1.55 }
-  return { size: 21, spacing: 1.9 }
+  if (len >= 18) return { size: 13, spacing: 0.9 }
+  if (len >= 14) return { size: 15, spacing: 1.1 }
+  if (len >= 11) return { size: 17, spacing: 1.35 }
+  return { size: 19, spacing: 1.7 }
 }
 
 function renderSilhouette(type: StampType, palette: Palette) {
@@ -145,7 +145,7 @@ export function DestinationStamp({
   className = '',
 }: StampProps) {
   const safeName = (name || 'DESTINATION').toUpperCase().slice(0, 24)
-  const safeRegion = region ? region.slice(0, 24) : ''
+  const safeRegion = region ? region.toUpperCase().slice(0, 24) : ''
   const style = stampNameStyle(safeName)
   const palette = TYPE_PALETTE[type] ?? TYPE_PALETTE.default
   const grainId = `grain-${sanitizeId(`${safeName}-${type}-${country}`)}`
@@ -168,13 +168,13 @@ export function DestinationStamp({
       <rect x="1.5" y="1.5" width="97" height="121" rx="5" fill="#F5F0E8" stroke="#CBD5E1" strokeWidth="1.5" strokeDasharray="4 3" />
       {renderFlag(country)}
 
-      <g transform="translate(6,4) scale(1.12)">
+      <g transform="translate(10,7) scale(0.98)">
         {renderSilhouette(type, palette)}
       </g>
 
       <text
         x="50"
-        y="71"
+        y="83"
         fill="#1E293B"
         textAnchor="middle"
         fontSize={style.size}
@@ -191,11 +191,11 @@ export function DestinationStamp({
       {safeRegion && (
         <text
           x="50"
-          y="88"
+          y="98"
           fill="#64748B"
           textAnchor="middle"
-          fontSize="9.5"
-          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 300, letterSpacing: '0.3px' }}
+          fontSize="8.2"
+          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 400, letterSpacing: '1.1px' }}
         >
           · {safeRegion} ·
         </text>

@@ -6,12 +6,21 @@ import { Activity, Download, RefreshCw } from 'lucide-react'
 import { SunnyEscapesResponse, SunTimeline } from '@/lib/types'
 import { formatSunHours } from '@/lib/format'
 
-type SortMode = 'score' | 'sun' | 'net' | 'name' | 'country' | 'quality' | 'altitude' | 'temp' | 'car' | 'train'
+type SortMode = 'score' | 'sun' | 'net' | 'name' | 'country' | 'quality' | 'altitude' | 'temp' | 'car' | 'train' | 'model' | 'tier'
 type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 type WeatherSourceMode = 'meteoswiss' | 'openmeteo' | 'meteoswiss_api'
+type AdminTravelMode = 'both' | 'car' | 'train'
+
+const ADMIN_ORIGIN_CITIES = [
+  { name: 'Basel', lat: 47.5596, lon: 7.5886 },
+  { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
+  { name: 'Bern', lat: 46.948, lon: 7.4474 },
+  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
+  { name: 'Olten', lat: 47.3505, lon: 7.9032 },
+] as const
 
 const ADMIN_TYPE_CHIPS: { id: AdminTypeChip; label: string }[] = [
   { id: 'mountain', label: '⛰️ Mountain' },
@@ -68,6 +77,13 @@ function scoreColor(score: number) {
   return 'text-slate-500'
 }
 
+function tierPillClass(tier?: string) {
+  if (tier === 'strict') return 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  if (tier === 'relaxed') return 'bg-yellow-100 text-yellow-800 border-yellow-200'
+  if (tier === 'any_sun') return 'bg-amber-100 text-amber-800 border-amber-200'
+  return 'bg-rose-100 text-rose-700 border-rose-200'
+}
+
 function formatTravelHm(durationMin?: number | null) {
   if (!Number.isFinite(durationMin ?? NaN)) return '-'
   const rounded = Math.max(0, Math.round(durationMin as number))
@@ -108,17 +124,22 @@ export default function AdminDiagnosticsPage() {
   })
   const [page, setPage] = useState(1)
   const [weatherSource, setWeatherSource] = useState<WeatherSourceMode>('openmeteo')
+  const [adminOrigin, setAdminOrigin] = useState<string>('Basel')
+  const [adminMode, setAdminMode] = useState<AdminTravelMode>('both')
   const weatherSourceInitRef = useRef(false)
   const [meta, setMeta] = useState({
     liveSource: '',
     debugPath: '',
     cache: '',
     fallback: '',
+    resultTier: '',
     requestMs: '',
     responseAt: '',
     weatherFreshness: '',
     weatherSource: '',
     modelPolicy: '',
+    candidateCount: '',
+    livePoolCount: '',
     headers: {} as Record<string, string>,
   })
   const [originMeta, setOriginMeta] = useState<{ name: string; lat: number; lon: number } | null>(null)
@@ -148,13 +169,16 @@ export default function AdminDiagnosticsPage() {
     setLoading(true)
     setError('')
     try {
+      const selectedOrigin = ADMIN_ORIGIN_CITIES.find(city => city.name === adminOrigin) || ADMIN_ORIGIN_CITIES[0]
       const p = new URLSearchParams({
-        lat: '47.5596',
-        lon: '7.5886',
-        max_travel_h: '4.5',
+        lat: String(selectedOrigin.lat),
+        lon: String(selectedOrigin.lon),
+        origin_name: selectedOrigin.name,
+        origin_kind: 'manual',
+        max_travel_h: '6.5',
         travel_min_h: '0',
-        travel_max_h: '4.5',
-        mode: 'both',
+        travel_max_h: '6.5',
+        mode: adminMode,
         ga: 'false',
         limit: '5000',
         demo: 'false',
@@ -175,6 +199,7 @@ export default function AdminDiagnosticsPage() {
         'x-fomo-live-fallback',
         'x-fomo-candidate-count',
         'x-fomo-live-pool-count',
+        'x-fomo-result-tier',
         'x-fomo-weather-source',
         'x-fomo-weather-model-policy',
         'x-fomo-request-ms',
@@ -201,11 +226,14 @@ export default function AdminDiagnosticsPage() {
         debugPath: res.headers.get('x-fomo-debug-live-path') || '',
         cache: res.headers.get('x-fomo-response-cache') || '',
         fallback: res.headers.get('x-fomo-live-fallback') || '',
+        resultTier: res.headers.get('x-fomo-result-tier') || payload._meta?.result_tier || '',
         requestMs: res.headers.get('x-fomo-request-ms') || '',
         responseAt: payload._meta?.generated_at || '',
         weatherFreshness: payload._meta?.weather_data_freshness || '',
         weatherSource: res.headers.get('x-fomo-weather-source') || '',
         modelPolicy: res.headers.get('x-fomo-weather-model-policy') || '',
+        candidateCount: res.headers.get('x-fomo-candidate-count') || '',
+        livePoolCount: res.headers.get('x-fomo-live-pool-count') || '',
         headers: headersObj,
       })
     } catch (err) {
@@ -239,7 +267,7 @@ export default function AdminDiagnosticsPage() {
       return
     }
     fetchData()
-  }, [weatherSource, forecastDay])
+  }, [weatherSource, forecastDay, adminOrigin, adminMode])
 
   const byCountryCount = useMemo(() => {
     const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
@@ -323,6 +351,8 @@ export default function AdminDiagnosticsPage() {
       if (sortMode === 'temp') return (a.weather_now?.temp_c ?? 0) - (b.weather_now?.temp_c ?? 0)
       if (sortMode === 'car') return aCar - bCar
       if (sortMode === 'train') return aTrain - bTrain
+      if (sortMode === 'model') return String(a.weather_model ?? '').localeCompare(String(b.weather_model ?? ''), 'de-CH')
+      if (sortMode === 'tier') return String(a.tier_eligibility ?? '').localeCompare(String(b.tier_eligibility ?? ''), 'de-CH')
       return a.sun_score.score - b.sun_score.score
     }
 
@@ -360,7 +390,7 @@ export default function AdminDiagnosticsPage() {
 
   const bucketSummary = useMemo(() => {
     return bucketCounts.map((bucket) => {
-      const label = bucket.max_h >= 4.5
+      const label = bucket.max_h >= 6.5
         ? `${bucket.min_h}-${bucket.max_h}h`
         : `${bucket.min_h}-${bucket.max_h}h`
       return {
@@ -369,6 +399,8 @@ export default function AdminDiagnosticsPage() {
         strict: bucket.strict_count ?? bucket.count,
         atLeast: bucket.at_least_count ?? bucket.count,
         raw: bucket.raw_count ?? bucket.count,
+        destinationCount: bucket.destination_count ?? bucket.raw_count ?? bucket.count,
+        resultTier: bucket.result_tier ?? 'best_available',
       }
     })
   }, [bucketCounts])
@@ -466,6 +498,9 @@ export default function AdminDiagnosticsPage() {
 
         <p className="text-xs text-slate-600 mb-3" style={{ fontFamily: 'DM Mono, monospace' }}>
           API rows: {rows.length} · visible after filters: {filteredSorted.length}
+          {meta.resultTier ? ` · tier ${meta.resultTier}` : ''}
+          {meta.candidateCount ? ` · candidates ${meta.candidateCount}` : ''}
+          {meta.livePoolCount ? ` · live pool ${meta.livePoolCount}` : ''}
         </p>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
@@ -500,6 +535,12 @@ export default function AdminDiagnosticsPage() {
                     {bucket.count}
                   </p>
                   <p className="text-[10px] text-slate-500">
+                    in range {bucket.destinationCount}
+                  </p>
+                  <span className={`mt-1 inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${tierPillClass(bucket.resultTier)}`}>
+                    {bucket.resultTier}
+                  </span>
+                  <p className="text-[10px] text-slate-500">
                     strict {bucket.strict} · ≥origin {bucket.atLeast} · raw {bucket.raw}
                   </p>
                 </div>
@@ -508,7 +549,7 @@ export default function AdminDiagnosticsPage() {
           </section>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
           <div className="flex flex-wrap gap-2 items-center">
             {(['CH', 'DE', 'FR', 'IT'] as const).map(c => (
               <button
@@ -540,6 +581,26 @@ export default function AdminDiagnosticsPage() {
               <option value="temp">Temperature</option>
               <option value="car">Car travel</option>
               <option value="train">Train travel</option>
+              <option value="model">Model</option>
+              <option value="tier">Tier eligibility</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Origin
+            <select value={adminOrigin} onChange={e => setAdminOrigin(e.target.value)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+              {ADMIN_ORIGIN_CITIES.map(city => (
+                <option key={city.name} value={city.name}>{city.name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Mode
+            <select value={adminMode} onChange={e => setAdminMode(e.target.value as AdminTravelMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+              <option value="both">Car + Train</option>
+              <option value="car">Car</option>
+              <option value="train">Train</option>
             </select>
           </label>
 
@@ -621,7 +682,11 @@ export default function AdminDiagnosticsPage() {
               {meta.requestMs && <span> · request {meta.requestMs}ms</span>}
               {meta.weatherSource && <span> · source {meta.weatherSource}</span>}
               {meta.modelPolicy && <span> · model {meta.modelPolicy}</span>}
+              {meta.resultTier && <span> · tier {meta.resultTier}</span>}
             </p>
+            <div className={`mb-2 inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${meta.liveSource === 'mock' ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+              {meta.liveSource === 'mock' ? 'DEMO MODE' : 'LIVE DATA'}
+            </div>
             <details>
               <summary className="text-xs font-semibold text-slate-700 cursor-pointer">Response headers</summary>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-600">
@@ -727,6 +792,16 @@ export default function AdminDiagnosticsPage() {
                     Temp {sortArrow('temp')}
                   </button>
                 </th>
+                <th className="text-left px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('model')} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    Model {sortArrow('model')}
+                  </button>
+                </th>
+                <th className="text-left px-3 py-2 font-semibold">
+                  <button type="button" onClick={() => handleSortChange('tier')} className="inline-flex items-center gap-1 hover:text-slate-900">
+                    Tier {sortArrow('tier')}
+                  </button>
+                </th>
                 <th className="text-left px-3 py-2 font-semibold">Conditions</th>
                 <th className="text-left px-3 py-2 font-semibold">Timeline</th>
               </tr>
@@ -734,11 +809,11 @@ export default function AdminDiagnosticsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
+                  <td colSpan={15} className="px-3 py-6 text-center text-slate-500">Loading live diagnostics...</td>
                 </tr>
               ) : filteredSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
+                  <td colSpan={15} className="px-3 py-6 text-center text-slate-500">No destinations for current filters.</td>
                 </tr>
               ) : (
                 <>
@@ -755,6 +830,8 @@ export default function AdminDiagnosticsPage() {
                       <td className="px-3 py-2.5 text-right text-slate-500">-</td>
                       <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(originSnapshot.score)}`}>{Math.round(originSnapshot.score * 100)}%</td>
                       <td className="px-3 py-2.5 text-right text-slate-700">{originSnapshot.tempC}°C</td>
+                      <td className="px-3 py-2.5 text-slate-500">origin</td>
+                      <td className="px-3 py-2.5 text-slate-500">-</td>
                       <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={originSnapshot.summary}>{originSnapshot.summary}</td>
                       <td className="px-3 py-2.5"><MiniTimeline timeline={originSnapshot.timeline} day={forecastDay} /></td>
                     </tr>
@@ -800,6 +877,12 @@ export default function AdminDiagnosticsPage() {
                         <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.train?.duration_min)}</td>
                         <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
                         <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
+                        <td className="px-3 py-2.5 text-slate-600">{row.weather_model || '-'}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${tierPillClass(row.tier_eligibility)}`}>
+                            {row.tier_eligibility || '-'}
+                          </span>
+                        </td>
                         <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
                           {row.weather_now?.summary || row.conditions}
                         </td>
@@ -808,7 +891,7 @@ export default function AdminDiagnosticsPage() {
 
                       {isExpanded && (
                         <tr className="bg-slate-50/70 border-t border-slate-100">
-                          <td colSpan={13} className="px-3 py-3">
+                          <td colSpan={15} className="px-3 py-3">
                             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
                               <div>
                                 <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>

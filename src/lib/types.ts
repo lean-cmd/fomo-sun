@@ -68,6 +68,9 @@ export interface EscapeResult {
   rank: number; destination: Destination; sun_score: SunScore
   conditions: string  // human-friendly with comparison
   net_sun_min: number // sunshine minus round-trip travel time
+  optimal_departure?: string
+  tier_eligibility?: 'strict' | 'relaxed' | 'any_sun' | 'best_available'
+  weather_model?: 'meteoswiss_seamless' | 'best_match'
   weather_now: { summary: string; temp_c: number }
   tourism: TourismInfo
   travel: { car?: TravelResult; train?: TravelResult }
@@ -92,12 +95,15 @@ export interface SunnyEscapesResponse {
     generated_at: string; weather_data_freshness: string
     attribution: string[]; demo_mode: boolean
     trip_span?: 'daytrip' | 'plus1day'
+    result_tier?: 'strict' | 'relaxed' | 'any_sun' | 'best_available'
     fallback_notice?: string
     bucket_counts?: Array<{
       id: string
       min_h: number
       max_h: number
       count: number
+      destination_count?: number
+      result_tier?: 'strict' | 'relaxed' | 'any_sun' | 'best_available'
       strict_count?: number
       at_least_count?: number
       raw_count?: number

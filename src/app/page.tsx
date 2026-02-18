@@ -40,8 +40,7 @@ type EscapeFilterChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
 type CitySeed = { name: string; lat: number; lon: number }
 
 const MIN_TRAVEL_H = 0
-const MAX_TRAVEL_H = 4.5
-const MIN_ESCAPE_SUN_MIN = 30
+const MAX_TRAVEL_H = 6.5
 const JOYSTICK_MAX_PX = 42
 
 const TRAVEL_BANDS = [
@@ -49,7 +48,7 @@ const TRAVEL_BANDS = [
   { id: 'short-a', label: '1h-1.5h', minH: 1, maxH: 1.5, maxLabel: '1h30' },
   { id: 'short-b', label: '1.5h-2h', minH: 1.5, maxH: 2, maxLabel: '2h' },
   { id: 'mid', label: '2h-3h', minH: 2, maxH: 3, maxLabel: '3h' },
-  { id: 'long', label: '3hrs+', minH: 3, maxH: 4.5, maxLabel: '3hrs+' },
+  { id: 'long', label: '3h-6.5h', minH: 3, maxH: 6.5, maxLabel: '6h30' },
 ] as const
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
@@ -326,6 +325,7 @@ function SunTimelineBar({
   sunWindow,
   showNowMarker = false,
   travelMin,
+  travelMode,
   compact = false,
   label,
   sunLabel,
@@ -335,6 +335,7 @@ function SunTimelineBar({
   sunWindow?: { today: DaylightWindow; tomorrow: DaylightWindow }
   showNowMarker?: boolean
   travelMin?: number
+  travelMode?: 'car' | 'train'
   compact?: boolean
   label?: string
   sunLabel?: string
@@ -349,7 +350,11 @@ function SunTimelineBar({
   const now = new Date()
   const nowHour = now.getHours() + now.getMinutes() / 60
   const nowPct = clamp((nowHour / 24) * 100, 0, 100)
-  const travelWidthPct = travelMin ? clamp(((travelMin / 60) / 24) * 100, 0, 100 - nowPct) : 0
+  const travelStartHour = dayFocus === 'tomorrow'
+    ? Math.max(7, win.start_hour)
+    : nowHour
+  const travelStartPct = clamp((travelStartHour / 24) * 100, 0, 100)
+  const travelWidthPct = travelMin ? clamp(((travelMin / 60) / 24) * 100, 0, 100 - travelStartPct) : 0
 
   return (
     <div className="flex items-start gap-2">
@@ -371,7 +376,13 @@ function SunTimelineBar({
 
           {showNowMarker && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
           {travelMin && travelWidthPct > 0 && (
-            <div className="tl-travel-overlay" style={{ left: `${nowPct}%`, width: `${travelWidthPct}%` }} />
+            <div className="tl-travel-overlay" style={{ left: `${travelStartPct}%`, width: `${travelWidthPct}%` }}>
+              {travelMode === 'train' ? (
+                <TrainFront className="tl-travel-icon" strokeWidth={1.8} />
+              ) : (
+                <Car className="tl-travel-icon" strokeWidth={1.8} />
+              )}
+            </div>
           )}
         </div>
         {!compact && (
@@ -516,9 +527,13 @@ export default function Home() {
   const originSunMin = data?.origin_conditions.sunshine_min ?? 0
 
   const bucketCountMap = useMemo(() => {
-    const map = new Map<string, number>()
+    const map = new Map<string, { count: number; destinationCount: number; tier?: string }>()
     for (const bucket of data?._meta?.bucket_counts || []) {
-      map.set(bucket.id, bucket.count)
+      map.set(bucket.id, {
+        count: bucket.count,
+        destinationCount: bucket.destination_count ?? bucket.raw_count ?? bucket.count,
+        tier: bucket.result_tier,
+      })
     }
     return map
   }, [data?._meta?.bucket_counts])
@@ -528,8 +543,8 @@ export default function Home() {
   const isBandAvailable = useCallback((bandIndex: number) => {
     if (!hasJoystickInteracted || !bucketCountsReady) return true
     const band = TRAVEL_BANDS[bandIndex]
-    const count = bucketCountMap.get(band.id)
-    return count === undefined ? true : count > 0
+    const info = bucketCountMap.get(band.id)
+    return info === undefined ? true : info.destinationCount > 0
   }, [bucketCountMap, bucketCountsReady, hasJoystickInteracted])
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
@@ -934,48 +949,10 @@ export default function Home() {
 
   const fallbackNotice = data?._meta?.fallback_notice || ''
   const resultRows = data?.escapes || []
+  const resultTier = data?._meta?.result_tier
   const heroDayFocus: DayFocus = 'tomorrow'
   const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
-
-  const topEscapeCurrent = useMemo(() => {
-    return resultRows.find(row => (
-      row.sun_score.sunshine_forecast_min >= MIN_ESCAPE_SUN_MIN &&
-      row.sun_score.sunshine_forecast_min > originSunMin
-    )) ?? null
-  }, [originSunMin, resultRows])
-
-  const topEscapeTomorrow = useMemo(() => {
-    const candidates = resultRows.filter(row => {
-      const tomorrowMin = Math.round((row.tomorrow_sun_hours ?? 0) * 60)
-      const effectiveTomorrowMin = tomorrowMin > 0 ? tomorrowMin : row.sun_score.sunshine_forecast_min
-      return effectiveTomorrowMin >= MIN_ESCAPE_SUN_MIN && effectiveTomorrowMin > originTomorrowMin
-    })
-    if (!candidates.length) {
-      if (!fastestEscape) return null
-      const fastTomorrowMin = Math.round((fastestEscape.tomorrow_sun_hours ?? 0) * 60)
-      const effectiveFastMin = fastTomorrowMin > 0 ? fastTomorrowMin : fastestEscape.sun_score.sunshine_forecast_min
-      return (effectiveFastMin >= MIN_ESCAPE_SUN_MIN && effectiveFastMin > originTomorrowMin) ? fastestEscape : null
-    }
-    return [...candidates]
-      .sort((a, b) => {
-        const aTomorrow = Math.round((a.tomorrow_sun_hours ?? 0) * 60)
-        const bTomorrow = Math.round((b.tomorrow_sun_hours ?? 0) * 60)
-        if (bTomorrow !== aTomorrow) return bTomorrow - aTomorrow
-        const aTravel = getBestTravel(a)?.min ?? Infinity
-        const bTravel = getBestTravel(b)?.min ?? Infinity
-        if (aTravel !== bTravel) return aTravel - bTravel
-        return b.sun_score.score - a.sun_score.score
-      })[0] ?? null
-  }, [fastestEscape, originTomorrowMin, resultRows])
-
-  const safeFastestEscape = useMemo(() => {
-    if (!fastestEscape) return null
-    const fastTomorrowMin = Math.round((fastestEscape.tomorrow_sun_hours ?? 0) * 60)
-    const effectiveFastMin = fastTomorrowMin > 0 ? fastTomorrowMin : fastestEscape.sun_score.sunshine_forecast_min
-    return effectiveFastMin >= MIN_ESCAPE_SUN_MIN && effectiveFastMin > originTomorrowMin ? fastestEscape : null
-  }, [fastestEscape, originTomorrowMin])
-
-  const heroEscape = topEscapeTomorrow ?? topEscapeCurrent ?? safeFastestEscape ?? null
+  const heroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
   const heroOriginSunMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60) || originSunMin
 
   const topBestTravel = heroEscape ? getBestTravel(heroEscape) : null
@@ -993,27 +970,33 @@ export default function Home() {
     if (originDataSource === 'meteoswiss') return 'MeteoSwiss origin + Open-Meteo destinations'
     return 'Open-Meteo live forecast'
   }, [data?._meta?.demo_mode, demo, liveDataSource, originDataSource])
+  const tierMessage = useMemo(() => {
+    if (resultTier === 'any_sun') return 'Slim pickings today. These are your best bets.'
+    if (resultTier === 'best_available') return "Overcast everywhere. Here's where sun is least absent."
+    return ''
+  }, [resultTier])
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
-    const travel = topBestTravel ? formatTravelClock(topBestTravel.min / 60) : 'short'
+    const travel = topBestTravel
+      ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}`
+      : 'a short trip'
     const city = compactLabel(origin.name, 12)
-    const gain = formatSunHours(sunGainMin)
-    const sun = formatSunHours(resolvedTopSunMin)
-    const originSun = formatSunHours(heroOriginSunMin)
+    const gain = sunGainMin > 0 ? formatSunHours(sunGainMin) : ''
+    const destination = heroEscape.destination.name
     const templates = sunGainMin > 0
       ? [
-        `+${gain} more sun than ${city}. ${travel} by ${topBestTravel?.mode || 'car'}. Go.`,
-        `${sun} sunshine. ${city} gets ${originSun}. ${travel} away.`,
-        `While ${city} sits in fog, ${heroEscape.destination.name} has ${sun}. ${travel}.`,
+        `${destination} looks much brighter than ${city} tomorrow. It’s about ${travel}.`,
+        `${city} stays grey tomorrow; ${destination} is your best escape. Plan roughly ${travel}.`,
+        `${destination} gives you about ${gain} more sun than ${city}. It’s around ${travel}.`,
       ]
       : [
-        `${sun} sunshine forecast. ${travel} by ${topBestTravel?.mode || 'car'}. Worth it.`,
-        `${heroEscape.destination.name} leads tomorrow with ${sun}. ${travel} away.`,
+        `${destination} still looks like your best shot tomorrow. It’s about ${travel}.`,
+        `${city} and nearby spots look similar tomorrow, but ${destination} remains the strongest option.`,
       ]
     const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [heroEscape, origin.name, topBestTravel, resolvedTopSunMin, sunGainMin, heroOriginSunMin, heroFlowTick])
+  }, [heroEscape, origin.name, topBestTravel, sunGainMin, heroFlowTick])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
@@ -1034,13 +1017,8 @@ export default function Home() {
     return escape.sun_score.sunshine_forecast_min
   }, [dayFocus])
 
-  const isQualifiedSunnyEscape = useCallback((escape: EscapeCard) => {
-    const sunMin = escapeSunMinutes(escape)
-    return sunMin >= MIN_ESCAPE_SUN_MIN && sunMin > originSunMin
-  }, [escapeSunMinutes, originSunMin])
-
   const filteredRows = useMemo(() => {
-    const strictBetter = resultRows.filter(isQualifiedSunnyEscape)
+    const strictBetter = resultRows
     if (strictBetter.length === 0) return []
     const typed = activeTypeChips.length === 0
       ? strictBetter
@@ -1052,7 +1030,7 @@ export default function Home() {
         })
       })
     return typed
-  }, [activeTypeChips, isQualifiedSunnyEscape, resultRows])
+  }, [activeTypeChips, resultRows])
 
   const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
 
@@ -1068,32 +1046,24 @@ export default function Home() {
       return true
     }
 
-    if (visibleRows.length > 0) {
-      pushRow(visibleRows[0])
-    }
-    if (fastestEscape && isQualifiedSunnyEscape(fastestEscape)) {
-      if (!pushRow(fastestEscape)) {
-        const row = rows.find(r => r.escape.destination.id === fastestEscape.destination.id)
-        if (row && !row.badges.includes('fastest')) row.badges.push('fastest')
-      }
-    }
-    if (warmestEscape && isQualifiedSunnyEscape(warmestEscape)) {
-      if (!pushRow(warmestEscape)) {
-        const row = rows.find(r => r.escape.destination.id === warmestEscape.destination.id)
-        if (row && !row.badges.includes('warmest')) row.badges.push('warmest')
-      }
-    }
-
     for (const escape of visibleRows) {
       if (rows.length >= 5) break
       pushRow(escape)
     }
 
-    if (rows.length === 0) {
-      const fallback = (fastestEscape && isQualifiedSunnyEscape(fastestEscape))
-        ? fastestEscape
-        : (warmestEscape && isQualifiedSunnyEscape(warmestEscape) ? warmestEscape : null)
-      pushRow(fallback)
+    if (rows.length < 3) {
+      if (fastestEscape) {
+        if (!pushRow(fastestEscape)) {
+          const row = rows.find(r => r.escape.destination.id === fastestEscape.destination.id)
+          if (row && !row.badges.includes('fastest')) row.badges.push('fastest')
+        }
+      }
+      if (warmestEscape) {
+        if (!pushRow(warmestEscape)) {
+          const row = rows.find(r => r.escape.destination.id === warmestEscape.destination.id)
+          if (row && !row.badges.includes('warmest')) row.badges.push('warmest')
+        }
+      }
     }
 
     const fastestId = fastestEscape?.destination.id
@@ -1104,7 +1074,7 @@ export default function Home() {
       if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
       return { ...row, badges }
     })
-  }, [fastestEscape, isQualifiedSunnyEscape, visibleRows, warmestEscape])
+  }, [fastestEscape, visibleRows, warmestEscape])
 
   useEffect(() => {
     if (!displayRows.length) {
@@ -1327,6 +1297,11 @@ export default function Home() {
                   <p className="mt-1 text-[12px] text-slate-600">
                     {heroInfoLine}
                   </p>
+                  {heroDayFocus === 'tomorrow' && heroEscape.optimal_departure && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Leave by <span className="font-semibold text-slate-700">{heroEscape.optimal_departure}</span> to catch full sun.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1336,7 +1311,7 @@ export default function Home() {
                 timeline={data?.origin_timeline || heroEscape.sun_timeline}
                 dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
-                showNowMarker
+                showNowMarker={false}
                 label={origin.name}
                 sunLabel={formatSunHours(heroOriginSunMin)}
                 compact
@@ -1348,6 +1323,7 @@ export default function Home() {
                 label={heroEscape.destination.name}
                 sunLabel={formatSunHours(resolvedTopSunMin)}
                 travelMin={topBestTravel?.min}
+                travelMode={topBestTravel?.mode}
                 compact
               />
             </div>
@@ -1429,8 +1405,9 @@ export default function Home() {
             {TRAVEL_BANDS.map((band, idx) => {
               const active = idx === effectiveRangeIndex
               const available = isBandAvailable(idx)
-              const count = bucketCountMap.get(band.id)
-              const disabled = count !== undefined && !available
+              const info = bucketCountMap.get(band.id)
+              const destinationCount = info?.destinationCount
+              const disabled = destinationCount !== undefined && !available
               return (
                 <button
                   key={band.id}
@@ -1448,7 +1425,7 @@ export default function Home() {
                         : 'border-slate-200 bg-white text-slate-500'
                   } ${disabled ? '' : 'cursor-pointer hover:border-amber-200 active:scale-[0.98]'} transition`}
                   style={{ fontFamily: 'DM Mono, monospace' }}
-                  title={disabled ? `No sunny escapes in ${band.label}` : undefined}
+                  title={disabled ? `No destinations in ${band.label}` : undefined}
                 >
                   {band.label}
                 </button>
@@ -1520,10 +1497,16 @@ export default function Home() {
             </section>
           )}
 
+          {tierMessage && displayRows.length > 0 && (
+            <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+              {tierMessage}
+            </div>
+          )}
+
           {displayRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
-              <p className="text-[14px] text-slate-700">Cloud jackpot. Even the escapes are sulking.</p>
-              <p className="text-[12px] text-slate-500 mt-1">Try tomorrow or push the joystick right for longer-range sun.</p>
+              <p className="text-[14px] text-slate-700">No destinations in this travel range right now.</p>
+              <p className="text-[12px] text-slate-500 mt-1">Try a wider travel bucket or switch to tomorrow.</p>
             </div>
           )}
 
@@ -1599,6 +1582,11 @@ export default function Home() {
                                     <p className="text-[12px] leading-none text-slate-600 inline-flex items-center gap-1.5 font-semibold py-1">
                                       <IconForMode mode={bestTravel.mode} />
                                       <span>{formatTravelClock(bestTravel.min / 60)}</span>
+                                      {dayFocus === 'tomorrow' && escape.optimal_departure && (
+                                        <span className="text-[10px] text-slate-500 font-medium">
+                                          · leave {escape.optimal_departure}
+                                        </span>
+                                      )}
                                     </p>
                                   )}
                                   <ChevronDown className={`w-4 h-4 text-slate-400 self-center transition-transform ${isOpen ? 'rotate-180' : ''}`} />

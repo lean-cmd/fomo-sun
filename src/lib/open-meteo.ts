@@ -55,6 +55,12 @@ export interface LiveBatchWeatherResult extends LiveHourlyForecastResult {
   lat: number
   lon: number
   current: LiveWeatherResult
+  sunrise_today_iso?: string
+  sunrise_tomorrow_iso?: string
+  sunset_today_iso?: string
+  sunset_tomorrow_iso?: string
+  daylight_window_today?: { start_hour: number; end_hour: number }
+  daylight_window_tomorrow?: { start_hour: number; end_hour: number }
 }
 
 export type WeatherSourcePolicy = 'auto' | 'meteoswiss' | 'openmeteo'
@@ -219,12 +225,22 @@ function parseBatchRecord(payload: any): LiveBatchWeatherResult | null {
 
   const hours = parseHourly(payload)
   const totals = computeSunTotals(hours)
+  const sunriseToday = typeof payload?.daily?.sunrise?.[0] === 'string' ? payload.daily.sunrise[0] : undefined
+  const sunriseTomorrow = typeof payload?.daily?.sunrise?.[1] === 'string' ? payload.daily.sunrise[1] : sunriseToday
+  const sunsetToday = typeof payload?.daily?.sunset?.[0] === 'string' ? payload.daily.sunset[0] : undefined
+  const sunsetTomorrow = typeof payload?.daily?.sunset?.[1] === 'string' ? payload.daily.sunset[1] : sunsetToday
 
   return {
     lat,
     lon,
     current: parseCurrent(payload),
     hours,
+    sunrise_today_iso: sunriseToday,
+    sunrise_tomorrow_iso: sunriseTomorrow,
+    sunset_today_iso: sunsetToday,
+    sunset_tomorrow_iso: sunsetTomorrow,
+    daylight_window_today: sunriseToday && sunsetToday ? windowFromSunriseSunset(sunriseToday, sunsetToday) : undefined,
+    daylight_window_tomorrow: sunriseTomorrow && sunsetTomorrow ? windowFromSunriseSunset(sunriseTomorrow, sunsetTomorrow) : undefined,
     ...totals,
   }
 }
@@ -243,7 +259,7 @@ async function fetchBatchChunk(
 
   const latCsv = locations.map(l => l.lat.toFixed(5)).join(',')
   const lonCsv = locations.map(l => l.lon.toFixed(5)).join(',')
-  const url = `${BASE}/forecast?latitude=${latCsv}&longitude=${lonCsv}&current=${CURRENT_FIELDS}&hourly=${HOURLY_FIELDS}&forecast_days=2&timezone=Europe%2FZurich`
+  const url = `${BASE}/forecast?latitude=${latCsv}&longitude=${lonCsv}&current=${CURRENT_FIELDS}&hourly=${HOURLY_FIELDS}&daily=sunrise,sunset&forecast_days=2&timezone=Europe%2FZurich`
   const payload = await fetchOpenMeteoForecast(url, 300, model)
   const rows = normalizeBatchPayload(payload)
   const parsed = rows
@@ -398,11 +414,11 @@ export async function getSunTimes(
  * falls back to per-point cached helpers for reliability.
  */
 export async function batchGetWeather(
-  locations: { lat: number; lon: number }[],
+  locations: { lat: number; lon: number; country?: string }[],
   options?: { weather_source?: WeatherSourcePolicy | string }
 ): Promise<LiveBatchWeatherResult[]> {
   const policy = normalizeWeatherSourcePolicy(options?.weather_source)
-  const deduped: { lat: number; lon: number }[] = []
+  const deduped: { lat: number; lon: number; country?: string }[] = []
   const seen = new Set<string>()
 
   for (const loc of locations) {
@@ -415,10 +431,12 @@ export async function batchGetWeather(
   if (deduped.length === 0) return []
 
   const outByKey = new Map<string, LiveBatchWeatherResult>()
-  const swiss = policy === 'openmeteo' ? [] : deduped.filter(p => inSwissModelBounds(p.lat, p.lon))
+  const swiss = policy === 'openmeteo'
+    ? []
+    : deduped.filter(p => p.country === 'CH' || (!p.country && inSwissModelBounds(p.lat, p.lon)))
   const crossBorder = policy === 'openmeteo'
     ? deduped
-    : deduped.filter(p => !inSwissModelBounds(p.lat, p.lon))
+    : deduped.filter(p => !(p.country === 'CH' || (!p.country && inSwissModelBounds(p.lat, p.lon))))
 
   const processGroup = async (
     group: { lat: number; lon: number }[],
@@ -434,29 +452,35 @@ export async function batchGetWeather(
       for (const point of group) {
         const key = batchPointKey(point.lat, point.lon)
         if (outByKey.has(key)) continue
-        const [current, hourly] = await Promise.all([
+        const [current, hourly, sun] = await Promise.all([
           getCurrentWeather(point.lat, point.lon, { weather_source: policy }),
           getHourlyForecast(point.lat, point.lon, { weather_source: policy }),
+          getSunTimes(point.lat, point.lon, { weather_source: policy }),
         ])
         outByKey.set(key, {
           lat: point.lat,
           lon: point.lon,
           current,
           ...hourly,
+          daylight_window_today: sun.daylight_window_today,
+          daylight_window_tomorrow: sun.daylight_window_tomorrow,
         })
       }
     } catch {
       const fallbackRows = await Promise.all(
         group.map(async point => {
-          const [current, hourly] = await Promise.all([
+          const [current, hourly, sun] = await Promise.all([
             getCurrentWeather(point.lat, point.lon, { weather_source: policy }),
             getHourlyForecast(point.lat, point.lon, { weather_source: policy }),
+            getSunTimes(point.lat, point.lon, { weather_source: policy }),
           ])
           return {
             lat: point.lat,
             lon: point.lon,
             current,
             ...hourly,
+            daylight_window_today: sun.daylight_window_today,
+            daylight_window_tomorrow: sun.daylight_window_tomorrow,
           }
         })
       )

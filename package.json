@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "poi:prepare": "node scripts/prepare-poi-import.mjs"
+    "poi:prepare": "node scripts/prepare-poi-import.mjs",
+    "smoke:test": "node scripts/smoke-test.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.564.0",

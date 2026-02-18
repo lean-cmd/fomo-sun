@@ -8,7 +8,17 @@ import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, Touris
 import { addRequestLog } from '@/lib/request-log'
 import { enrichDestination } from '@/lib/tourism/enrichDestination'
 
-type LiveForecastBundle = Awaited<ReturnType<typeof getHourlyForecast>>
+type LiveForecastBundle = {
+  hours: Awaited<ReturnType<typeof getHourlyForecast>>['hours']
+  total_sunshine_today_min: number
+  total_sunshine_tomorrow_min: number
+  sunrise_today_iso?: string
+  sunrise_tomorrow_iso?: string
+  sunset_today_iso?: string
+  sunset_tomorrow_iso?: string
+  daylight_window_today?: DaylightWindow
+  daylight_window_tomorrow?: DaylightWindow
+}
 type TripSpan = 'daytrip' | 'plus1day'
 
 type ScoredWithTravel = {
@@ -20,6 +30,7 @@ type ScoredWithTravel = {
   netGainVsOriginMin: number
   tomorrowSunMin: number
   tomorrowNetAfterArrivalMin: number
+  optimalDeparture?: string
   carTravel?: ReturnType<typeof getMockTravelTime>
   trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
   bestTravelMin: number
@@ -32,10 +43,13 @@ type RankedEscapeRow = {
   travel_time_min: number
   net_gain_min: number
   combined_score: number
+  sunshine_min: number
   temperature_c: number
   in_window: boolean
   window_overflow_min: number
 }
+
+type ResultTier = 'strict' | 'relaxed' | 'any_sun' | 'best_available'
 
 const DEMO_TRAIN_FAST_IDS = new Set([
   'solothurn',
@@ -77,8 +91,6 @@ const TARGET_POI_COUNT = 500
 const QUERY_CACHE_TTL_MS = 12_000
 const LIVE_WEATHER_POOL_TARGET = 36
 const LIVE_WEATHER_POOL_EXPLICIT_MAX = 140
-const MIN_ESCAPE_SUN_MIN = 30
-const BUCKET_MERGE_MIN_RESULTS = 4
 const DIVERSITY_RADIUS_KM = 25
 const DIVERSITY_MAX_NEARBY_IN_TOP = 2
 const DIVERSITY_TOP_ROWS = 5
@@ -87,7 +99,7 @@ const UI_TRAVEL_BUCKETS = [
   { id: 'short-a', min_h: 1, max_h: 1.5 },
   { id: 'short-b', min_h: 1.5, max_h: 2 },
   { id: 'mid', min_h: 2, max_h: 3 },
-  { id: 'long', min_h: 3, max_h: 4.5 },
+  { id: 'long', min_h: 3, max_h: 6.5 },
 ] as const
 const queryResponseCache = new Map<string, { expires_at: number; response: SunnyEscapesResponse; headers: Record<string, string> }>()
 const ZURICH_TZ = 'Europe/Zurich'
@@ -159,8 +171,8 @@ function demoTrainFactor(id: string): number {
   return 0.62 + (hash % 7) * 0.025 // 0.62 - 0.77
 }
 
-function mapsPlaceLabel(name: string) {
-  const value = name.trim()
+function mapsPlaceLabel(name?: string | null) {
+  const value = String(name || '').trim()
   if (!value) return value
   const lower = value.toLowerCase()
   if (lower.includes('switzerland') || lower.includes('germany') || lower.includes('france') || value.includes(',')) {
@@ -169,10 +181,15 @@ function mapsPlaceLabel(name: string) {
   return `${value}, Switzerland`
 }
 
-function buildGoogleMapsDirectionsUrl(mapsName: string, originName?: string) {
+function buildGoogleMapsDirectionsUrl(mapsName: string | null | undefined, originName?: string, fallbackName?: string, country?: string) {
+  const destinationLabel = mapsPlaceLabel(mapsName) || mapsPlaceLabel(
+    fallbackName
+      ? `${fallbackName}${country === 'DE' ? ', Germany' : country === 'FR' ? ', France' : country === 'IT' ? ', Italy' : ', Switzerland'}`
+      : 'Switzerland'
+  )
   const p = new URLSearchParams({
     api: '1',
-    destination: mapsPlaceLabel(mapsName),
+    destination: destinationLabel,
     travelmode: 'driving',
   })
   if (originName?.trim()) p.set('origin', mapsPlaceLabel(originName))
@@ -280,6 +297,14 @@ function isBaselLikeOrigin(originName: string, lat: number, lon: number) {
   return Math.abs(lat - DEFAULT_ORIGIN.lat) <= 0.18 && Math.abs(lon - DEFAULT_ORIGIN.lon) <= 0.22
 }
 
+function weatherModelForDestination(
+  destination: typeof destinations[number],
+  weatherSource: 'openmeteo' | 'meteoswiss' | 'meteoswiss_api'
+): 'meteoswiss_seamless' | 'best_match' {
+  if (weatherSource === 'openmeteo') return 'best_match'
+  return destination.country === 'CH' ? 'meteoswiss_seamless' : 'best_match'
+}
+
 function tomorrowStringInZurich() {
   return dayStringInZurich(new Date(Date.now() + 24 * 60 * 60 * 1000))
 }
@@ -304,6 +329,55 @@ function dayAverages(hours: LiveForecastBundle['hours'], dayStr: string) {
     humidityPct: avg(bucket.map(h => h.relative_humidity_pct)),
     windKmh: avg(bucket.map(h => h.wind_speed_kmh)),
   }
+}
+
+function hourFromIso(iso: string) {
+  const hh = Number(iso.slice(11, 13))
+  const mm = Number(iso.slice(14, 16))
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return 0
+  return hh + mm / 60
+}
+
+function hourToHHMM(hour: number) {
+  const clamped = clamp(hour, 0, 23.99)
+  const whole = Math.floor(clamped)
+  const minute = Math.round((clamped - whole) * 60)
+  const hh = String(whole + Math.floor(minute / 60)).padStart(2, '0')
+  const mm = String(minute % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+function sunnyMinutesLostDuringTravel(input: {
+  hours: LiveForecastBundle['hours']
+  dayStr: string
+  departureHour: number
+  travelMin: number
+  daylight?: DaylightWindow
+}) {
+  if (!Number.isFinite(input.travelMin) || input.travelMin <= 0) return 0
+  const travelHours = input.travelMin / 60
+  if (travelHours <= 0) return 0
+  const start = Math.max(0, input.departureHour)
+  const end = Math.min(24, start + travelHours)
+  if (end <= start) return 0
+
+  const daylightStart = input.daylight?.start_hour ?? 0
+  const daylightEnd = input.daylight?.end_hour ?? 24
+  const intervalStart = Math.max(start, daylightStart)
+  const intervalEnd = Math.min(end, daylightEnd)
+  if (intervalEnd <= intervalStart) return 0
+
+  let lost = 0
+  for (const h of input.hours) {
+    if (!h.time.startsWith(input.dayStr)) continue
+    const hourStart = hourFromIso(h.time)
+    const hourEnd = Math.min(24, hourStart + 1)
+    const overlap = Math.max(0, Math.min(intervalEnd, hourEnd) - Math.max(intervalStart, hourStart))
+    if (overlap <= 0) continue
+    lost += h.sunshine_duration_min * overlap
+  }
+
+  return Math.max(0, Math.round(lost))
 }
 
 function extractTempCFromText(text: string) {
@@ -458,8 +532,42 @@ function selectLiveWeatherPool(candidates: Array<{
         }
         return b.destination.altitude_m - a.destination.altitude_m
       })
-    if (explicitPool.length <= LIVE_WEATHER_POOL_EXPLICIT_MAX) return explicitPool
-    return explicitPool.slice(0, LIVE_WEATHER_POOL_EXPLICIT_MAX)
+    const explicitTarget = Math.min(
+      LIVE_WEATHER_POOL_EXPLICIT_MAX,
+      Math.max(24, LIVE_WEATHER_POOL_TARGET)
+    )
+    const deduped = new Map<string, typeof candidates[number]>()
+    const addRows = (rows: typeof candidates) => {
+      for (const row of rows) {
+        if (deduped.has(row.destination.id)) continue
+        deduped.set(row.destination.id, row)
+        if (deduped.size >= explicitTarget) break
+      }
+    }
+
+    addRows(explicitPool)
+    if (deduped.size < explicitTarget) {
+      addRows(
+        [...candidates]
+          .sort((a, b) => {
+            const da = Math.abs(a.bestTravelMin - windowCenter)
+            const db = Math.abs(b.bestTravelMin - windowCenter)
+            if (da !== db) return da - db
+            return b.destination.altitude_m - a.destination.altitude_m
+          })
+      )
+    }
+    if (deduped.size < explicitTarget) {
+      // Long-window requests should still keep some true long-range candidates in the live pool.
+      const preferLong = windowCenter >= 170
+      addRows(
+        [...candidates]
+          .sort((a, b) => preferLong
+            ? b.bestTravelMin - a.bestTravelMin
+            : a.bestTravelMin - b.bestTravelMin)
+      )
+    }
+    return Array.from(deduped.values()).slice(0, explicitTarget)
   }
 
   const target = LIVE_WEATHER_POOL_TARGET
@@ -638,6 +746,16 @@ function computeLiveWeatherWindow(
   }
 }
 
+function resolveDaylightWindow(
+  live: Awaited<ReturnType<typeof batchGetWeather>>[number],
+  day: 'today' | 'tomorrow',
+  fallback: DaylightWindow
+) {
+  if (day === 'today' && live.daylight_window_today) return live.daylight_window_today
+  if (day === 'tomorrow' && live.daylight_window_tomorrow) return live.daylight_window_tomorrow
+  return fallback
+}
+
 function buildTripPlan(destination: typeof destinations[number]) {
   if (destination.trip_plan) {
     const steps = [
@@ -648,12 +766,17 @@ function buildTripPlan(destination: typeof destinations[number]) {
     if (destination.trip_plan.pro_tip) steps.push(`💡 ${destination.trip_plan.pro_tip}`)
     return steps
   }
-  return destination.plan_template.split(' | ')
+  return String(destination.plan_template || '')
+    .split(' | ')
+    .map(part => part.trim())
+    .filter(Boolean)
 }
 
 function hourCondition(h: LiveForecastBundle['hours'][number]) {
-  if (h.sunshine_duration_min >= 45) return 'sun'
-  if (h.sunshine_duration_min >= 15) return 'partial'
+  if (h.sunshine_duration_min >= 24) return 'sun'
+  if (h.sunshine_duration_min >= 5) return 'partial'
+  if (h.cloud_cover_pct <= 30 && h.low_cloud_cover_pct <= 45) return 'sun'
+  if (h.cloud_cover_pct <= 60) return 'partial'
   return 'cloud'
 }
 
@@ -726,7 +849,7 @@ function originSunScoreFromCurrent(input: {
 export async function GET(request: NextRequest) {
   const startedAt = Date.now()
   const sp = request.nextUrl.searchParams
-  const maxSupportedH = 4.5
+  const maxSupportedH = 6.5
   const lat = parseFloat(sp.get('lat') || String(DEFAULT_ORIGIN.lat))
   const lon = parseFloat(sp.get('lon') || String(DEFAULT_ORIGIN.lon))
   let maxTravelH = Math.min(maxSupportedH, Math.max(0.5, parseFloat(sp.get('max_travel_h') || '2.5')))
@@ -760,10 +883,9 @@ export async function GET(request: NextRequest) {
         ? 'meteoswiss'
         : weatherSourceRaw === 'meteoswiss_api' || weatherSourceRaw === 'meteoswiss-ogd'
           ? 'meteoswiss_api'
-          : 'openmeteo'
+          : 'meteoswiss'
   ) as 'openmeteo' | 'meteoswiss' | 'meteoswiss_api'
   const forecastWeatherSource: WeatherSourcePolicy = weatherSource === 'openmeteo' ? 'openmeteo' : 'meteoswiss'
-  const useMeteoSwissOriginApi = weatherSource === 'meteoswiss_api'
   const agentPrefsRaw = request.headers.get('X-FOMO-Agent-Preferences')
   let agentPrefs: Record<string, unknown> = {}
   if (agentPrefsRaw) {
@@ -805,6 +927,7 @@ export async function GET(request: NextRequest) {
   })
   const adminView = sp.get('admin') === 'true'
   const adminAll = adminView && sp.get('admin_all') === 'true'
+  const useMeteoSwissOriginApi = adminView && weatherSource === 'meteoswiss_api'
   const rawLimit = parseInt(sp.get('limit') || '6')
   const limit = adminView
     ? Math.min(adminAll ? 5000 : 500, Math.max(1, rawLimit))
@@ -911,10 +1034,10 @@ export async function GET(request: NextRequest) {
   let originDataSource: 'open-meteo' | 'meteoswiss' | 'mock' = demoMode ? 'mock' : 'open-meteo'
   let fogHeuristicApplied = false
   const liveModelPolicy = weatherSource === 'openmeteo'
-    ? 'all:open-meteo-default'
+    ? 'all:open-meteo-default(best_match)'
     : weatherSource === 'meteoswiss'
-      ? 'forecast:CH:meteoswiss_seamless|DE/FR/IT:default'
-      : 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:default'
+      ? 'forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
+      : 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
 
   // Pre-filter by rough distance and user filters
   let candidates = adminAll
@@ -985,6 +1108,10 @@ export async function GET(request: NextRequest) {
     const originForGainMin = tripSpan === 'plus1day'
       ? Math.round(originTomorrowHours * 60)
       : originSunMin
+    const demoTomorrowDaylight = getMockDaylightWindow(1)
+    const demoSunriseHour = Math.max(0, demoTomorrowDaylight.start_hour + 1)
+    const targetArrivalHour = Math.max(7, demoSunriseHour)
+    const earliestDepartureHour = 5.5
     return candidatesWithTravel.map(c => {
       const w = getMockWeather(c.destination, true)
       const tomorrowMin = Math.round(getMockTomorrowSunHoursForDest(c.destination, true) * 60)
@@ -992,6 +1119,14 @@ export async function GET(request: NextRequest) {
         ? clamp(tomorrowMin, 0, 600)
         : w.sunshine_forecast_min
       const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
+      const travelHours = c.bestTravelMin / 60
+      const idealDepartureHour = targetArrivalHour - travelHours
+      const cappedDepartureHour = Math.max(earliestDepartureHour, idealDepartureHour)
+      const arrivalHour = cappedDepartureHour + travelHours
+      const missedEarlyHours = Math.max(0, arrivalHour - targetArrivalHour)
+      const daylightHours = Math.max(1, demoTomorrowDaylight.end_hour - demoTomorrowDaylight.start_hour)
+      const missedEarlySunMin = Math.round((missedEarlyHours / daylightHours) * tomorrowMin)
+      const tomorrowNetAfterArrivalMin = Math.max(0, Math.round(tomorrowMin - missedEarlySunMin))
       const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originForGainMin)
       return {
         destination: c.destination,
@@ -1009,7 +1144,8 @@ export async function GET(request: NextRequest) {
         netSunAfterArrivalMin,
         netGainVsOriginMin: netGainVsOrigin,
         tomorrowSunMin: tomorrowMin,
-        tomorrowNetAfterArrivalMin: Math.max(0, Math.round(tomorrowMin - c.bestTravelMin)),
+        tomorrowNetAfterArrivalMin,
+        optimalDeparture: hourToHHMM(cappedDepartureHour),
         carTravel: c.carTravel,
         trainTravel: c.trainTravel,
         bestTravelMin: c.bestTravelMin,
@@ -1027,7 +1163,7 @@ export async function GET(request: NextRequest) {
         getHourlyForecast(lat, lon, { weather_source: forecastWeatherSource }),
         getSunTimes(lat, lon, { weather_source: forecastWeatherSource }),
         batchGetWeather(
-          liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon })),
+          liveCandidatesWithTravel.map(c => ({ lat: c.destination.lat, lon: c.destination.lon, country: c.destination.country })),
           { weather_source: forecastWeatherSource }
         ),
         useMeteoSwissOriginApi ? getSwissMeteoOriginSnapshot(lat, lon) : Promise.resolve(null),
@@ -1039,7 +1175,7 @@ export async function GET(request: NextRequest) {
       originSunMin = originCurrent.sunshine_duration_min
       originSunScore = originSunScoreFromCurrent(originCurrent)
       originTempC = Math.round(originCurrent.temperature_c)
-      if (swissOriginSnapshot) {
+      if (useMeteoSwissOriginApi && swissOriginSnapshot) {
         originDataSource = 'meteoswiss'
         originDescription = `${swissOriginSnapshot.description} · ${swissOriginSnapshot.station_name}`
         originSunMin = Math.max(0, Math.round(swissOriginSnapshot.sunshine_min))
@@ -1056,7 +1192,8 @@ export async function GET(request: NextRequest) {
         precipitationMm: originCurrent.precipitation_mm,
       })
       const originFogRiskSwiss = Boolean(
-        swissOriginSnapshot
+        useMeteoSwissOriginApi
+        && swissOriginSnapshot
         && swissOriginSnapshot.humidity_pct >= 88
         && swissOriginSnapshot.sunshine_min <= 6
       )
@@ -1073,7 +1210,26 @@ export async function GET(request: NextRequest) {
         tomorrow: sunTimes.daylight_window_tomorrow,
       }
       originTimeline = timelineFromLive(originHourly.hours, sunWindow)
+      const nowZurichHour = hourInZurich(new Date())
+      const todayDay = dayStringInZurich(new Date())
       const tomorrowDay = tomorrowStringInZurich()
+      const originTodayRemainingRawMin = sunnyMinutesLostDuringTravel({
+        hours: originHourly.hours,
+        dayStr: todayDay,
+        departureHour: nowZurichHour,
+        travelMin: Math.max(0, (sunWindow.today.end_hour - nowZurichHour) * 60),
+        daylight: sunWindow.today,
+      })
+      const originTodayStats = dayAverages(originHourly.hours, todayDay)
+      const originTodayAdjustedMin = applyOriginFogPenalty({
+        sunshineMin: originTodayRemainingRawMin,
+        fogRisk: originFogRisk,
+        lowCloudPct: originTodayStats.lowCloudPct,
+        cloudPct: originTodayStats.cloudPct,
+        precipitationMm: originTodayStats.precipitationMm,
+      })
+      if (originTodayAdjustedMin !== originTodayRemainingRawMin) fogHeuristicApplied = true
+      originSunMin = originTodayAdjustedMin
       const originTomorrowRawMin = Math.round(originHourly.total_sunshine_tomorrow_min)
       const originTomorrowStats = dayAverages(originHourly.hours, tomorrowDay)
       const originTomorrowAdjustedMin = applyOriginFogPenalty({
@@ -1101,6 +1257,15 @@ export async function GET(request: NextRequest) {
         }
 
         const liveWindow = computeLiveWeatherWindow(live.hours, inversionLikely, sunWindow.today)
+        const destinationDaylightToday = resolveDaylightWindow(live, 'today', sunWindow.today)
+        const destinationDaylightTomorrow = resolveDaylightWindow(live, 'tomorrow', sunWindow.tomorrow)
+        const todayRemainingRawMin = sunnyMinutesLostDuringTravel({
+          hours: live.hours,
+          dayStr: todayDay,
+          departureHour: nowZurichHour,
+          travelMin: Math.max(0, (destinationDaylightToday.end_hour - nowZurichHour) * 60),
+          daylight: destinationDaylightToday,
+        })
         const tomorrowSunMinRaw = Math.round(live.total_sunshine_tomorrow_min)
         const tomorrowStats = dayAverages(live.hours, tomorrowDay)
         const tomorrowFogAdjusted = applyFogAltitudeAdjustment({
@@ -1114,24 +1279,53 @@ export async function GET(request: NextRequest) {
           capMin: 600,
         })
         const daytripFogAdjusted = applyFogAltitudeAdjustment({
-          baseSunMin: liveWindow.weatherInput.sunshine_forecast_min,
+          baseSunMin: todayRemainingRawMin,
           destinationAltitudeM: c.destination.altitude_m,
           fogRisk: originFogRisk,
           lowCloudPct: liveWindow.stats.lowCloudPct,
           cloudPct: liveWindow.stats.cloudPct,
           precipitationMm: liveWindow.stats.precipitationMm,
           snowfallCm: liveWindow.stats.snowfallCm,
-          capMin: 180,
+          capMin: 600,
         })
         if (tomorrowFogAdjusted.applied || daytripFogAdjusted.applied) fogHeuristicApplied = true
         const tomorrowSunMin = tomorrowFogAdjusted.sunMin
-        const effectiveSunMin = tripSpan === 'plus1day'
-          ? tomorrowSunMin
-          : daytripFogAdjusted.sunMin
+        const lostTodaySunRawMin = sunnyMinutesLostDuringTravel({
+          hours: live.hours,
+          dayStr: todayDay,
+          departureHour: nowZurichHour,
+          travelMin: c.bestTravelMin,
+          daylight: destinationDaylightToday,
+        })
+        const todayAdjustmentRatio = todayRemainingRawMin > 0
+          ? daytripFogAdjusted.sunMin / todayRemainingRawMin
+          : 1
+        const lostTodaySunAdjustedMin = Math.max(0, Math.round(lostTodaySunRawMin * todayAdjustmentRatio))
+        const destinationSunriseTomorrowHour = live.sunrise_tomorrow_iso
+          ? hourFromIso(live.sunrise_tomorrow_iso)
+          : Math.max(0, destinationDaylightTomorrow.start_hour + 1)
+        const targetArrivalHourTomorrow = Math.max(7, destinationSunriseTomorrowHour)
+        const travelHours = c.bestTravelMin / 60
+        const idealDepartureTomorrowHour = targetArrivalHourTomorrow - travelHours
+        const cappedDepartureTomorrowHour = Math.max(5.5, idealDepartureTomorrowHour)
+        const arrivalTomorrowHour = cappedDepartureTomorrowHour + travelHours
+        const missedEarlySunTomorrowMin = idealDepartureTomorrowHour < 5.5 && arrivalTomorrowHour > targetArrivalHourTomorrow
+          ? sunnyMinutesLostDuringTravel({
+            hours: live.hours,
+            dayStr: tomorrowDay,
+            departureHour: targetArrivalHourTomorrow,
+            travelMin: Math.max(0, (arrivalTomorrowHour - targetArrivalHourTomorrow) * 60),
+            daylight: destinationDaylightTomorrow,
+          })
+          : 0
+        const todayNetSunAfterTravelMin = Math.max(0, Math.round(daytripFogAdjusted.sunMin - lostTodaySunAdjustedMin))
+        const tomorrowNetSunAfterArrivalMin = Math.max(0, Math.round(tomorrowSunMin - missedEarlySunTomorrowMin))
+        const effectiveSunMin = tripSpan === 'plus1day' ? tomorrowSunMin : daytripFogAdjusted.sunMin
+        const effectiveNetSunMin = tripSpan === 'plus1day' ? tomorrowNetSunAfterArrivalMin : todayNetSunAfterTravelMin
         const originGainBaselineMin = tripSpan === 'plus1day'
           ? originTomorrowAdjustedMin
           : originSunMin
-        const netSunAfterArrivalMin = Math.max(0, Math.round(effectiveSunMin - c.bestTravelMin))
+        const netSunAfterArrivalMin = effectiveNetSunMin
         const netGainVsOrigin = Math.max(0, netSunAfterArrivalMin - originGainBaselineMin)
 
         return {
@@ -1150,7 +1344,8 @@ export async function GET(request: NextRequest) {
           netSunAfterArrivalMin,
           netGainVsOriginMin: netGainVsOrigin,
           tomorrowSunMin,
-          tomorrowNetAfterArrivalMin: Math.max(0, Math.round(tomorrowSunMin - c.bestTravelMin)),
+          tomorrowNetAfterArrivalMin: tomorrowNetSunAfterArrivalMin,
+          optimalDeparture: hourToHHMM(cappedDepartureTomorrowHour),
           carTravel: c.carTravel,
           trainTravel: c.trainTravel,
           bestTravelMin: c.bestTravelMin,
@@ -1158,6 +1353,12 @@ export async function GET(request: NextRequest) {
             hours: live.hours,
             total_sunshine_today_min: live.total_sunshine_today_min,
             total_sunshine_tomorrow_min: live.total_sunshine_tomorrow_min,
+            sunrise_today_iso: live.sunrise_today_iso,
+            sunrise_tomorrow_iso: live.sunrise_tomorrow_iso,
+            sunset_today_iso: live.sunset_today_iso,
+            sunset_tomorrow_iso: live.sunset_tomorrow_iso,
+            daylight_window_today: live.daylight_window_today,
+            daylight_window_tomorrow: live.daylight_window_tomorrow,
           },
         }
       })
@@ -1197,17 +1398,11 @@ export async function GET(request: NextRequest) {
   const sunshineForSurfaceMin = (row: ScoredWithTravel) => (
     tripSpan === 'plus1day' ? row.tomorrowSunMin : row.sun_score.sunshine_forecast_min
   )
-  const meetsMinSunshine = (row: ScoredWithTravel) => sunshineForSurfaceMin(row) >= MIN_ESCAPE_SUN_MIN
   const isStrictBetterThanOrigin = (row: ScoredWithTravel) => {
-    if (comparisonMetric(row) > comparisonOriginMin) return true
-    // Tomorrow mode: allow clearly sunnier destinations even if travel erodes strict net lead.
-    if (tripSpan === 'plus1day') return row.tomorrowSunMin >= originTomorrowMin + 45
-    return false
+    return sunshineForSurfaceMin(row) > comparisonOriginMin
   }
   const isAtLeastAsGoodAsOrigin = (row: ScoredWithTravel) => {
-    if (comparisonMetric(row) >= comparisonOriginMin) return true
-    if (tripSpan === 'plus1day') return row.tomorrowSunMin >= originTomorrowMin
-    return false
+    return sunshineForSurfaceMin(row) >= comparisonOriginMin
   }
   const withTravel = scored
     .sort((a, b) => {
@@ -1218,30 +1413,31 @@ export async function GET(request: NextRequest) {
       return a.bestTravelMin - b.bestTravelMin
     })
     .slice(0, topLimit)
-  const eligibleRows = adminAll ? withTravel : withTravel.filter(meetsMinSunshine)
+  const eligibleRows = withTravel
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
   let appliedWindowMin = strictWindowMin
   let appliedWindowMax = strictWindowMax
-  const fallbackMinResults = adminView ? 1 : Math.min(5, limit)
+  const targetResultCount = adminView ? Math.min(5, limit) : Math.min(5, limit)
 
-  const rankRowsByNet = (rows: ScoredWithTravel[]): RankedEscapeRow[] => rows
+  const rankRowsByNet = (rows: ScoredWithTravel[], windowMin = strictWindowMin, windowMax = strictWindowMax): RankedEscapeRow[] => rows
     .map(r => {
       const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
       const travelConvenience = 1 - clamp(r.bestTravelMin / maxTravelMin, 0, 1)
       const tempBoost = preferWarm ? clamp((r.temp_c - 6) * 1.6, 0, 16) : 0
       const combined = netGainMin * 0.72 + (r.sun_score.score * 100) * 0.2 + travelConvenience * 8 + tempBoost
-      const inWindow = r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax
+      const inWindow = r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax
       const overflowMin = inWindow
         ? 0
-        : (r.bestTravelMin < strictWindowMin ? strictWindowMin - r.bestTravelMin : r.bestTravelMin - strictWindowMax)
+        : (r.bestTravelMin < windowMin ? windowMin - r.bestTravelMin : r.bestTravelMin - windowMax)
       return {
         destination: r.destination,
         sun_score: r.sun_score,
         travel_time_min: r.bestTravelMin,
         net_gain_min: netGainMin,
         combined_score: combined,
+        sunshine_min: sunshineForSurfaceMin(r),
         temperature_c: r.temp_c,
         in_window: inWindow,
         window_overflow_min: overflowMin,
@@ -1255,61 +1451,157 @@ export async function GET(request: NextRequest) {
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
       return a.travel_time_min - b.travel_time_min
     })
+  const rankRowsBySun = (rows: ScoredWithTravel[], windowMin = strictWindowMin, windowMax = strictWindowMax): RankedEscapeRow[] => rows
+    .map(r => {
+      const sunshineMin = sunshineForSurfaceMin(r)
+      const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
+      const inWindow = r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax
+      const overflowMin = inWindow
+        ? 0
+        : (r.bestTravelMin < windowMin ? windowMin - r.bestTravelMin : r.bestTravelMin - windowMax)
+      return {
+        destination: r.destination,
+        sun_score: r.sun_score,
+        travel_time_min: r.bestTravelMin,
+        net_gain_min: netGainMin,
+        combined_score: sunshineMin,
+        sunshine_min: sunshineMin,
+        temperature_c: r.temp_c,
+        in_window: inWindow,
+        window_overflow_min: overflowMin,
+      }
+    })
+    .sort((a, b) => {
+      if (b.sunshine_min !== a.sunshine_min) return b.sunshine_min - a.sunshine_min
+      if (preferWarm && b.temperature_c !== a.temperature_c) return b.temperature_c - a.temperature_c
+      if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
+      return a.travel_time_min - b.travel_time_min
+    })
 
-  const strictWindowRows = adminAll
-    ? eligibleRows
-    : eligibleRows.filter(r => r.bestTravelMin >= strictWindowMin && r.bestTravelMin <= strictWindowMax)
-  const strictBetterRows = adminAll
-    ? strictWindowRows
-    : strictWindowRows.filter(isStrictBetterThanOrigin)
-  const strictAtLeastRows = strictWindowRows.filter(isAtLeastAsGoodAsOrigin)
+  const tierPredicates = {
+    strict: (row: ScoredWithTravel) => isStrictBetterThanOrigin(row) && sunshineForSurfaceMin(row) >= 60,
+    relaxed: (row: ScoredWithTravel) => isAtLeastAsGoodAsOrigin(row) && sunshineForSurfaceMin(row) >= 30,
+    any_sun: (row: ScoredWithTravel) => sunshineForSurfaceMin(row) > 0,
+  } as const
 
-  let rankingPool = strictBetterRows
+  const chooseTier = (rowsInWindow: ScoredWithTravel[], target: number): { tier: ResultTier; rows: ScoredWithTravel[] } => {
+    const strictRows = rowsInWindow.filter(tierPredicates.strict)
+    if (strictRows.length >= target) return { tier: 'strict', rows: strictRows }
 
-  // Explicit joystick windows should stay strict: never leak far-out travel times.
-  if (!adminAll && hasExplicitTravelWindow) {
-    if (rankingPool.length < fallbackMinResults) rankingPool = strictAtLeastRows
-    if (rankingPool.length === 0) rankingPool = strictWindowRows
+    const relaxedRows = rowsInWindow.filter(tierPredicates.relaxed)
+    if (relaxedRows.length >= target) return { tier: 'relaxed', rows: relaxedRows }
+
+    const anySunRows = rowsInWindow.filter(tierPredicates.any_sun)
+    if (anySunRows.length >= target) return { tier: 'any_sun', rows: anySunRows }
+
+    return { tier: 'best_available', rows: rowsInWindow }
+  }
+
+  const rowsForWindow = (windowMin: number, windowMax: number) => (
+    eligibleRows.filter(r => r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax)
+  )
+
+  const chooseTieredPool = (
+    windowMin: number,
+    windowMax: number,
+    target: number
+  ): { tier: ResultTier; rows: ScoredWithTravel[]; appliedMin: number; appliedMax: number } => {
+    const widenSteps = [0, 30, 60]
+    let fallback: { tier: ResultTier; rows: ScoredWithTravel[]; appliedMin: number; appliedMax: number } = {
+      tier: 'best_available',
+      rows: [],
+      appliedMin: windowMin,
+      appliedMax: windowMax,
+    }
+
+    for (const step of widenSteps) {
+      const min = Math.max(0, windowMin - step)
+      const max = windowMax + step
+      const rows = rowsForWindow(min, max)
+      if (rows.length === 0) continue
+      const pick = chooseTier(rows, target)
+      const selected = {
+        tier: pick.tier,
+        rows: pick.rows,
+        appliedMin: min,
+        appliedMax: max,
+      }
+      fallback = selected
+      if (pick.rows.length >= target) return selected
+      if (pick.tier !== 'best_available') return selected
+      if (rows.length >= 3) return selected
+    }
+
+    if (eligibleRows.length > 0) {
+      return {
+        tier: 'best_available',
+        rows: eligibleRows,
+        appliedMin: windowMin,
+        appliedMax: windowMax,
+      }
+    }
+
+    return fallback
+  }
+
+  let resultTier: ResultTier = 'strict'
+  let rankingPool: ScoredWithTravel[] = []
+  const strictWindowRows = rowsForWindow(strictWindowMin, strictWindowMax)
+
+  if (adminAll) {
+    const tierProbe = chooseTier(strictWindowRows, targetResultCount)
+    resultTier = tierProbe.tier
+    rankingPool = eligibleRows.length > 0 ? eligibleRows : tierProbe.rows
   } else {
-    // v69: keep a full 5-card experience by progressively relaxing filters.
-    if (!adminAll && rankingPool.length < fallbackMinResults) {
-      rankingPool = strictAtLeastRows
-    }
-    if (!adminAll && rankingPool.length < fallbackMinResults) {
-      appliedWindowMin = Math.max(0, strictWindowMin - 15)
-      appliedWindowMax = strictWindowMax + 15
-      const widenedRows = eligibleRows.filter(r => r.bestTravelMin >= appliedWindowMin && r.bestTravelMin <= appliedWindowMax)
-      const widenedBetterRows = widenedRows.filter(isStrictBetterThanOrigin)
-      const widenedAtLeastRows = widenedRows.filter(isAtLeastAsGoodAsOrigin)
-      rankingPool = widenedBetterRows.length >= fallbackMinResults ? widenedBetterRows : widenedAtLeastRows
-    }
-    if (!adminAll && rankingPool.length < fallbackMinResults) {
-      const atLeastGlobalRows = eligibleRows.filter(isAtLeastAsGoodAsOrigin)
-      if (atLeastGlobalRows.length >= fallbackMinResults) rankingPool = atLeastGlobalRows
-    }
-    if (!adminAll && rankingPool.length < fallbackMinResults) {
+    const selectedPool = chooseTieredPool(strictWindowMin, strictWindowMax, targetResultCount)
+    resultTier = selectedPool.tier
+    rankingPool = selectedPool.rows
+    appliedWindowMin = selectedPool.appliedMin
+    appliedWindowMax = selectedPool.appliedMax
+    if (rankingPool.length === 0 && eligibleRows.length > 0) {
       rankingPool = eligibleRows
+      resultTier = 'best_available'
     }
   }
 
-  const rankedByNet = rankRowsByNet(rankingPool)
+  const rankedByNet = resultTier === 'best_available'
+    ? rankRowsBySun(rankingPool, appliedWindowMin, appliedWindowMax)
+    : rankRowsByNet(rankingPool, appliedWindowMin, appliedWindowMax)
 
   const bucketCounts = UI_TRAVEL_BUCKETS.map(bucket => {
     const minMin = Math.round(bucket.min_h * 60)
     const maxMin = Math.round(bucket.max_h * 60)
-    const rowsInBucket = eligibleRows.filter(
-      row => row.bestTravelMin >= minMin && row.bestTravelMin <= maxMin
+    const rowsInBucket = rowsForWindow(minMin, maxMin)
+    const selected = chooseTieredPool(minMin, maxMin, targetResultCount)
+    const tierRows = selected.rows
+    const strictCount = tierRows.filter(tierPredicates.strict).length
+    const atLeastCount = tierRows.filter(tierPredicates.relaxed).length
+    const anySunCount = tierRows.filter(tierPredicates.any_sun).length
+    const rawCount = tierRows.length
+    const count = Math.min(
+      targetResultCount,
+      selected.tier === 'strict'
+        ? strictCount
+        : selected.tier === 'relaxed'
+          ? atLeastCount
+          : selected.tier === 'any_sun'
+            ? anySunCount
+            : Math.max(rawCount, Math.min(targetResultCount, eligibleRows.length))
     )
-    const strictCount = rowsInBucket.filter(isStrictBetterThanOrigin).length
-    const atLeastCount = rowsInBucket.filter(isAtLeastAsGoodAsOrigin).length
-    const rawCount = rowsInBucket.length
-    const count = strictCount > 0 ? strictCount : (atLeastCount > 0 ? atLeastCount : rawCount)
+    const nearRows = rowsInBucket.length > 0
+      ? rowsInBucket
+      : rowsForWindow(Math.max(0, minMin - 60), maxMin + 60)
+    const destinationCount = nearRows.length > 0
+      ? nearRows.length
+      : (eligibleRows.length > 0 ? 1 : 0)
     return {
       ...bucket,
       count,
       strict_count: strictCount,
       at_least_count: atLeastCount,
       raw_count: rawCount,
+      destination_count: destinationCount,
+      result_tier: rawCount > 0 ? selected.tier : 'best_available',
     }
   })
 
@@ -1366,6 +1658,12 @@ export async function GET(request: NextRequest) {
   }
 
   const comparisonOriginLabel = originNameParam || 'selected location'
+  const tierEligibilityForRow = (row: ScoredWithTravel): ResultTier => {
+    if (tierPredicates.strict(row)) return 'strict'
+    if (tierPredicates.relaxed(row)) return 'relaxed'
+    if (tierPredicates.any_sun(row)) return 'any_sun'
+    return 'best_available'
+  }
 
   function formatComparison(destMin: number, originMin: number): string {
     if (originMin <= 0 || destMin <= originMin) return ''
@@ -1392,6 +1690,12 @@ export async function GET(request: NextRequest) {
       source: 'fallback',
     }
 
+    if (adminView) {
+      const immediate = Promise.resolve(fallback)
+      tourismMemo.set(destination.id, immediate)
+      return immediate
+    }
+
     const pending = enrichDestination({
       id: destination.id,
       name: destination.name,
@@ -1410,7 +1714,7 @@ export async function GET(request: NextRequest) {
     return pending
   }
 
-  const toEscapeResult = async (
+  const toEscapeResultUnsafe = async (
     full: ScoredWithTravel,
     rank: number
   ): Promise<EscapeResult> => {
@@ -1441,6 +1745,9 @@ export async function GET(request: NextRequest) {
       sun_score: full.sun_score,
       conditions: `${destSunMin} min sunshine${cmp}`,
       net_sun_min: netSun,
+      optimal_departure: full.optimalDeparture,
+      tier_eligibility: tierEligibilityForRow(full),
+      weather_model: weatherModelForDestination(full.destination, weatherSource),
       weather_now: {
         summary: full.conditions,
         temp_c: full.temp_c,
@@ -1452,13 +1759,30 @@ export async function GET(request: NextRequest) {
       },
       plan: buildTripPlan(full.destination),
       links: {
-        google_maps: buildGoogleMapsDirectionsUrl(full.destination.maps_name, mapsOriginName),
+        google_maps: buildGoogleMapsDirectionsUrl(
+          full.destination.maps_name,
+          mapsOriginName,
+          full.destination.name,
+          full.destination.country
+        ),
         sbb: buildSbbTimetableUrl(full.destination.sbb_name, sbbOriginName, tripSpan),
         webcam: full.destination.webcam_url,
       },
       sun_timeline: liveTimeline ?? getMockSunTimeline(full.destination, demoMode),
       tomorrow_sun_hours: liveTomorrowSun ?? getMockTomorrowSunHoursForDest(full.destination, demoMode),
       admin_hourly: adminHourly,
+    }
+  }
+
+  const toEscapeResult = async (
+    full: ScoredWithTravel,
+    rank: number
+  ): Promise<EscapeResult | null> => {
+    try {
+      return await toEscapeResultUnsafe(full, rank)
+    } catch (err) {
+      console.error('[fomo] escape-row-failed', full.destination?.id, err)
+      return null
     }
   }
 
@@ -1501,9 +1825,10 @@ export async function GET(request: NextRequest) {
     tourismSourceSet.add(tourism.source)
   }))
 
-  const escapes: EscapeResult[] = await Promise.all(topRows.map((row, i) => toEscapeResult(row, i + 1)))
-  const fastestEscape = fastestCandidate ? await toEscapeResult(fastestCandidate, 0) : undefined
-  const warmestEscape = warmestCandidate ? await toEscapeResult(warmestCandidate, 0) : undefined
+  const escapes: EscapeResult[] = (await Promise.all(topRows.map((row, i) => toEscapeResult(row, i + 1))))
+    .filter((row): row is EscapeResult => Boolean(row))
+  const fastestEscape = fastestCandidate ? (await toEscapeResult(fastestCandidate, 0) ?? undefined) : undefined
+  const warmestEscape = warmestCandidate ? (await toEscapeResult(warmestCandidate, 0) ?? undefined) : undefined
 
   const originName = originNameParam || (
     (Math.abs(lat - DEFAULT_ORIGIN.lat) < 0.1 && Math.abs(lon - DEFAULT_ORIGIN.lon) < 0.1)
@@ -1537,6 +1862,7 @@ export async function GET(request: NextRequest) {
       ],
       demo_mode: demoMode,
       trip_span: tripSpan,
+      result_tier: resultTier,
       fallback_notice: fallbackNotice || undefined,
       bucket_counts: bucketCounts,
     },
@@ -1579,6 +1905,7 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Weather-Model-Policy': liveModelPolicy,
     'X-FOMO-Fog-Heuristic': fogHeuristicApplied ? 'applied' : 'off',
     'X-FOMO-Trip-Horizon': tripSpan === 'plus1day' ? 'tomorrow-only' : 'today-remaining-daylight',
+    'X-FOMO-Result-Tier': resultTier,
     'X-FOMO-Travel-Window-Min': String(appliedWindowMin),
     'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
     'X-FOMO-Agent-Prefs-Applied': Object.keys(agentPrefs).length > 0 ? '1' : '0',
