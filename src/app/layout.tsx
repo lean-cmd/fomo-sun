@@ -42,19 +42,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased min-h-screen flex flex-col">
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-gray-100 py-4 px-4">
-          <div className="max-w-xl mx-auto space-y-1.5 text-center">
-            <div className="text-[10px] text-gray-400">
-              Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-gray-500">MeteoSwiss</a> (CC BY 4.0)
-              {' · '}Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-gray-500">OJP</a>
-              {' · '}<a href="/blog" className="hover:text-gray-500">Blog</a>
-              {' · '}<a href="/about" className="hover:text-gray-500">About</a>
-              {' · '}<a href="/admin" className="hover:text-gray-500">Admin</a>
-              {' · '}<a href="/api/v1/sunny-escapes" className="hover:text-gray-500">API</a>
-              {' · '}<a href="/llms.txt" className="hover:text-gray-500">llms.txt</a>
+        <footer className="border-t border-slate-200/60 bg-white/50 py-4 px-4 mt-8">
+          <div className="max-w-xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[10px] text-slate-500">
+            <div>
+              <span className="font-semibold tracking-wide text-slate-500">FOMO Sun</span> &copy; {new Date().getFullYear()}
             </div>
-            <div className="text-[11px] text-gray-400">
-              Built with <span className="text-amber-500">&#9829;</span> and AI in Basel
+            <span className="text-slate-300 hidden sm:inline">|</span>
+            <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <a href="/about" className="transition-colors hover:text-amber-600">About</a>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <a href="/api/v1/sunny-escapes" className="transition-colors hover:text-amber-600">API Access</a>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <a href="/admin" className="transition-colors hover:text-amber-600">Admin Diagnostics</a>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <a href="/llms.txt" className="transition-colors hover:text-amber-600">llms.txt</a>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <span className="whitespace-nowrap">
+              Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-amber-600 transition-colors">MeteoSwiss</a>
+            </span>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <span className="whitespace-nowrap">
+              Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-amber-600 transition-colors">OJP</a>
+            </span>
+            <span className="text-slate-300 hidden sm:inline">|</span>
+            <div>
+              Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel
             </div>
           </div>
         </footer>

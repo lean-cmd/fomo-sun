@@ -1,5 +1,6 @@
 'use client'
 
+import * as React from 'react'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { Activity, Download, RefreshCw } from 'lucide-react'
@@ -155,6 +156,18 @@ export default function AdminDiagnosticsPage() {
   const [sortDesc, setSortDesc] = useState(true)
   const [pageSizeMode, setPageSizeMode] = useState<PageSizeMode>('50')
   const [forecastDay, setForecastDay] = useState<ForecastDay>('today')
+
+  useEffect(() => {
+    const f = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Europe/Zurich', hour: 'numeric', hour12: false
+    })
+    const hourStr = f.formatToParts(new Date()).find(p => p.type === 'hour')?.value || '0'
+    const hour = parseInt(hourStr, 10) % 24
+    if (hour >= 20) {
+      setForecastDay('tomorrow')
+    }
+  }, [])
+
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
@@ -249,21 +262,21 @@ export default function AdminDiagnosticsPage() {
       const { payload, res } = await fetchAdminPayload(forecastDay)
 
       const headersObj: Record<string, string> = {}
-      ;[
-        'x-fomo-live-source',
-        'x-fomo-debug-live-path',
-        'x-fomo-response-cache',
-        'x-fomo-live-fallback',
-        'x-fomo-candidate-count',
-        'x-fomo-live-pool-count',
-        'x-fomo-result-tier',
-        'x-fomo-weather-source',
-        'x-fomo-weather-model-policy',
-        'x-fomo-request-ms',
-      ].forEach(h => {
-        const val = res.headers.get(h)
-        if (val) headersObj[h] = val
-      })
+        ;[
+          'x-fomo-live-source',
+          'x-fomo-debug-live-path',
+          'x-fomo-response-cache',
+          'x-fomo-live-fallback',
+          'x-fomo-candidate-count',
+          'x-fomo-live-pool-count',
+          'x-fomo-result-tier',
+          'x-fomo-weather-source',
+          'x-fomo-weather-model-policy',
+          'x-fomo-request-ms',
+        ].forEach(h => {
+          const val = res.headers.get(h)
+          if (val) headersObj[h] = val
+        })
 
       setRows(payload.escapes || [])
       setBucketCounts(payload._meta?.bucket_counts || [])
@@ -751,9 +764,8 @@ export default function AdminDiagnosticsPage() {
                 {bucketHealthChecks.map((row) => (
                   <span
                     key={`${row.day}-${row.bucket}`}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
-                      row.warn ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${row.warn ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      }`}
                   >
                     {row.day} {row.bucket}: {row.valid_count}
                   </span>
@@ -795,13 +807,13 @@ export default function AdminDiagnosticsPage() {
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center bg-slate-50/50 p-2 rounded-xl">
             {(['CH', 'DE', 'FR', 'IT'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => toggleCountry(c)}
                 disabled={!byCountryCount[c]}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeCountries[c] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'} ${!byCountryCount[c] ? 'opacity-40 cursor-not-allowed' : ''}`}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${activeCountries[c] ? 'bg-amber-100 text-amber-800 shadow-sm' : 'bg-white text-slate-500 hover:bg-slate-50 border border-slate-200'} ${!byCountryCount[c] ? 'opacity-40 cursor-not-allowed' : ''}`}
               >
                 {c} ({byCountryCount[c] || 0})
               </button>
@@ -882,21 +894,21 @@ export default function AdminDiagnosticsPage() {
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
           />
 
-          <div className="inline-flex p-1 rounded-full border border-slate-200 bg-white">
-            <button onClick={() => setForecastDay('today')} className={`px-3 py-1 rounded-full text-xs font-semibold ${forecastDay === 'today' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}>Today</button>
-            <button onClick={() => setForecastDay('tomorrow')} className={`px-3 py-1 rounded-full text-xs font-semibold ${forecastDay === 'tomorrow' ? 'bg-slate-900 text-white' : 'text-slate-500'}`}>Tomorrow</button>
+          <div className="inline-flex p-1 rounded-full bg-slate-100/80 shadow-inner">
+            <button onClick={() => setForecastDay('today')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${forecastDay === 'today' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Today</button>
+            <button onClick={() => setForecastDay('tomorrow')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${forecastDay === 'tomorrow' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Tomorrow</button>
           </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3 space-y-3">
-          <div>
+          <div className="bg-slate-50/50 p-3 rounded-xl">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Quality filters</p>
             <div className="flex flex-wrap gap-2">
               {(['verified', 'curated', 'generated'] as DestinationQuality[]).map(quality => (
                 <button
                   key={quality}
                   onClick={() => toggleQuality(quality)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeQualities[quality] ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${activeQualities[quality] ? 'bg-amber-100 text-amber-800 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
                 >
                   {quality} ({byQualityCount[quality] || 0})
                 </button>
@@ -904,14 +916,14 @@ export default function AdminDiagnosticsPage() {
             </div>
           </div>
 
-          <div>
+          <div className="bg-slate-50/50 p-3 rounded-xl">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold mb-2">Type filters</p>
             <div className="flex flex-wrap gap-2">
               {ADMIN_TYPE_CHIPS.map(type => (
                 <button
                   key={type.id}
                   onClick={() => toggleTypeChip(type.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${activeTypeChips.includes(type.id) ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition ${activeTypeChips.includes(type.id) ? 'bg-amber-100 text-amber-800 shadow-sm' : 'bg-white text-slate-600 hover:bg-slate-50 border border-slate-200'}`}
                 >
                   {type.label} ({byTypeCount[type.id] || 0})
                 </button>
@@ -1082,93 +1094,93 @@ export default function AdminDiagnosticsPage() {
                     </tr>
                   )}
                   {pagedRows.map((row) => {
-                  const isExpanded = expandedId === row.destination.id
-                  const daySunMin = forecastDay === 'today' ? row.sun_score.sunshine_forecast_min : Math.round((row.tomorrow_sun_hours || 0) * 60)
-                  const dayNetSunMin = (() => {
-                    if (forecastDay === 'today') return Math.max(0, row.net_sun_min)
-                    const bestTravelMin = Math.min(
-                      row.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
-                      row.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
-                    )
-                    if (!Number.isFinite(bestTravelMin)) return 0
-                    return Math.max(0, daySunMin - Math.round(bestTravelMin))
-                  })()
-                  const dayPrefix = dayStringInZurich(forecastDay === 'today' ? 0 : 1)
-                  const hourly = (row.admin_hourly || []).filter(h => h.time.startsWith(dayPrefix)).slice(0, 24)
-                  const selected = selectedCompare.includes(row.destination.id)
+                    const isExpanded = expandedId === row.destination.id
+                    const daySunMin = forecastDay === 'today' ? row.sun_score.sunshine_forecast_min : Math.round((row.tomorrow_sun_hours || 0) * 60)
+                    const dayNetSunMin = (() => {
+                      if (forecastDay === 'today') return Math.max(0, row.net_sun_min)
+                      const bestTravelMin = Math.min(
+                        row.travel?.car?.duration_min ?? Number.POSITIVE_INFINITY,
+                        row.travel?.train?.duration_min ?? Number.POSITIVE_INFINITY
+                      )
+                      if (!Number.isFinite(bestTravelMin)) return 0
+                      return Math.max(0, daySunMin - Math.round(bestTravelMin))
+                    })()
+                    const dayPrefix = dayStringInZurich(forecastDay === 'today' ? 0 : 1)
+                    const hourly = (row.admin_hourly || []).filter(h => h.time.startsWith(dayPrefix)).slice(0, 24)
+                    const selected = selectedCompare.includes(row.destination.id)
 
-                  return (
-                    <Fragment key={row.destination.id}>
-                      <tr
-                        className="border-t border-slate-100 hover:bg-slate-50/60 cursor-pointer"
-                        onClick={() => setExpandedId(prev => prev === row.destination.id ? null : row.destination.id)}
-                      >
-                        <td className="px-3 py-2.5">
-                          <input
-                            type="checkbox"
-                            checked={selected}
-                            onClick={e => e.stopPropagation()}
-                            onChange={() => toggleCompare(row.destination.id)}
-                            className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900"
-                          />
-                        </td>
-                        <td className="px-3 py-2.5 font-medium text-slate-800">{row.destination.name}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{row.destination.country}</td>
-                        <td className="px-3 py-2.5 text-slate-600">{row.destination.quality ?? 'generated'}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(dayNetSunMin)}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.car?.duration_min)}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.train?.duration_min)}</td>
-                        <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
-                        <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
-                        <td className="px-3 py-2.5 text-slate-600">{row.weather_model || '-'}</td>
-                        <td className="px-3 py-2.5">
-                          <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${tierPillClass(row.tier_eligibility)}`}>
-                            {row.tier_eligibility || '-'}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
-                          {row.weather_now?.summary || row.conditions}
-                        </td>
-                        <td className="px-3 py-2.5"><MiniTimeline timeline={row.sun_timeline} day={forecastDay} /></td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr className="bg-slate-50/70 border-t border-slate-100">
-                          <td colSpan={15} className="px-3 py-3">
-                            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>
-                                <div className="grid grid-cols-24 gap-1">
-                                  {hourly.length
-                                    ? hourly.map((h, idx) => (
-                                      <div key={idx} title={`${h.time.slice(11, 16)} · ${h.sunshine_min}min sun`} className={`h-4 rounded ${hourCellClass(h.sunshine_min)}`} />
-                                    ))
-                                    : Array.from({ length: 24 }).map((_, idx) => <div key={idx} className="h-4 rounded bg-slate-200" />)}
-                                </div>
-                                <div className="mt-1.5 flex justify-between text-[10px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
-                                  {['00', '04', '08', '12', '16', '20', '24'].map(label => <span key={label}>{label}</span>)}
-                                </div>
-                                <div className="mt-2 text-[11px] text-slate-600">
-                                  Cloud {Math.round(row.sun_score.low_cloud_cover_pct)}% · Temp {Math.round(row.weather_now?.temp_c ?? 0)}°C
-                                </div>
-                              </div>
-
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-700 mb-1">Links</p>
-                                <div className="space-y-1 text-[11px]">
-                                  {row.links.google_maps && <a href={row.links.google_maps} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline block">Google Maps</a>}
-                                  {row.links.sbb && <a href={row.links.sbb} target="_blank" rel="noopener noreferrer" className="text-red-700 hover:underline block">SBB Timetable</a>}
-                                </div>
-                              </div>
-                            </div>
+                    return (
+                      <Fragment key={row.destination.id}>
+                        <tr
+                          className="border-t border-slate-100 hover:bg-slate-50/60 cursor-pointer"
+                          onClick={() => setExpandedId(prev => prev === row.destination.id ? null : row.destination.id)}
+                        >
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onClick={e => e.stopPropagation()}
+                              onChange={() => toggleCompare(row.destination.id)}
+                              className="w-3.5 h-3.5 rounded border-slate-300 accent-slate-900"
+                            />
                           </td>
+                          <td className="px-3 py-2.5 font-medium text-slate-800">{row.destination.name}</td>
+                          <td className="px-3 py-2.5 text-slate-600">{row.destination.country}</td>
+                          <td className="px-3 py-2.5 text-slate-600">{row.destination.quality ?? 'generated'}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-600">{row.destination.altitude_m.toLocaleString()} m</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(daySunMin)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatSunHours(dayNetSunMin)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.car?.duration_min)}</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{formatTravelHm(row.travel?.train?.duration_min)}</td>
+                          <td className={`px-3 py-2.5 text-right font-semibold ${scoreColor(row.sun_score.score)}`}>{Math.round(row.sun_score.score * 100)}%</td>
+                          <td className="px-3 py-2.5 text-right text-slate-700">{Math.round(row.weather_now?.temp_c ?? 0)}°C</td>
+                          <td className="px-3 py-2.5 text-slate-600">{row.weather_model || '-'}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={`inline-flex rounded-full border px-1.5 py-0.5 text-[10px] font-semibold ${tierPillClass(row.tier_eligibility)}`}>
+                              {row.tier_eligibility || '-'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600 max-w-[260px] truncate" title={row.weather_now?.summary || row.conditions}>
+                            {row.weather_now?.summary || row.conditions}
+                          </td>
+                          <td className="px-3 py-2.5"><MiniTimeline timeline={row.sun_timeline} day={forecastDay} /></td>
                         </tr>
-                      )}
-                    </Fragment>
-                  )
-                })}
+
+                        {isExpanded && (
+                          <tr className="bg-slate-50/70 border-t border-slate-100">
+                            <td colSpan={15} className="px-3 py-3">
+                              <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-3">
+                                <div>
+                                  <p className="text-[11px] font-semibold text-slate-700 mb-1">Hourly sunshine breakdown</p>
+                                  <div className="grid grid-cols-24 gap-1">
+                                    {hourly.length
+                                      ? hourly.map((h, idx) => (
+                                        <div key={idx} title={`${h.time.slice(11, 16)} · ${h.sunshine_min}min sun`} className={`h-4 rounded ${hourCellClass(h.sunshine_min)}`} />
+                                      ))
+                                      : Array.from({ length: 24 }).map((_, idx) => <div key={idx} className="h-4 rounded bg-slate-200" />)}
+                                  </div>
+                                  <div className="mt-1.5 flex justify-between text-[10px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                    {['00', '04', '08', '12', '16', '20', '24'].map(label => <span key={label}>{label}</span>)}
+                                  </div>
+                                  <div className="mt-2 text-[11px] text-slate-600">
+                                    Cloud {Math.round(row.sun_score.low_cloud_cover_pct)}% · Temp {Math.round(row.weather_now?.temp_c ?? 0)}°C
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <p className="text-[11px] font-semibold text-slate-700 mb-1">Links</p>
+                                  <div className="space-y-1 text-[11px]">
+                                    {row.links.google_maps && <a href={row.links.google_maps} target="_blank" rel="noopener noreferrer" className="text-sky-700 hover:underline block">Google Maps</a>}
+                                    {row.links.sbb && <a href={row.links.sbb} target="_blank" rel="noopener noreferrer" className="text-red-700 hover:underline block">SBB Timetable</a>}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </>
               )}
             </tbody>

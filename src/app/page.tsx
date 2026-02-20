@@ -1319,7 +1319,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={openOriginPicker}
-                className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-4 w-4 text-slate-400"
+                className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-4 w-4 text-slate-400 hover:text-slate-600 transition-colors"
                 aria-label="Open city picker"
               >
                 <ChevronDown className="w-3 h-3" />
@@ -1513,13 +1513,12 @@ export default function Home() {
                     setJoystickRange(idx)
                   }}
                   disabled={disabled}
-                  className={`h-7 rounded-full border inline-flex items-center justify-center ${
-                    active
-                      ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold'
-                      : disabled
-                        ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                        : 'border-slate-200 bg-white text-slate-500'
-                  } ${disabled ? '' : 'cursor-pointer hover:border-amber-200 active:scale-[0.98]'} transition`}
+                  className={`h-7 rounded-full border inline-flex items-center justify-center ${active
+                    ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold'
+                    : disabled
+                      ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                      : 'border-slate-200 bg-white text-slate-500'
+                    } ${disabled ? '' : 'cursor-pointer hover:border-amber-200 active:scale-[0.98]'} transition`}
                   style={{ fontFamily: 'DM Mono, monospace' }}
                   title={disabled ? `No destinations in ${band.label}` : undefined}
                 >
@@ -1542,11 +1541,10 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setShowResultFilters(v => !v)}
-                className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${
-                  showResultFilters || activeTypeChips.length > 0
-                    ? 'bg-amber-100 border-amber-300 text-amber-800'
-                    : 'bg-white border-slate-200 text-slate-600'
-                }`}
+                className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showResultFilters || activeTypeChips.length > 0
+                  ? 'bg-amber-100 border-amber-300 text-amber-800'
+                  : 'bg-white border-slate-200 text-slate-600'
+                  }`}
                 aria-expanded={showResultFilters}
                 aria-controls="result-filter-chips"
               >
@@ -1579,11 +1577,10 @@ export default function Home() {
                       key={chip.id}
                       type="button"
                       onClick={() => toggleTypeChip(chip.id)}
-                      className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${
-                        active
-                          ? 'bg-amber-100 border-amber-300 text-amber-800'
-                          : 'bg-white border-slate-200 text-slate-600'
-                      }`}
+                      className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
+                        ? 'bg-amber-100 border-amber-300 text-amber-800'
+                        : 'bg-white border-slate-200 text-slate-600'
+                        }`}
                     >
                       {chip.label}
                     </button>
@@ -1662,36 +1659,36 @@ export default function Home() {
                             </div>
                           </div>
 
-                          <div className="shrink-0 pt-1 pr-0.5 text-right">
-                            <div className="inline-flex w-[86px] flex-col items-end gap-1">
-                              <div className="inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5">
-                                <Sun className="w-[13px] h-[13px] text-amber-500 shrink-0" strokeWidth={1.9} />
-                                <div className="text-right">
-                                  {(() => {
-                                    const sun = splitSunLabel(escapeSunMinutes(escape))
-                                    return (
-                                      <span className="inline-flex items-baseline justify-end gap-[1px] tracking-tight text-amber-600 font-semibold leading-none">
-                                        <span className="text-[21px] leading-[0.95]">{sun.major}</span>
-                                        {sun.fraction ? (
-                                          <sup className="text-[12px] leading-none text-amber-500 font-semibold relative -top-[0.08em]">{sun.fraction}</sup>
-                                        ) : null}
-                                        <span className="text-[12px] leading-none text-amber-500 font-medium">{sun.unit}</span>
-                                      </span>
-                                    )
-                                  })()}
-                                </div>
+                          <div className="shrink-0 pt-1 pr-0.5 text-right flex items-start justify-end min-w-[65px]">
+                            <div className="grid grid-cols-[13px_auto] items-center gap-x-1.5 gap-y-1 justify-end">
+                              <Sun className="w-[13px] h-[13px] text-amber-500 shrink-0" strokeWidth={1.9} />
+                              <div className="text-right">
+                                {(() => {
+                                  const sun = splitSunLabel(escapeSunMinutes(escape))
+                                  return (
+                                    <span className="inline-flex items-baseline justify-end gap-[1px] tracking-tight text-amber-600 font-semibold leading-none">
+                                      <span className="text-[21px] leading-[0.95]">{sun.major}</span>
+                                      {sun.fraction ? (
+                                        <sup className="text-[12px] leading-none text-amber-500 font-semibold relative -top-[0.08em]">{sun.fraction}</sup>
+                                      ) : null}
+                                      <span className="text-[12px] leading-none text-amber-500 font-medium">{sun.unit}</span>
+                                    </span>
+                                  )
+                                })()}
                               </div>
-                              <div className="inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5">
-                                <SunPlusIcon className="w-[13px] h-[13px]" />
-                                <span className="text-[11px] leading-none text-emerald-600 font-semibold text-right">
-                                  +{formatSunHours(gainMin)}
-                                </span>
-                              </div>
+
+                              <SunPlusIcon className="w-[13px] h-[13px]" />
+                              <span className="text-[11px] leading-none text-emerald-600 font-semibold text-right">
+                                +{formatSunHours(gainMin)}
+                              </span>
+
                               {bestTravel && (
-                                <p className="text-[12px] leading-none text-slate-600 inline-grid w-full grid-cols-[13px_minmax(0,1fr)] items-center gap-x-0.5 font-semibold">
-                                  <IconForMode mode={bestTravel.mode} className="w-[13px] h-[13px]" />
-                                  <span className="inline-flex items-baseline justify-end">{formatTravelClock(bestTravel.min / 60)}</span>
-                                </p>
+                                <>
+                                  <IconForMode mode={bestTravel.mode} className="w-[13px] h-[13px] text-slate-500" />
+                                  <span className="text-[12px] leading-none text-slate-600 font-semibold inline-flex items-baseline justify-end">
+                                    {formatTravelClock(bestTravel.min / 60)}
+                                  </span>
+                                </>
                               )}
                             </div>
                           </div>
@@ -1737,6 +1734,8 @@ export default function Home() {
                             destinationLabel={escape.destination.name}
                             originSunLabel={formatSunHours(originTimelineSunMin)}
                             destinationSunLabel={formatSunHours(escapeTimelineSunMin)}
+                            travelMin={bestTravel?.min}
+                            travelMode={bestTravel?.mode}
                           />
                         </div>
 
@@ -1789,37 +1788,6 @@ export default function Home() {
                           </div>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => setExpandedScoreDetails(prev => ({ ...prev, [escape.destination.id]: !prev[escape.destination.id] }))}
-                          className="text-[11px] text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline"
-                        >
-                          How is this scored?
-                        </button>
-
-                        <div className={`grid transition-all duration-200 ${showBreakdown ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}>
-                          <div className="overflow-hidden">
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-2.5 space-y-2">
-                              {([
-                                ['Sunshine', scoreBreakdown.sunshine_pct],
-                                ['Cloud', scoreBreakdown.cloud_pct],
-                                ['Altitude', scoreBreakdown.altitude_bonus_pct],
-                                [`Gain vs ${origin.name}`, scoreBreakdown.gain_pct],
-                              ] as [string, number][]).map(([label, value], i) => (
-                                <div key={label} className="grid grid-cols-[86px_1fr_36px] items-center gap-2 text-[11px]">
-                                  <span className="text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>{label}</span>
-                                  <div className="h-1.5 rounded-full bg-slate-200 overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full bg-amber-400"
-                                      style={{ width: showBreakdown ? `${value}%` : 0, transition: `width 300ms ease-out ${i * 50}ms` }}
-                                    />
-                                  </div>
-                                  <span className="text-slate-800 text-right" style={{ fontFamily: 'DM Mono, monospace' }}>{value}%</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
 
                         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
                           {escape.links.google_maps && (
@@ -1840,7 +1808,8 @@ export default function Home() {
                               rel="noopener noreferrer"
                               className="inline-flex items-center gap-1 text-slate-600 font-semibold hover:text-slate-900"
                             >
-                              🚆 SBB Timetable
+                              <TrainFront className="w-3.5 h-3.5" />
+                              SBB Timetable
                             </a>
                           )}
                           <a
@@ -1874,28 +1843,31 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="px-3 pb-6 text-center text-[11px] text-slate-500">
-        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-2">
-          <button onClick={detectLocation} disabled={locating} className="hover:underline underline-offset-2 inline-flex items-center gap-1">
-            <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
-            {locating ? 'Locating...' : 'Use my location'}
-          </button>
-          {originMode === 'gps' && (
-            <button onClick={() => setOriginMode('manual')} className="hover:underline underline-offset-2">
+      <div className="max-w-xl mx-auto px-4 pb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] text-slate-500">
+        <button onClick={detectLocation} disabled={locating} className="hover:text-amber-600 transition-colors inline-flex items-center gap-1">
+          <LocateFixed className="w-3 h-3" strokeWidth={1.8} />
+          {locating ? 'Locating...' : 'Use my location'}
+        </button>
+        {originMode === 'gps' && (
+          <>
+            <span className="text-slate-300">·</span>
+            <button onClick={() => setOriginMode('manual')} className="hover:text-amber-600 transition-colors">
               Back to city
             </button>
-          )}
-          <button
-            onClick={() => { setDemo(v => !v) }}
-            className={`live-toggle scale-[0.9] origin-center ${demo ? 'is-demo' : 'is-live'}`}
-            aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-          >
-            <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
-            <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
-            <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
-          </button>
-        </div>
-      </footer>
-    </div>
+          </>
+        )}
+        <span className="text-slate-300">·</span>
+        <button
+          onClick={() => { setDemo(v => !v) }}
+          className={`live-toggle scale-[0.7] origin-center ${demo ? 'is-demo' : 'is-live'}`}
+          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+        >
+          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
+        </button>
+      </div>
+
+    </div >
   )
 }
