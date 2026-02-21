@@ -9,6 +9,63 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V100 — commit `8bd4bb8` — 2026-02-21
+
+**Theme:** Vintage Stamp Rework + Admin Stamp Gallery
+
+### 1. V88 Release Changelog — append after V99 entry
+
+```
+### V100 (8bd4bb8)
+Theme: Vintage Stamp Rework + Admin Stamp Gallery
+
+Changes:
+- Stamps: Rebuilt `DestinationStamp` into a richer Swiss-vintage poster system with country-specific palettes, deterministic per-destination variation, and canton-aware styling for Swiss destinations.
+- Stamps: Added tourism-aware motif selection (lake, thermal, town/castle, rail, forest, alpine) using destination context plus tourism tags/highlights where available.
+- Hero card: Passed destination/tourism context into the hero stamp so artwork better matches each place.
+- Admin: Added a new `/admin/stamps` gallery route and linked it from Forecast Diagnostics.
+- Gallery: Added searchable/paginated stamp browser for all destinations with tourism-source attribution (`discover.swiss` / `geo.admin.ch` / fallback) to inspect design consistency.
+
+Files: src/components/DestinationStamp.tsx, src/app/page.tsx, src/app/admin/page.tsx, src/app/admin/stamps/page.tsx
+Validation: npm run build passed; local smoke checks confirmed admin link and `/admin/stamps` rendering.
+Rollback: git revert 8bd4bb8
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V100 | 2026-02-21 | Codex session
+- Reworked stamps to Swiss-vintage poster style with country + canton-aware variation
+- Added tourism-context motif logic so stamps better match destination character
+- Added `/admin/stamps` gallery (search + pagination) and linked it from admin diagnostics
+- Added tourism-source visibility in gallery cards for design QA
+- Commit: 8bd4bb8
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Night (Codex session)
+
+**Deployed:** V100 (8bd4bb8)
+**Status:** Shipped and validated
+
+**What was done:**
+- Read the stamp-design intent from Notion docs and aligned the implementation to the vintage Swiss poster language: condensed destination title, limited lithograph palette, destination silhouette, and perforated stamp framing.
+- Reworked stamp rendering so each destination has deterministic visual uniqueness with stronger country and canton identity.
+- Added tourism-aware stamp cues and surfaced a dedicated stamp gallery in admin to review all designs and tourism-data source quality.
+
+**Next:**
+- Curate canton-specific motif overrides for known outliers where automated cues still feel generic.
+```
+
+---
+
 ## V99 — commit `820c778` — 2026-02-21
 
 **Theme:** Weather API Policy Split + Admin Source Controls
