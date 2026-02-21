@@ -9,6 +9,115 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V98 — commit `1674738` — 2026-02-21
+
+**Theme:** Weather Source Validation + Origin Data Reliability
+
+### 1. V88 Release Changelog — append after V97 entry
+
+```
+### V98 (1674738)
+Theme: Weather Source Validation + Origin Data Reliability
+
+Changes:
+- API: Result pool now excludes destinations with 0 forecast sun minutes for non-admin responses (sunny-escapes route).
+- Open-Meteo: Added guardrail in hourly forecast fetch to retry without Swiss model pinning when Swiss-model payload returns all-zero sunshine for both today and tomorrow.
+- MeteoSwiss OGD: Fixed station metadata and observation parsing keys to match current CSV schema, enabling meteoswiss_api origin snapshots again.
+- Diagnostics: Added scripts/weather-api-diff.mjs to compare openmeteo vs meteoswiss vs meteoswiss_api and run upstream model checks for CH/DE/FR/IT sample sets.
+
+Files: src/app/api/v1/sunny-escapes/route.ts, src/lib/open-meteo.ts, src/lib/swissmeteo.ts, scripts/weather-api-diff.mjs
+Validation: npm run build passed; weather-api-diff confirms CH20/DE5/FR5/IT5 consistency checks and source-policy deltas.
+Rollback: git revert 1674738
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V98 | 2026-02-21 | Codex session
+- Added non-admin 0-sun result exclusion in API ranking pool
+- Repaired MeteoSwiss OGD origin parsing (station metadata + observations)
+- Added Swiss-model zero-sun fallback guardrail in Open-Meteo hourly fetch
+- Added weather source diagnostics script (scripts/weather-api-diff.mjs)
+- Commit: 1674738
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Evening (Codex session)
+
+**Deployed:** V98 (1674738)
+**Status:** Shipped and validated
+
+**What was done:**
+- Ran a structured weather-source validation for tomorrow forecasts on a 35-row sample (CH20, DE5, FR5, IT5).
+- Confirmed internal consistency between `tomorrow_sun_hours` and summed `admin_hourly` sunshine minutes (all sampled rows within small rounding deltas).
+- Identified and fixed two reliability issues: MeteoSwiss OGD origin parser drift (CSV header mismatch) and Swiss-model all-zero sunshine payloads for origin hourly calculations.
+- Added a permanent diagnostics script to reproduce source comparisons and upstream checks.
+
+**Next:**
+- Monitor `x-fomo-origin-source` distribution for `meteoswiss_api` requests and keep fallback rates under review.
+```
+
+---
+
+## V97 — commit `aa21509` — 2026-02-21
+
+**Theme:** Hero Card Today-Copy Hotfix
+
+### 1. V88 Release Changelog — append after V96 entry
+
+```
+### V97 (aa21509)
+Theme: Hero Card Today-Copy Hotfix
+
+Changes:
+- Hero card headline now reflects selected day focus: "Best escape today" in Today mode and "Best escape tomorrow" in Tomorrow mode.
+- Hero supporting text templates now reference the active day focus instead of hardcoded "tomorrow" phrasing.
+
+Files: src/app/page.tsx
+Validation: npm run build passed; verified hero copy in both Today and Tomorrow modes.
+Rollback: git revert aa21509
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V97 | 2026-02-21 | Codex session
+- Hero card copy now follows active day focus (Today/Tomorrow)
+- Removed hardcoded "tomorrow" language from hero info text templates
+- Commit: aa21509
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Evening (Codex session)
+
+**Deployed:** V97 (aa21509)
+**Status:** Hotfix shipped
+
+**What was done:**
+- Updated hero card microcopy so Today mode explicitly says "Best escape today".
+- Updated hero narrative sentences to stay aligned with the active day focus.
+- Preserved existing ranking logic; this release is a wording and clarity hotfix.
+
+**Next:**
+- Continue V98 weather-source validation and reliability pass.
+```
+
+---
+
 ## V96 — commit `e93f7a9` — 2026-02-21
 
 **Theme:** Hero Timeline & Data Consistency
