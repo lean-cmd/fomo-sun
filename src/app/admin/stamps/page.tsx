@@ -206,6 +206,7 @@ export default async function StampGalleryPage({
                   country={row.country}
                   types={row.types}
                   description={tourism?.description_long || tourism?.description_short || row.description || ''}
+                  planTemplate={row.plan_template}
                   tourismTags={tourism?.tags || []}
                   tourismHighlights={tourism?.highlights || []}
                   className="w-full h-auto"

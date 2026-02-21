@@ -1386,6 +1386,7 @@ export default function Home() {
                 country={heroEscape.destination.country}
                 types={heroEscape.destination.types}
                 description={heroEscape.tourism?.description_long || heroEscape.tourism?.description_short || heroEscape.destination.description || ''}
+                planTemplate={heroEscape.destination.plan_template}
                 tourismTags={heroEscape.tourism?.tags || []}
                 tourismHighlights={heroEscape.tourism?.highlights || []}
                 className="h-[102px] w-[90px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"

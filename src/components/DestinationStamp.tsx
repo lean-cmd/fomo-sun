@@ -1,5 +1,6 @@
 type StampType = 'mountain' | 'lake' | 'town' | 'thermal' | 'ski' | 'viewpoint' | 'default'
 type CountryCode = 'CH' | 'DE' | 'FR' | 'IT'
+type CityVariant = 'none' | 'generic' | 'basel' | 'bern' | 'zurich' | 'geneva'
 type StampFeatures = {
   lake: boolean
   rail: boolean
@@ -7,6 +8,11 @@ type StampFeatures = {
   thermal: boolean
   forest: boolean
   snow: boolean
+  alpine: boolean
+  cableCar: boolean
+  river: boolean
+  cityVariant: CityVariant
+  stMoritz: boolean
 }
 
 interface StampProps {
@@ -18,6 +24,7 @@ interface StampProps {
   country?: CountryCode
   types?: string[]
   description?: string
+  planTemplate?: string
   tourismTags?: string[]
   tourismHighlights?: string[]
   className?: string
@@ -380,14 +387,48 @@ function regionToken(country: CountryCode, region?: string) {
   return `${words[0][0]}${words[1][0]}${words[0].slice(1, 2)}`
 }
 
-function detectFeatures(type: StampType, text: string, altitude = 0): StampFeatures {
-  const lake = /\blake|see|lac|lago|shore|river|rhein|rhine|water\b/i.test(text) || type === 'lake'
-  const rail = /\btrain|rail|bahn|funicular|gondola|cable car|sbb\b/i.test(text)
-  const town = /\btown|city|old town|village|castle|burg|chateau\b/i.test(text) || type === 'town'
+function detectFeatures(type: StampType, text: string, altitude = 0, destinationId = '', destinationName = ''): StampFeatures {
+  const id = (destinationId || '').toLowerCase()
+  const cityName = destinationName || ''
+  const matchesBasel = id === 'basel' || /\bbasel\b/i.test(cityName)
+  const matchesBern = id === 'bern' || /\bbern\b/i.test(cityName)
+  const matchesZurich = id === 'zurich' || /\bzurich\b|\bzuerich\b/i.test(cityName)
+  const matchesGeneva = id === 'geneva' || /\bgeneva\b|\bgeneve\b/i.test(cityName)
+  const stMoritz = id === 'st-moritz' || /\bst\.?\s*moritz\b/i.test(cityName)
+
+  const river = /\briver|riverside|rhine|rhein|aare|limmat|rhone|rhône|fluss|fleuve\b/i.test(text)
+  const lake = /\blake|see|lac|lago|shore|waterfront|harbor|harbour\b/i.test(text) || type === 'lake' || river
+  const rail = /\btrain|rail|bahn|sbb|tram|cogwheel|rack railway|glacier express\b/i.test(text)
+  const cableCar = /\bcable car|gondola|funicular|lift|seilbahn|telepherique|funivia|aerial\b/i.test(text)
+  const townLike = /\btown|city|old town|village|castle|burg|chateau|skyline|arcade\b/i.test(text) || type === 'town'
   const thermal = /\bthermal|spa|bath|wellness|terme\b/i.test(text) || type === 'thermal'
   const forest = /\bforest|wald|foret|pine|fir|wood\b/i.test(text)
-  const snow = type === 'ski' || altitude >= 1650 || /\bski|snow|glacier\b/i.test(text)
-  return { lake, rail, town, thermal, forest, snow }
+  const alpine = type === 'ski'
+    || altitude >= 1450
+    || /\balp|alpine|summit|ridge|peak|glacier|high altitude|panorama\b/i.test(text)
+    || stMoritz
+  const snow = type === 'ski' || altitude >= 1650 || /\bski|snow|glacier|winter\b/i.test(text) || (alpine && altitude >= 1500)
+
+  let cityVariant: CityVariant = 'none'
+  if (matchesBasel) cityVariant = 'basel'
+  else if (matchesBern) cityVariant = 'bern'
+  else if (matchesZurich) cityVariant = 'zurich'
+  else if (matchesGeneva) cityVariant = 'geneva'
+  else if (townLike) cityVariant = 'generic'
+
+  return {
+    lake,
+    rail: rail || cableCar,
+    town: townLike || cityVariant !== 'none',
+    thermal,
+    forest,
+    snow,
+    alpine,
+    cableCar,
+    river,
+    cityVariant,
+    stMoritz,
+  }
 }
 
 function pickPalette(country: CountryCode, seed: number, cantonCode: string): PosterPalette {
@@ -406,35 +447,41 @@ function pickPalette(country: CountryCode, seed: number, cantonCode: string): Po
 }
 
 function renderScene(seed: number, palette: PosterPalette, features: StampFeatures) {
-  const horizon = 50 + Math.round(seeded(seed, 11) * 7)
-  const farLift = Math.round(seeded(seed, 17) * 6)
-  const midLift = Math.round(seeded(seed, 23) * 8)
-  const nearLift = Math.round(seeded(seed, 29) * 10)
-  const sunX = 70 + Math.round(seeded(seed, 31) * 14)
-  const sunY = 20 + Math.round(seeded(seed, 37) * 8)
+  const horizon = 49 + Math.round(seeded(seed, 11) * 8)
+  const mountainScale = features.alpine ? 1.4 : 1
+  const sunX = 68 + Math.round(seeded(seed, 31) * 16)
+  const sunY = 16 + Math.round(seeded(seed, 37) * 9)
   const lakeY = horizon + 20
-  const railY = horizon + 18
+  const railY = horizon + 29
+  const riverY = horizon + 28
+  const skylineY = horizon + 22
 
-  const farRidge = [
-    `M6 ${horizon + 8}`,
-    `C 20 ${horizon - 10 - farLift}, 33 ${horizon - 8 + farLift}, 48 ${horizon - 12 - farLift}`,
-    `C 62 ${horizon - 6 + farLift}, 77 ${horizon - 9 - farLift}, 94 ${horizon + 6}`,
-    'L 94 80 L 6 80 Z',
-  ].join(' ')
+  const ridgePoints = (baseY: number, amplitude: number, salt: number) => {
+    const points: Array<{ x: number; y: number }> = []
+    for (let i = 0; i < 8; i += 1) {
+      const x = 6 + (88 / 7) * i
+      const wave = Math.sin((i / 7) * Math.PI * (2.1 + seeded(seed, salt + 50) * 0.95))
+      const noise = (seeded(seed, salt + i * 7) - 0.5) * amplitude * 0.34
+      const sharp = i % 2 === 0 ? 1.15 : 0.72
+      const y = clamp(baseY - Math.max(0, wave) * amplitude * sharp + noise, 8, 78)
+      points.push({ x, y: Number(y.toFixed(2)) })
+    }
+    return points
+  }
 
-  const midRidge = [
-    `M6 ${horizon + 14}`,
-    `C 17 ${horizon + 4 - midLift}, 28 ${horizon + 6 + midLift}, 42 ${horizon + 2 - midLift}`,
-    `C 58 ${horizon + 7 + midLift}, 76 ${horizon + 2 - midLift}, 94 ${horizon + 14}`,
-    'L 94 80 L 6 80 Z',
-  ].join(' ')
+  const toRidgePath = (points: Array<{ x: number; y: number }>) => {
+    const line = points
+      .map((pt, idx) => `${idx === 0 ? 'M' : 'L'}${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
+      .join(' ')
+    return `${line} L94 80 L6 80 Z`
+  }
 
-  const nearRidge = [
-    `M6 ${horizon + 24}`,
-    `C 20 ${horizon + 9 - nearLift}, 37 ${horizon + 15 + nearLift}, 52 ${horizon + 8 - nearLift}`,
-    `C 66 ${horizon + 16 + nearLift}, 80 ${horizon + 8 - nearLift}, 94 ${horizon + 24}`,
-    'L 94 80 L 6 80 Z',
-  ].join(' ')
+  const farPoints = ridgePoints(horizon + 8, (9 + seeded(seed, 17) * 5) * mountainScale, 101)
+  const midPoints = ridgePoints(horizon + 14, (14 + seeded(seed, 23) * 6) * mountainScale, 171)
+  const nearPoints = ridgePoints(horizon + 23, (20 + seeded(seed, 29) * 8) * mountainScale, 241)
+  const farRidge = toRidgePath(farPoints)
+  const midRidge = toRidgePath(midPoints)
+  const nearRidge = toRidgePath(nearPoints)
 
   const lakePath = [
     `M6 ${lakeY}`,
@@ -443,8 +490,32 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
     'L 94 80 L 6 80 Z',
   ].join(' ')
 
-  const railTrack1 = `M6 ${railY} C 25 ${railY - 6}, 48 ${railY + 5}, 94 ${railY - 2}`
-  const railTrack2 = `M6 ${railY + 2.8} C 25 ${railY - 3.2}, 48 ${railY + 7.8}, 94 ${railY + 0.8}`
+  const meadowPath = [
+    `M6 ${horizon + 26}`,
+    `C 18 ${horizon + 20}, 34 ${horizon + 29}, 48 ${horizon + 22}`,
+    `C 63 ${horizon + 16}, 77 ${horizon + 27}, 94 ${horizon + 24}`,
+    'L94 80 L6 80 Z',
+  ].join(' ')
+
+  const snowPeaks = [...midPoints, ...nearPoints]
+    .sort((a, b) => a.y - b.y)
+    .slice(0, features.alpine ? 6 : 3)
+
+  const railColor = mixHex(palette.ridgeNear, '#DBE4EF', 0.42)
+  const sleeperColor = mixHex(railColor, '#0F172A', 0.24)
+  const railStartX = 8
+  const railEndX = 92
+  const railSlope = -2 / (railEndX - railStartX)
+
+  const cableX1 = 12
+  const cableY1 = features.alpine ? 35 : 38
+  const cableX2 = 88
+  const cableY2 = features.alpine ? 22 : 27
+  const cableYAt = (x: number) => cableY1 + ((x - cableX1) / (cableX2 - cableX1)) * (cableY2 - cableY1)
+
+  const skylineBase = mixHex(palette.ridgeNear, '#0F172A', 0.22)
+  const skylineAccent = mixHex(skylineBase, '#E2E8F0', 0.16)
+  const riverColor = mixHex(palette.water, '#A3BCD3', 0.1)
 
   return (
     <g>
@@ -454,33 +525,163 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
       <path d={nearRidge} fill={palette.ridgeNear} />
 
       {features.snow && (
-        <g fill={palette.snow} opacity="0.92">
-          <path d={`M34 ${horizon - 10} L39 ${horizon - 1} L30 ${horizon - 1} Z`} />
-          <path d={`M56 ${horizon - 14} L62 ${horizon - 3} L51 ${horizon - 3} Z`} />
-          <path d={`M73 ${horizon - 11} L78 ${horizon - 2} L69 ${horizon - 2} Z`} />
+        <g fill={palette.snow} opacity={features.alpine ? 0.95 : 0.9}>
+          {snowPeaks.map((peak, idx) => {
+            const width = features.alpine ? 3.2 : 2.5
+            const depth = features.alpine ? 4.5 : 3.3
+            const drift = (seeded(seed, 400 + idx) - 0.5) * 1.1
+            const x = peak.x + drift
+            const y = peak.y + 0.8
+            return (
+              <path
+                key={`snow-${idx}`}
+                d={`M${(x - width).toFixed(1)} ${(y + depth).toFixed(1)} L${x.toFixed(1)} ${y.toFixed(1)} L${(x + width).toFixed(1)} ${(y + depth).toFixed(1)} Z`}
+              />
+            )
+          })}
         </g>
       )}
 
-      <path d={`M6 ${horizon + 26} C 24 ${horizon + 20}, 45 ${horizon + 29}, 64 ${horizon + 22} C 75 ${horizon + 19}, 84 ${horizon + 23}, 94 ${horizon + 25} L94 80 L6 80 Z`} fill={palette.meadow} opacity="0.78" />
+      <path d={meadowPath} fill={palette.meadow} opacity="0.8" />
 
-      {features.lake && <path d={lakePath} fill={palette.water} opacity="0.85" />}
+      {(features.lake || features.river) && (
+        <path d={lakePath} fill={palette.water} opacity="0.86" />
+      )}
+
+      {features.cityVariant === 'basel' && (
+        <g opacity="0.98">
+          <path d={`M6 ${riverY} C 23 ${riverY - 3.4}, 45 ${riverY + 2.7}, 94 ${riverY - 1.6} L 94 80 L 6 80 Z`} fill={riverColor} />
+          <g fill={skylineBase}>
+            <rect x="12" y={skylineY - 4} width="7" height="4" />
+            <rect x="20.5" y={skylineY - 7} width="6" height="7" />
+            <rect x="28.5" y={skylineY - 5} width="8" height="5" />
+            <rect x="39" y={skylineY - 8} width="6.5" height="8" />
+            <rect x="47.5" y={skylineY - 6} width="7.5" height="6" />
+            <path d={`M66 ${skylineY + 1} L66 ${skylineY - 11} L69.9 ${skylineY - 13} L69.9 ${skylineY + 1} Z`} fill={skylineAccent} />
+            <path d={`M72 ${skylineY + 1} L72 ${skylineY - 10} L75.9 ${skylineY - 12} L75.9 ${skylineY + 1} Z`} fill={skylineAccent} />
+          </g>
+          <g>
+            <path d={`M30 ${riverY - 0.9} h11 l-1.7 2.8 h-7.6 z`} fill={mixHex(palette.roof, '#FFFFFF', 0.16)} />
+            <path d={`M34.8 ${riverY - 3.4} l2.2 0.9 l-0.7 2 h-1.5 z`} fill={mixHex(palette.frame, '#E2E8F0', 0.22)} />
+          </g>
+        </g>
+      )}
+
+      {features.cityVariant === 'bern' && (
+        <g opacity="0.98">
+          <path d={`M6 ${riverY + 0.5} C 23 ${riverY - 2.2}, 44 ${riverY + 2.9}, 94 ${riverY - 1.1} L 94 80 L 6 80 Z`} fill={riverColor} />
+          <g fill={skylineBase}>
+            <rect x="16" y={skylineY - 4} width="7.2" height="4" />
+            <rect x="24.5" y={skylineY - 7} width="5.6" height="7" />
+            <rect x="31.4" y={skylineY - 5} width="8.3" height="5" />
+            <rect x="41.2" y={skylineY - 6.5} width="6.2" height="6.5" />
+            <path d={`M52 ${skylineY + 1} L52 ${skylineY - 11} L54.2 ${skylineY - 16} L56.4 ${skylineY - 11} L56.4 ${skylineY + 1} Z`} fill={skylineAccent} />
+          </g>
+        </g>
+      )}
+
+      {features.cityVariant === 'zurich' && (
+        <g opacity="0.98">
+          <path d={`M6 ${riverY + 0.9} C 24 ${riverY - 2.5}, 46 ${riverY + 2.6}, 94 ${riverY - 1.3} L 94 80 L 6 80 Z`} fill={riverColor} />
+          <g fill={skylineBase}>
+            <rect x="14" y={skylineY - 4} width="8" height="4" />
+            <rect x="23.8" y={skylineY - 6} width="6.3" height="6" />
+            <rect x="32.4" y={skylineY - 8} width="5.5" height="8" />
+            <path d={`M42 ${skylineY + 1} L42 ${skylineY - 8} L44.3 ${skylineY - 12} L46.6 ${skylineY - 8} L46.6 ${skylineY + 1} Z`} fill={skylineAccent} />
+            <path d={`M49.8 ${skylineY + 1} L49.8 ${skylineY - 8} L52.1 ${skylineY - 12} L54.4 ${skylineY - 8} L54.4 ${skylineY + 1} Z`} fill={skylineAccent} />
+            <rect x="58" y={skylineY - 5} width="7.8" height="5" />
+          </g>
+        </g>
+      )}
+
+      {features.cityVariant === 'geneva' && (
+        <g opacity="0.98">
+          <path d={`M6 ${riverY + 1.3} C 24 ${riverY - 2}, 48 ${riverY + 2.2}, 94 ${riverY - 1.2} L 94 80 L 6 80 Z`} fill={riverColor} />
+          <g fill={skylineBase}>
+            <rect x="16" y={skylineY - 4} width="8.2" height="4" />
+            <rect x="25.8" y={skylineY - 6.6} width="6" height="6.6" />
+            <rect x="33.5" y={skylineY - 5} width="7.1" height="5" />
+            <rect x="43.2" y={skylineY - 7.2} width="5.3" height="7.2" />
+            <rect x="50" y={skylineY - 5.4} width="8" height="5.4" />
+          </g>
+          <path d={`M63 ${riverY - 0.3} C63 ${riverY - 9.5}, 66.6 ${riverY - 15.2}, 64.8 ${riverY - 20}`} stroke={mixHex(palette.water, '#FFFFFF', 0.45)} strokeWidth="1.1" fill="none" strokeLinecap="round" opacity="0.85" />
+        </g>
+      )}
+
+      {features.cityVariant === 'generic' && (
+        <g opacity="0.96">
+          {features.river && (
+            <path d={`M6 ${riverY + 0.8} C 24 ${riverY - 2.2}, 46 ${riverY + 2.4}, 94 ${riverY - 1.1} L 94 80 L 6 80 Z`} fill={riverColor} />
+          )}
+          <g fill={skylineBase}>
+            <rect x="18" y={skylineY - 4.4} width="8.5" height="4.4" />
+            <rect x="28.3" y={skylineY - 7} width="6.1" height="7" />
+            <rect x="36.5" y={skylineY - 5.2} width="9" height="5.2" />
+            <rect x="47.4" y={skylineY - 8.2} width="5.8" height="8.2" />
+          </g>
+        </g>
+      )}
 
       {features.rail && (
-        <g>
-          <path d={railTrack1} stroke={palette.rail} strokeWidth="1.6" strokeLinecap="round" fill="none" />
-          <path d={railTrack2} stroke={palette.rail} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.85" />
-          <path d="M10 66h4M19 65h4M28 66h4M38 67h4M49 68h4M61 68h4M73 67h4M84 66h4" stroke={palette.rail} strokeWidth="1.05" strokeLinecap="round" opacity="0.66" />
+        <g opacity="0.9">
+          <path d={`M${railStartX} ${railY} L${railEndX} ${railY - 2}`} stroke={railColor} strokeWidth="1.4" strokeLinecap="round" fill="none" />
+          <path d={`M${railStartX} ${railY + 2.1} L${railEndX} ${railY + 0.1}`} stroke={railColor} strokeWidth="1.15" strokeLinecap="round" fill="none" />
+          {Array.from({ length: 8 }).map((_, idx) => {
+            const x = 12 + idx * 10.5
+            const y1 = railY + (x - railStartX) * railSlope
+            return (
+              <path
+                key={`sleeper-${idx}`}
+                d={`M${x.toFixed(1)} ${(y1 - 0.2).toFixed(1)} L${x.toFixed(1)} ${(y1 + 2.6).toFixed(1)}`}
+                stroke={sleeperColor}
+                strokeWidth="0.9"
+                strokeLinecap="round"
+              />
+            )
+          })}
         </g>
       )}
 
-      {features.town && (
-        <g opacity="0.95">
+      {features.cableCar && (
+        <g opacity="0.94">
+          <path d={`M${cableX1} ${cableY1} L${cableX2} ${cableY2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.3)} strokeWidth="1.1" strokeLinecap="round" />
+          <path d={`M${cableX1} ${cableY1} L${cableX1} ${cableY1 + 10}`} stroke={mixHex(palette.frame, '#0F172A', 0.15)} strokeWidth="1" />
+          <path d={`M${cableX2} ${cableY2} L${cableX2} ${cableY2 + 9}`} stroke={mixHex(palette.frame, '#0F172A', 0.15)} strokeWidth="1" />
+          {[42, 63].map((x, idx) => {
+            const y = cableYAt(x)
+            return (
+              <g key={`cabin-${idx}`}>
+                <path d={`M${x} ${y.toFixed(1)} L${x} ${(y + 3.6).toFixed(1)}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.35)} strokeWidth="0.8" />
+                <rect
+                  x={(x - 2.6).toFixed(1)}
+                  y={(y + 3.4).toFixed(1)}
+                  width="5.2"
+                  height="3.7"
+                  rx="0.8"
+                  fill={mixHex(palette.roof, '#E2E8F0', 0.18)}
+                />
+              </g>
+            )
+          })}
+        </g>
+      )}
+
+      {features.stMoritz && (
+        <g opacity="0.96">
+          <circle cx="72" cy={horizon + 11} r="3.9" fill="#EBC0A1" />
+          <rect x="68.7" y={horizon + 10.2} width="6.8" height="2.2" rx="1.1" fill={mixHex(palette.water, '#0F172A', 0.3)} />
+          <path d={`M67 ${horizon + 18.2} C 69 ${horizon + 15.4}, 75 ${horizon + 15.3}, 78 ${horizon + 18.2} L 75.5 ${horizon + 24.5} L 69.5 ${horizon + 24.5} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.12)} />
+          <path d={`M66.5 ${horizon + 25} L79.4 ${horizon + 31.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.2)} strokeWidth="1.1" strokeLinecap="round" />
+          <path d={`M65.2 ${horizon + 26.2} L78.2 ${horizon + 32.2}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="1.05" strokeLinecap="round" />
+        </g>
+      )}
+
+      {features.town && features.cityVariant === 'none' && (
+        <g opacity="0.94">
           <path d={`M18 ${horizon + 23} L22 ${horizon + 19} L26 ${horizon + 23} Z`} fill={palette.roof} />
           <rect x="19.4" y={horizon + 23} width="5.1" height="4.8" fill={mixHex(palette.roof, '#FFFFFF', 0.25)} />
           <path d={`M28 ${horizon + 23} L32 ${horizon + 18} L37 ${horizon + 23} Z`} fill={palette.roof} />
           <rect x="29.8" y={horizon + 23} width="5.8" height="5.8" fill={mixHex(palette.roof, '#FFFFFF', 0.22)} />
-          <path d={`M39 ${horizon + 23} L43 ${horizon + 15} L47 ${horizon + 23} Z`} fill={palette.roof} />
-          <rect x="41.2" y={horizon + 23} width="4.3" height="7.2" fill={mixHex(palette.roof, '#FFFFFF', 0.2)} />
         </g>
       )}
 
@@ -551,6 +752,7 @@ export function DestinationStamp({
   country = 'CH',
   types = [],
   description = '',
+  planTemplate = '',
   tourismTags = [],
   tourismHighlights = [],
   className = '',
@@ -564,13 +766,14 @@ export function DestinationStamp({
     safeName,
     safeRegion,
     description,
+    planTemplate,
     ...types,
     ...tourismTags,
     ...tourismHighlights,
   ].join(' ')
   const seed = hashCode(`${destinationId || safeName}|${country}|${regionCode}|${type}|${contextText.toLowerCase()}`)
   const palette = pickPalette(country, seed, cantonCode)
-  const features = detectFeatures(type, contextText, altitude)
+  const features = detectFeatures(type, contextText, altitude, destinationId || '', name || safeName)
   const idBase = sanitizeId(`${destinationId || safeName}-${country}-${regionCode}-${type}`)
   const grainId = `grain-${idBase}`
   const paperId = `paper-grad-${idBase}`
