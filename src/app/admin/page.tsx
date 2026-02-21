@@ -685,6 +685,9 @@ export default function AdminDiagnosticsPage() {
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
+            <Link href="/admin/stamps" className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50">
+              Stamp gallery
+            </Link>
             <Link href="/" className="text-xs text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline">Back to app</Link>
           </div>
         </div>

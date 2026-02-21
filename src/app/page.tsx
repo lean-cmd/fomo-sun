@@ -1379,9 +1379,15 @@ export default function Home() {
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
                 name={heroEscape.destination.name}
+                destinationId={heroEscape.destination.id}
+                altitude={heroEscape.destination.altitude_m}
                 region={heroEscape.destination.region}
                 type={stampTypeFromDestination(heroEscape.destination)}
                 country={heroEscape.destination.country}
+                types={heroEscape.destination.types}
+                description={heroEscape.tourism?.description_long || heroEscape.tourism?.description_short || heroEscape.destination.description || ''}
+                tourismTags={heroEscape.tourism?.tags || []}
+                tourismHighlights={heroEscape.tourism?.highlights || []}
                 className="h-[102px] w-[90px] drop-shadow-[0_10px_20px_rgba(180,83,9,0.18)]"
               />
             </div>
