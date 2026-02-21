@@ -52,6 +52,28 @@ const TRAVEL_BANDS = [
   { id: 'long', label: '3h-6.5h', minH: 3, maxH: 6.5, maxLabel: '6h30' },
 ] as const
 
+const DEMO_BASEL_HERO = {
+  name: 'Basel',
+  lat: 47.5596,
+  lon: 7.5886,
+  region: 'Basel-Stadt',
+  altitude_m: 260,
+} as const
+
+const DEMO_ST_MORITZ = {
+  id: 'st-moritz',
+  name: 'St. Moritz',
+  region: 'Engadin, GR',
+  country: 'CH' as const,
+  lat: 46.497,
+  lon: 9.838,
+  altitude_m: 1822,
+  types: ['mountain', 'lake'] as const,
+  plan_template: 'Slope session | Lake walk | Alpine terrace',
+  maps_name: 'St. Moritz',
+  sbb_name: 'St. Moritz',
+}
+
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Aarau', lat: 47.3925, lon: 8.0442 },
   { name: 'Baden', lat: 47.4738, lon: 8.3077 },
@@ -1069,17 +1091,23 @@ export default function Home() {
   }, [dayFocus])
   const resultRows = data?.escapes || []
   const resultTier = data?._meta?.result_tier
+  const isDemoModeActive = demo || data?._meta?.demo_mode || liveDataSource === 'mock'
+  const forceQuickDemoBaselHero = isDemoModeActive && activeBand.id === 'quick'
+  const forceLongDemoStMoritzHero = isDemoModeActive && activeBand.id === 'long'
+  const stayHomeCityName = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.name : origin.name
+  const stayHomeLat = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.lat : origin.lat
+  const stayHomeLon = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.lon : origin.lon
   const heroDayFocus: DayFocus = dayFocus
   const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
   const heroOriginSunMin = dayFocus === 'tomorrow' ? originTomorrowMin : originSunMin
   const defaultHeroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
-  const isBaselOrigin = /\bbasel\b/i.test(origin.name)
+  const isBaselOrigin = forceQuickDemoBaselHero || /\bbasel\b/i.test(origin.name)
   const hasTenPctBetterOption = resultRows.some((escape) => {
     const candidateSunMin = escapeSunMinutes(escape)
     if (heroOriginSunMin <= 0) return candidateSunMin > 0
     return candidateSunMin >= heroOriginSunMin * 1.1
   })
-  const shouldStayHomeHero = Boolean(data) && (resultRows.length === 0 || !hasTenPctBetterOption)
+  const shouldStayHomeHero = Boolean(data) && (forceQuickDemoBaselHero || resultRows.length === 0 || !hasTenPctBetterOption)
   const stayHomeHero = useMemo<EscapeCard | null>(() => {
     if (!shouldStayHomeHero || !data) return null
     const sunMin = heroOriginSunMin
@@ -1098,17 +1126,17 @@ export default function Home() {
         rank: 1,
         destination: {
           ...base.destination,
-          id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(origin.name || 'home')}`,
-          name: origin.name,
-          region: isBaselOrigin ? 'Basel-Stadt' : 'Home Base',
+          id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(stayHomeCityName || 'home')}`,
+          name: stayHomeCityName,
+          region: isBaselOrigin ? DEMO_BASEL_HERO.region : 'Home Base',
           country: 'CH',
-          lat: origin.lat,
-          lon: origin.lon,
-          altitude_m: isBaselOrigin ? 260 : Math.max(200, Math.round(base.destination.altitude_m * 0.75)),
+          lat: stayHomeLat,
+          lon: stayHomeLon,
+          altitude_m: isBaselOrigin ? DEMO_BASEL_HERO.altitude_m : Math.max(200, Math.round(base.destination.altitude_m * 0.75)),
           types: ['town', 'lake'],
           plan_template: 'Stay local | Walk in the sun | Terrace break',
-          maps_name: `${origin.name}, Switzerland`,
-          sbb_name: origin.name,
+          maps_name: `${stayHomeCityName}, Switzerland`,
+          sbb_name: stayHomeCityName,
         },
         sun_score: {
           ...base.sun_score,
@@ -1131,10 +1159,10 @@ export default function Home() {
         },
         tourism: {
           ...base.tourism,
-          description_short: `Stay in ${origin.name}`,
-          description_long: `No destination in range is at least 10% sunnier than ${origin.name} right now.`,
+          description_short: `Stay in ${stayHomeCityName}`,
+          description_long: `No destination in range is at least 10% sunnier than ${stayHomeCityName} right now.`,
           highlights: [
-            `${origin.name} is already one of the sunniest options`,
+            `${stayHomeCityName} is already one of the sunniest options`,
             'Save travel time and keep full daylight',
             'Great day for a local riverside or city walk',
           ],
@@ -1142,7 +1170,7 @@ export default function Home() {
         },
         travel: {},
         plan: [
-          `Stay in ${origin.name}`,
+          `Stay in ${stayHomeCityName}`,
           'Use the sunniest local window',
           'Skip travel and keep net sun',
         ],
@@ -1154,17 +1182,17 @@ export default function Home() {
     return {
       rank: 1,
       destination: {
-        id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(origin.name || 'home')}`,
-        name: origin.name,
-        region: isBaselOrigin ? 'Basel-Stadt' : 'Home Base',
+        id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(stayHomeCityName || 'home')}`,
+        name: stayHomeCityName,
+        region: isBaselOrigin ? DEMO_BASEL_HERO.region : 'Home Base',
         country: 'CH',
-        lat: origin.lat,
-        lon: origin.lon,
-        altitude_m: isBaselOrigin ? 260 : 420,
+        lat: stayHomeLat,
+        lon: stayHomeLon,
+        altitude_m: isBaselOrigin ? DEMO_BASEL_HERO.altitude_m : 420,
         types: ['town', 'lake'],
         plan_template: 'Stay local | Walk in the sun | Terrace break',
-        maps_name: `${origin.name}, Switzerland`,
-        sbb_name: origin.name,
+        maps_name: `${stayHomeCityName}, Switzerland`,
+        sbb_name: stayHomeCityName,
       },
       sun_score: {
         score: fallbackScore,
@@ -1183,8 +1211,8 @@ export default function Home() {
         temp_c: 0,
       },
       tourism: {
-        description_short: `Stay in ${origin.name}`,
-        description_long: `No destination in range is at least 10% sunnier than ${origin.name} right now.`,
+        description_short: `Stay in ${stayHomeCityName}`,
+        description_long: `No destination in range is at least 10% sunnier than ${stayHomeCityName} right now.`,
         highlights: ['Stay local', 'Keep full daylight', 'No net-sun gain from travel'],
         tags: ['town', 'local', 'sun'],
         hero_image: '',
@@ -1194,7 +1222,7 @@ export default function Home() {
       },
       travel: {},
       plan: [
-        `Stay in ${origin.name}`,
+        `Stay in ${stayHomeCityName}`,
         'Use the sunniest local window',
         'Skip travel and keep net sun',
       ],
@@ -1202,9 +1230,53 @@ export default function Home() {
       sun_timeline: data.origin_timeline,
       tomorrow_sun_hours: data.tomorrow_sun_hours,
     }
-  }, [data, defaultHeroEscape, heroOriginSunMin, isBaselOrigin, origin.lat, origin.lon, origin.name, shouldStayHomeHero])
-  const isStayHomeHero = shouldStayHomeHero && Boolean(stayHomeHero)
-  const heroEscape = isStayHomeHero ? stayHomeHero : defaultHeroEscape
+  }, [data, defaultHeroEscape, heroOriginSunMin, isBaselOrigin, shouldStayHomeHero, stayHomeCityName, stayHomeLat, stayHomeLon])
+  const forcedDemoStMoritzHero = useMemo<EscapeCard | null>(() => {
+    if (!forceLongDemoStMoritzHero || !data) return null
+    const existing = resultRows.find((escape) => escape.destination.id === DEMO_ST_MORITZ.id)
+    if (existing) return existing
+    const base = defaultHeroEscape ?? fastestEscape ?? warmestEscape ?? stayHomeHero
+    if (!base) return null
+    const seededTomorrowHours = Math.max(base.tomorrow_sun_hours ?? 0, 6.2)
+    const seededSunMin = dayFocus === 'tomorrow'
+      ? Math.max(Math.round(seededTomorrowHours * 60), Math.round((data.tomorrow_sun_hours ?? 0) * 60) + 60)
+      : Math.max(base.sun_score.sunshine_forecast_min, heroOriginSunMin + 60)
+    return {
+      ...base,
+      rank: 1,
+      destination: {
+        ...base.destination,
+        id: DEMO_ST_MORITZ.id,
+        name: DEMO_ST_MORITZ.name,
+        region: DEMO_ST_MORITZ.region,
+        country: DEMO_ST_MORITZ.country,
+        lat: DEMO_ST_MORITZ.lat,
+        lon: DEMO_ST_MORITZ.lon,
+        altitude_m: DEMO_ST_MORITZ.altitude_m,
+        types: [...DEMO_ST_MORITZ.types],
+        plan_template: DEMO_ST_MORITZ.plan_template,
+        maps_name: DEMO_ST_MORITZ.maps_name,
+        sbb_name: DEMO_ST_MORITZ.sbb_name,
+      },
+      sun_score: {
+        ...base.sun_score,
+        sunshine_forecast_min: seededSunMin,
+      },
+      net_sun_min: Math.max(base.net_sun_min, seededSunMin - 180),
+      conditions: `${seededSunMin} min sunshine | demo hero showcase`,
+      tomorrow_sun_hours: seededTomorrowHours,
+      tourism: {
+        ...base.tourism,
+        description_short: 'Iconic alpine sun in St. Moritz',
+        description_long: 'Demo hero card fixed to St. Moritz so stamp design can be showcased in this bucket.',
+        tags: Array.from(new Set([...(base.tourism?.tags || []), 'mountain', 'alps', 'ski'])),
+      },
+    }
+  }, [data, dayFocus, defaultHeroEscape, fastestEscape, forceLongDemoStMoritzHero, heroOriginSunMin, resultRows, stayHomeHero, warmestEscape])
+  const isStayHomeHero = !forceLongDemoStMoritzHero && shouldStayHomeHero && Boolean(stayHomeHero)
+  const heroEscape = forceLongDemoStMoritzHero
+    ? (forcedDemoStMoritzHero ?? defaultHeroEscape)
+    : (isStayHomeHero ? stayHomeHero : defaultHeroEscape)
 
   const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
   const topSunMin = heroEscape
@@ -1239,7 +1311,7 @@ export default function Home() {
     if (!heroEscape) return ''
     if (isStayHomeHero) {
       const dayLabel = heroDayFocus === 'today' ? 'today' : 'tomorrow'
-      const city = compactLabel(origin.name, 14)
+      const city = compactLabel(stayHomeCityName, 14)
       const templates = [
         `STAY HOME. ${city} is already one of the sunniest options ${dayLabel}.`,
         `No destination is at least 10% sunnier than ${city} ${dayLabel}.`,
@@ -1247,6 +1319,9 @@ export default function Home() {
       ]
       const idx = Math.abs((heroFlowTick + city.length) % templates.length)
       return templates[idx] || templates[0]
+    }
+    if (forceLongDemoStMoritzHero && heroEscape.destination.id === DEMO_ST_MORITZ.id) {
+      return 'Demo hero: St. Moritz is pinned in this long-travel bucket to showcase the new stamp artwork.'
     }
     const travel = topBestTravel
       ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}`
@@ -1267,7 +1342,7 @@ export default function Home() {
       ]
     const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [heroEscape, heroDayFocus, heroFlowTick, isStayHomeHero, origin.name, sunGainMin, topBestTravel])
+  }, [forceLongDemoStMoritzHero, heroEscape, heroDayFocus, heroFlowTick, isStayHomeHero, origin.name, stayHomeCityName, sunGainMin, topBestTravel])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
@@ -1530,10 +1605,10 @@ export default function Home() {
           >
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
-                name={isStayHomeHero ? origin.name : heroEscape.destination.name}
+                name={isStayHomeHero ? stayHomeCityName : heroEscape.destination.name}
                 destinationId={isStayHomeHero && isBaselOrigin ? 'basel' : heroEscape.destination.id}
                 altitude={heroEscape.destination.altitude_m}
-                region={isStayHomeHero && isBaselOrigin ? 'Basel-Stadt' : heroEscape.destination.region}
+                region={isStayHomeHero && isBaselOrigin ? DEMO_BASEL_HERO.region : heroEscape.destination.region}
                 type={stampTypeFromDestination(heroEscape.destination)}
                 country={heroEscape.destination.country}
                 types={heroEscape.destination.types}
@@ -1563,7 +1638,7 @@ export default function Home() {
                   )}
                   <span className="text-[11px] text-slate-500">
                     {isStayHomeHero
-                      ? `${origin.name} · HOME`
+                      ? `${stayHomeCityName} · HOME`
                       : `${heroEscape.destination.region} · ${FLAG[heroEscape.destination.country]}`}
                   </span>
                 </div>
