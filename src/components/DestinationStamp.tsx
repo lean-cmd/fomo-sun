@@ -866,6 +866,25 @@ export function DestinationStamp({
 }: StampProps) {
   const safeName = (name || 'DESTINATION').toUpperCase().slice(0, 24)
   const normalizedId = (destinationId || '').toLowerCase()
+  if (normalizedId === 'basel') {
+    return (
+      <svg
+        viewBox="0 0 100 124"
+        className={className}
+        role="img"
+        aria-label={`${safeName} destination stamp`}
+      >
+        <image
+          href="/stamps/basel-vintage.jpg"
+          x="0"
+          y="0"
+          width="100"
+          height="124"
+          preserveAspectRatio="xMidYMid slice"
+        />
+      </svg>
+    )
+  }
   if (normalizedId === 'st-moritz') {
     return (
       <svg
