@@ -9,6 +9,59 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V95 — commit `cd9430b` — 2026-02-21
+
+**Theme:** Caching Infrastructure (TTL + SWR)
+
+### 1. V88 Release Changelog — append after V94 entry
+
+```
+### V95 (cd9430b)
+Theme: Caching Infrastructure (TTL + SWR)
+
+Changes:
+- Lib: Added caching utility with TTL + stale-while-revalidate (SWR) support (src/lib/cache.ts).
+- Optimization: Implemented fetch coalescing and automatic eviction for caches.
+- Infrastructure: Added pre-configured caches for weather, SBB, and general queries.
+
+Files: src/lib/cache.ts
+Validation: Unit tests passed; Verified cache behavior in dev mode.
+Rollback: git revert cd9430b
+Agent: Claude
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V95 | 2026-02-21 | Claude session
+- New caching infrastructure (TTL + SWR) added to src/lib/cache.ts
+- Integrated for Weather and SBB connections
+- Commit: cd9430b
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Afternoon (Claude session)
+
+**Deployed:** V95 (cd9430b)
+**Status:** Shipped and deployed to Vercel
+
+**What was done:**
+- Implemented a robust in-memory caching system to handle external API rate limits and improve UI responsiveness.
+- The new `cache.ts` utility supports stale-while-revalidate (SWR), meaning users get instant results from cache while fresh data is fetched in the background.
+- Reduced "thundering herd" issues by coalescing identical concurrent requests.
+
+**Next:**
+- Monitor cache hit rates for weather and train data.
+```
+
+---
+
 ## V94 — commit `d52eb3d` — 2026-02-21
 
 **Theme:** UI Tweaks & Footer Polish
