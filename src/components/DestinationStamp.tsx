@@ -561,28 +561,46 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
   const riverColor = mixHex(palette.water, '#A3BCD3', 0.1)
 
   if (features.stMoritz) {
-    const slopeY = horizon + 24
+    const slopeTop = horizon + 19
+    const slopeMid = horizon + 29
+    const pisteBlue = mixHex(palette.snow, palette.water, 0.18)
+    const pisteShadow = mixHex(palette.snow, palette.ridgeNear, 0.14)
     return (
       <g>
         <circle cx={sunX} cy={sunY} r="11.2" fill={palette.sun} opacity="0.9" />
         <path d={farRidge} fill={palette.ridgeFar} />
         <path d={midRidge} fill={palette.ridgeMid} />
-        <path d={nearRidge} fill={palette.ridgeNear} />
-        <path d={`M6 ${slopeY} C 24 ${slopeY - 4}, 46 ${slopeY + 6}, 94 ${slopeY + 1} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.water, 0.12)} opacity="0.96" />
-        <path d={`M6 ${slopeY + 4} C 22 ${slopeY + 2}, 43 ${slopeY + 8}, 94 ${slopeY + 5} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.meadow, 0.18)} opacity="0.86" />
+        <path d={nearRidge} fill={mixHex(palette.ridgeNear, '#0F172A', 0.08)} />
+        <path d={`M6 ${slopeTop} C 23 ${slopeTop - 6}, 44 ${slopeTop + 6}, 94 ${slopeTop + 1} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.water, 0.09)} opacity="0.98" />
+        <path d={`M6 ${slopeMid} C 22 ${slopeMid - 2}, 45 ${slopeMid + 9}, 94 ${slopeMid + 4} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.meadow, 0.13)} opacity="0.9" />
+        <g stroke={pisteBlue} strokeWidth="1.05" strokeLinecap="round" fill="none" opacity="0.85">
+          <path d={`M10 ${slopeTop + 2} C 22 ${slopeTop + 5}, 38 ${slopeTop + 12}, 58 ${slopeTop + 21}`} />
+          <path d={`M24 ${slopeTop + 1} C 35 ${slopeTop + 8}, 52 ${slopeTop + 15}, 76 ${slopeTop + 24}`} />
+          <path d={`M43 ${slopeTop + 2} C 56 ${slopeTop + 10}, 71 ${slopeTop + 18}, 90 ${slopeTop + 28}`} />
+        </g>
+        <g stroke={pisteShadow} strokeWidth="0.9" strokeLinecap="round" fill="none" opacity="0.72">
+          <path d={`M14 ${slopeTop + 9} C 27 ${slopeTop + 14}, 44 ${slopeTop + 20}, 61 ${slopeTop + 28}`} />
+          <path d={`M31 ${slopeTop + 8} C 45 ${slopeTop + 14}, 62 ${slopeTop + 21}, 82 ${slopeTop + 30}`} />
+        </g>
         <g opacity="0.98">
-          <circle cx="57" cy={horizon + 12} r="5.3" fill="#EEC9AA" />
-          <rect x="50.7" y={horizon + 9.6} width="12.6" height="3.1" rx="1.55" fill={mixHex(palette.water, '#0F172A', 0.26)} />
-          <path d={`M49.8 ${horizon + 22.2} C 53.2 ${horizon + 15.6}, 61.6 ${horizon + 15.4}, 66.7 ${horizon + 22.3} L 63.6 ${horizon + 30.2} L 52.1 ${horizon + 30.2} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.14)} />
-          <path d={`M52.6 ${horizon + 30.1} L49.4 ${horizon + 36.3} L53.6 ${horizon + 36.8} L57.2 ${horizon + 30.2} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
-          <path d={`M62.2 ${horizon + 30.1} L59.3 ${horizon + 36.6} L63.5 ${horizon + 37} L66.8 ${horizon + 30.2} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
-          <path d={`M45.8 ${horizon + 36.3} L71.6 ${horizon + 45}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.2)} strokeWidth="1.35" strokeLinecap="round" />
-          <path d={`M44.3 ${horizon + 38.2} L70 ${horizon + 47}`} stroke={mixHex(palette.frame, '#FFFFFF', 0.22)} strokeWidth="1.25" strokeLinecap="round" />
-          <path d={`M52.2 ${horizon + 25.8} L48.7 ${horizon + 35.1}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="0.95" strokeLinecap="round" />
-          <path d={`M66.5 ${horizon + 25.5} L70.1 ${horizon + 33.7}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="0.95" strokeLinecap="round" />
-          <circle cx="72.4" cy={horizon + 39.6} r="0.95" fill={mixHex(palette.snow, '#FFFFFF', 0.12)} />
-          <circle cx="74.3" cy={horizon + 41.1} r="1.05" fill={mixHex(palette.snow, '#FFFFFF', 0.15)} />
-          <circle cx="76.4" cy={horizon + 42.7} r="0.9" fill={mixHex(palette.snow, '#FFFFFF', 0.12)} />
+          <circle cx="56.7" cy={horizon + 10.6} r="6.4" fill="#EEC9AA" />
+          <path d={`M49.9 ${horizon + 8.8} C 53.1 ${horizon + 5.7}, 60.6 ${horizon + 5.9}, 63.6 ${horizon + 9.2} L 62.8 ${horizon + 11.1} L 50.4 ${horizon + 11.1} Z`} fill={mixHex(palette.frame, '#0F172A', 0.2)} />
+          <circle cx="54.2" cy={horizon + 10.8} r="2.5" fill={mixHex(palette.water, '#0F172A', 0.35)} />
+          <circle cx="59.8" cy={horizon + 10.8} r="2.5" fill={mixHex(palette.water, '#0F172A', 0.35)} />
+          <rect x="56.1" y={horizon + 10.3} width="1.8" height="1" rx="0.45" fill={mixHex(palette.frame, '#FFFFFF', 0.3)} />
+          <circle cx="53.4" cy={horizon + 10.2} r="0.6" fill={mixHex('#FFFFFF', palette.water, 0.25)} opacity="0.82" />
+          <circle cx="59" cy={horizon + 10.2} r="0.6" fill={mixHex('#FFFFFF', palette.water, 0.25)} opacity="0.82" />
+          <path d={`M47.6 ${horizon + 22.8} C 50.7 ${horizon + 15.2}, 62.3 ${horizon + 14.6}, 67.9 ${horizon + 22.9} L 64.3 ${horizon + 32.6} L 49.5 ${horizon + 32.6} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.1)} />
+          <path d={`M51.2 ${horizon + 21.8} L58.3 ${horizon + 24.1} L54.8 ${horizon + 27.1} Z`} fill={mixHex('#D92D20', '#FFFFFF', 0.12)} opacity="0.9" />
+          <path d={`M51 ${horizon + 32.4} L47.5 ${horizon + 39.6} L52.3 ${horizon + 40} L56.2 ${horizon + 32.4} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M63 ${horizon + 32.4} L59.6 ${horizon + 40.1} L64.4 ${horizon + 40.4} L67.7 ${horizon + 32.4} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M46.7 ${horizon + 39.6} L74.5 ${horizon + 49.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.18)} strokeWidth="1.6" strokeLinecap="round" />
+          <path d={`M45 ${horizon + 41.5} L72.9 ${horizon + 51.3}`} stroke={mixHex(palette.frame, '#FFFFFF', 0.24)} strokeWidth="1.45" strokeLinecap="round" />
+          <path d={`M51 ${horizon + 27.1} L47.2 ${horizon + 37}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.28)} strokeWidth="1" strokeLinecap="round" />
+          <path d={`M67.2 ${horizon + 26.4} L71.2 ${horizon + 35.2}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.28)} strokeWidth="1" strokeLinecap="round" />
+          <circle cx="74.2" cy={horizon + 43.7} r="1.15" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
+          <circle cx="76.8" cy={horizon + 45.3} r="1.25" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
+          <circle cx="79.1" cy={horizon + 47.1} r="1.05" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
         </g>
       </g>
     )
@@ -621,19 +639,30 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
 
       {features.cityVariant === 'basel' && (
         <g opacity="0.98">
-          <path d={`M6 ${riverY} C 23 ${riverY - 3.4}, 45 ${riverY + 2.7}, 94 ${riverY - 1.6} L 94 80 L 6 80 Z`} fill={riverColor} />
+          <path d={`M6 ${skylineY + 4.8} C 22 ${skylineY + 1.6}, 44 ${skylineY + 7.5}, 94 ${skylineY + 3.2} L 94 80 L 6 80 Z`} fill={mixHex(riverColor, palette.water, 0.2)} />
+          <path d={`M6 ${skylineY + 8} C 22 ${skylineY + 4.8}, 45 ${skylineY + 10.3}, 94 ${skylineY + 6.6} L 94 80 L 6 80 Z`} fill={mixHex(riverColor, palette.ridgeNear, 0.1)} opacity="0.72" />
+          <path d={`M9 ${skylineY + 4.7} C 26 ${skylineY + 3.7}, 48 ${skylineY + 7.6}, 90 ${skylineY + 4.5}`} stroke={mixHex(palette.water, '#FFFFFF', 0.34)} strokeWidth="0.92" fill="none" opacity="0.8" />
           <g fill={skylineBase}>
-            <rect x="12" y={skylineY - 4} width="7" height="4" />
-            <rect x="20.5" y={skylineY - 7} width="6" height="7" />
-            <rect x="28.5" y={skylineY - 5} width="8" height="5" />
-            <rect x="39" y={skylineY - 8} width="6.5" height="8" />
-            <rect x="47.5" y={skylineY - 6} width="7.5" height="6" />
-            <path d={`M66 ${skylineY + 1} L66 ${skylineY - 11} L69.9 ${skylineY - 13} L69.9 ${skylineY + 1} Z`} fill={skylineAccent} />
-            <path d={`M72 ${skylineY + 1} L72 ${skylineY - 10} L75.9 ${skylineY - 12} L75.9 ${skylineY + 1} Z`} fill={skylineAccent} />
+            <rect x="12" y={skylineY - 4.2} width="7.4" height="4.2" />
+            <rect x="20.8" y={skylineY - 7.4} width="6.2" height="7.4" />
+            <rect x="47.9" y={skylineY - 5.9} width="8" height="5.9" />
+            <path d={`M31.7 ${skylineY + 1} L31.7 ${skylineY - 9.6} L33.5 ${skylineY - 13.5} L35.3 ${skylineY - 9.6} L35.3 ${skylineY + 1} Z`} />
+            <path d={`M37.4 ${skylineY + 1} L37.4 ${skylineY - 9.1} L39.2 ${skylineY - 13} L41 ${skylineY - 9.1} L41 ${skylineY + 1} Z`} />
+            <path d={`M65.7 ${skylineY + 1} L65.7 ${skylineY - 11.8} L69.8 ${skylineY - 14.1} L69.8 ${skylineY + 1} Z`} fill={skylineAccent} />
+            <path d={`M72 ${skylineY + 1} L72 ${skylineY - 11} L76 ${skylineY - 13.1} L76 ${skylineY + 1} Z`} fill={skylineAccent} />
           </g>
+          <g stroke={mixHex(skylineBase, '#FFFFFF', 0.32)} strokeWidth="0.62" opacity="0.64">
+            <path d={`M67.2 ${skylineY - 10.1} v9.6`} />
+            <path d={`M68.9 ${skylineY - 10.8} v10.3`} />
+            <path d={`M73.6 ${skylineY - 9.2} v8.8`} />
+            <path d={`M75 ${skylineY - 9.8} v9.4`} />
+          </g>
+          <path d={`M14 ${skylineY + 2.5} C 24 ${skylineY - 1.8}, 38 ${skylineY - 1.6}, 58 ${skylineY + 1.9} C 70 ${skylineY + 4.1}, 80 ${skylineY + 3.4}, 88 ${skylineY + 1.8}`} stroke={mixHex(palette.frame, '#0F172A', 0.08)} strokeWidth="1.65" fill="none" opacity="0.55" />
           <g>
-            <path d={`M30 ${riverY - 0.9} h11 l-1.7 2.8 h-7.6 z`} fill={mixHex(palette.roof, '#FFFFFF', 0.16)} />
-            <path d={`M34.8 ${riverY - 3.4} l2.2 0.9 l-0.7 2 h-1.5 z`} fill={mixHex(palette.frame, '#E2E8F0', 0.22)} />
+            <path d={`M41 ${skylineY + 3.3} h12.5 l-1.8 3 h-8.8 z`} fill={mixHex(palette.roof, '#FFFFFF', 0.14)} />
+            <path d={`M46 ${skylineY + 0.2} l2.4 1 l-0.8 2.1 h-1.6 z`} fill={mixHex(palette.frame, '#E2E8F0', 0.22)} />
+            <path d={`M6 ${skylineY - 4.9} L94 ${skylineY - 5.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.32)} strokeWidth="0.82" opacity="0.72" />
+            <path d={`M47.2 ${skylineY + 1.2} L47.2 ${skylineY - 5.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.26)} strokeWidth="0.72" />
           </g>
         </g>
       )}
