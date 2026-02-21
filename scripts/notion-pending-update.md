@@ -9,6 +9,68 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V101 — commit `d530c34` — 2026-02-21
+
+**Theme:** Stamp Redesign 2.0 + Footer Versioning
+
+### 1. V88 Release Changelog — append after V100 entry
+
+```
+### V101 (d530c34)
+Theme: Stamp Redesign 2.0 + Footer Versioning
+
+Changes:
+- Stamps: Removed the top color banner and removed visible canton abbreviation badges from stamp artwork.
+- Stamps: Rebuilt poster scene renderer to a more classic Swiss tourism-poster look with layered colorful landscapes (sky, ridges, meadows), soft curved forms, and textured print-style grain.
+- Stamps: Added context-aware scenic elements (lakes, railways, towns, forest silhouettes, thermal steam, snowcaps) based on destination and tourism metadata, reducing geometric-icon look.
+- Versioning: Added centralized release constant (`src/lib/release.ts`) and surfaced the live app version in global footer (`v101`).
+- Gallery: Updated gallery copy to reflect scenic poster language.
+
+Research references:
+- Notion design language source: Day 4 blog entry (`day-4-vintage-stamps-joystick-soul`) for condensed typography + vintage Swiss poster intent.
+- Visual direction checks: Museum für Gestaltung Zürich poster collection and heritage Swiss travel-poster references.
+
+Files: src/components/DestinationStamp.tsx, src/lib/release.ts, src/app/layout.tsx, src/app/admin/stamps/page.tsx
+Validation: npm run build passed; local smoke check confirmed footer version and stamp gallery rendering.
+Rollback: git revert d530c34
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V101 | 2026-02-21 | Codex session
+- Removed top stamp color bar and canton badge label
+- Reworked stamps toward scenic Swiss vintage poster compositions (colorful layered landscapes)
+- Added feature-driven scene elements: lake, railway, town, forest, thermal steam, snowcaps
+- Added centralized release version and footer display (`v101`)
+- Commit: d530c34
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Night (Codex session)
+
+**Deployed:** V101 (d530c34)
+**Status:** Shipped and validated
+
+**What was done:**
+- Read the Notion stamp language notes and aligned the redesign to vintage Swiss tourism poster cues.
+- Removed the decorative top strip and canton badge to let the scene itself carry destination identity.
+- Shifted stamp visuals away from geometric symbols to layered scenic mini-posters with richer color and travel-place context.
+- Added explicit app versioning in the footer so each release is visible in production.
+
+**Next:**
+- Curate per-destination manual overrides for iconic outliers (e.g., Matterhorn/Zermatt profile, lake-town skyline signatures).
+```
+
+---
+
 ## V100 — commit `8bd4bb8` — 2026-02-21
 
 **Theme:** Vintage Stamp Rework + Admin Stamp Gallery
