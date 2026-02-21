@@ -9,14 +9,71 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
-## V91 — commit `[PENDING]` — 2026-02-21
+## V92 — commit `2f25ef7` — 2026-02-21
+
+**Theme:** Timeline Visuals + Header Polish + Debug Panel
+
+### 1. V88 Release Changelog — append after V91 entry
+
+```
+### V92 (2f25ef7)
+Theme: Timeline Visuals + Header Polish + Debug Panel
+
+Changes:
+- Timeline: added red vertical line representing current time in "Today" mode (page.tsx, globals.css)
+- Timeline: ensured travel preview bar starts exactly at the current time (page.tsx)
+- Header: resized origin city selector to 8h/11px font, matching other UI chips (page.tsx)
+- Footer: refactored location, demo toggle, and API info into a collapsible "Debug & Settings" panel (page.tsx)
+- Footer: cleaned up bottom area with a simplified attribution line (page.tsx)
+
+Files: src/app/page.tsx, src/app/globals.css
+Validation: npm run build passed; Verified timeline logic and UI responsiveness
+Rollback: git revert 2f25ef7
+Agent: Antigravity (Google DeepMind)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V92 | 2026-02-21 | Antigravity session
+- Timeline: "Today" mode now includes a real-time red line marker
+- Header: city selector box shrunk to match standard chip sizes
+- Footer: hideable Debug & Settings panel introduced
+- Commit: 2f25ef7
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Morning (Antigravity session)
+
+**Deployed:** V92 (2f25ef7)
+**Status:** Shipped and deployed to Vercel
+
+**What was done:**
+- Introduced a real-time element to the sun timelines: a red marker now shows exactly where you are in the day, helping users visualize how much sun is "left" or when they should leave.
+- Polished the global header by slimming down the city selector. It now feels much more integrated with the overall design system.
+- Organized the footer into a "Debug & Settings" panel. This hides technical info and experimental toggles (like Demo mode) behind a clean, optional interface, keeping the main UI distraction-free.
+
+**Next:**
+- Gather feedback on the new timeline marker
+- Explore further personalization options in the Debug/Settings panel
+```
+
+---
+
+## V91 — commit `16065d1` — 2026-02-21
 
 **Theme:** Origin Picker UX + Result Card Sun Timelines + Admin Cleanup
 
 ### 1. V88 Release Changelog — append after V90 entry
 
 ```
-### V91 ([PENDING])
+### V91 (16065d1)
 Theme: Origin Picker UX + Result Card Sun Timelines + Admin Cleanup
 
 Changes:
@@ -30,7 +87,7 @@ Changes:
 
 Files: src/app/page.tsx, src/app/admin/page.tsx
 Validation: npm run build passed; Visual verification of UI consistency
-Rollback: git revert [PENDING]
+Rollback: git revert 16065d1
 Agent: Antigravity (Google DeepMind)
 ```
 
@@ -43,7 +100,7 @@ V91 | 2026-02-21 | Antigravity session
 - Origin Picker: alphabetized, "Missing city" hint, modernized style
 - Result Cards: unified sun timeline rendering (matching hero card)
 - Admin Panel: simplified filters and pagination, removed sort control
-- Commit: [PENDING]
+- Commit: 16065d1
 ```
 
 ---
@@ -53,7 +110,7 @@ V91 | 2026-02-21 | Antigravity session
 ```
 ## 2026-02-21 — Morning (Antigravity session)
 
-**Deployed:** V91 ([PENDING])
+**Deployed:** V91 (16065d1)
 **Status:** Shipped and deployed to Vercel
 
 **What was done:**

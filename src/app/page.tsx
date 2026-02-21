@@ -363,7 +363,6 @@ function SunTimelineBar({
   const effectiveTravelStartHour = travelStartHour !== undefined && Number.isFinite(travelStartHour)
     ? clamp(travelStartHour, 0, 24)
     : defaultTravelStartHour
-  const travelStartPct = clamp((effectiveTravelStartHour / 24) * 100, 0, 100)
   const travelEndHour = (() => {
     if (travelUntilHour !== undefined && Number.isFinite(travelUntilHour) && travelUntilHour > effectiveTravelStartHour) {
       return clamp(travelUntilHour, effectiveTravelStartHour, 24)
@@ -373,6 +372,7 @@ function SunTimelineBar({
     }
     return effectiveTravelStartHour
   })()
+  const travelStartPct = clamp((effectiveTravelStartHour / 24) * 100, 0, 100)
   const travelWidthPct = clamp(((travelEndHour - effectiveTravelStartHour) / 24) * 100, 0, 100 - travelStartPct)
 
   return (
@@ -450,6 +450,7 @@ function TimelineComparisonBlock({
   destinationSubLabel,
   destinationShowTicks = false,
   inlineSunLabels = false,
+  showNowMarker,
 }: {
   originTimeline: SunTimeline
   destinationTimeline: SunTimeline
@@ -466,6 +467,7 @@ function TimelineComparisonBlock({
   destinationSubLabel?: string
   destinationShowTicks?: boolean
   inlineSunLabels?: boolean
+  showNowMarker?: boolean
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-0.5">
@@ -473,7 +475,7 @@ function TimelineComparisonBlock({
         timeline={originTimeline}
         dayFocus={dayFocus}
         sunWindow={sunWindow}
-        showNowMarker={false}
+        showNowMarker={showNowMarker}
         label={originLabel}
         sunLabel={inlineSunLabels ? undefined : originSunLabel}
         inBarSunLabel={inlineSunLabels ? originSunLabel : undefined}
@@ -483,6 +485,7 @@ function TimelineComparisonBlock({
         timeline={destinationTimeline}
         dayFocus={dayFocus}
         sunWindow={sunWindow}
+        showNowMarker={showNowMarker}
         label={destinationLabel}
         sunLabel={inlineSunLabels ? undefined : destinationSunLabel}
         inBarSunLabel={inlineSunLabels ? destinationSunLabel : undefined}
@@ -590,6 +593,7 @@ export default function Home() {
   const [gpsOrigin, setGpsOrigin] = useState<{ lat: number; lon: number; name: string } | null>(null)
   const [originMode, setOriginMode] = useState<'manual' | 'gps'>('manual')
   const [locating, setLocating] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
 
   const [expandedScoreDetails, setExpandedScoreDetails] = useState<Record<string, boolean>>({})
   const [trainPreviewById, setTrainPreviewById] = useState<Record<string, { loading: boolean; rows: TrainConnectionPreview[]; error?: boolean }>>({})
@@ -1305,7 +1309,7 @@ export default function Home() {
         <div className="max-w-xl mx-auto px-3 h-[62px] grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="min-w-0">
             <div className="relative inline-flex items-center gap-1 min-w-0 max-w-[132px] text-slate-600">
-              <MapPinned className="w-3 h-3 text-slate-400 flex-shrink-0" strokeWidth={1.8} />
+              <MapPinned className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" strokeWidth={1.8} />
               <select
                 ref={originSelectRef}
                 value={selectedCity}
@@ -1313,19 +1317,19 @@ export default function Home() {
                   setSelectedCity(e.target.value)
                   setOriginMode('manual')
                 }}
-                className="w-full pl-8 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-[15px] font-semibold text-slate-900 appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
+                className="h-8 pl-8 pr-8 bg-white border border-slate-200 rounded-full text-[11px] font-medium text-slate-600 appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm cursor-pointer"
               >
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <ChevronDown className="w-4 h-4 text-slate-400" />
+              <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
               </div>
             </div>
             {originMode === 'manual' && (
-              <p className="mt-1.5 px-1 text-[10px] text-slate-400 font-medium">
-                Missing your city? Open a PR on GitHub to add it.
+              <p className="mt-1.5 px-1 text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
+                Missing city? Open a PR
               </p>
             )}
           </div>
@@ -1354,8 +1358,8 @@ export default function Home() {
               </button>
             </div>
           </div>
-        </div>
-      </header>
+        </div >
+      </header >
 
       <main className="max-w-xl mx-auto px-3 pt-3 sm:pt-4 pb-16">
 
@@ -1424,6 +1428,7 @@ export default function Home() {
                 travelUntilHour={heroSunBlockStartHour ?? undefined}
                 destinationShowTicks
                 inlineSunLabels
+                showNowMarker={dayFocus === 'today'}
               />
             </div>
 
@@ -1743,6 +1748,7 @@ export default function Home() {
                             travelUntilHour={dayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
                             destinationShowTicks
                             inlineSunLabels
+                            showNowMarker={dayFocus === 'today'}
                           />
                         </div>
 
@@ -1845,36 +1851,70 @@ export default function Home() {
 
           <p className="mt-2 text-[10px] text-slate-500 inline-flex items-center gap-1.5">
             <span className={`h-1.5 w-1.5 rounded-full ${dataUpdatedText === 'just now' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-            Data: {dataSourceLabel} · Updated {dataUpdatedText}
+            Data: {dataSourceLabel}
           </p>
         </section>
       </main>
 
-      <div className="max-w-xl mx-auto px-4 pb-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[10px] text-slate-500">
-        <button onClick={detectLocation} disabled={locating} className="hover:text-amber-600 transition-colors inline-flex items-center gap-1">
-          <LocateFixed className="w-3 h-3" strokeWidth={1.8} />
-          {locating ? 'Locating...' : 'Use my location'}
-        </button>
-        {originMode === 'gps' && (
-          <>
-            <span className="text-slate-300">·</span>
-            <button onClick={() => setOriginMode('manual')} className="hover:text-amber-600 transition-colors">
-              Back to city
+      <footer className="mt-4 pb-12 border-t border-slate-100">
+        <div className="max-w-xl mx-auto px-4 py-6">
+          <div className="flex flex-col items-center gap-4">
+            <button
+              onClick={() => setShowDebug(v => !v)}
+              className="inline-flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-[0.15em] transition-colors"
+            >
+              <SlidersHorizontal className="w-2.5 h-2.5" />
+              {showDebug ? 'Hide Debug' : 'Debug & Settings'}
             </button>
-          </>
-        )}
-        <span className="text-slate-300">·</span>
-        <button
-          onClick={() => { setDemo(v => !v) }}
-          className={`live-toggle scale-[0.7] origin-center ${demo ? 'is-demo' : 'is-live'}`}
-          aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
-        >
-          <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
-          <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
-          <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
-        </button>
-      </div>
 
-    </div >
+            {showDebug && (
+              <div className="w-full space-y-5 py-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[10px] text-slate-500 font-medium">
+                  <button onClick={detectLocation} disabled={locating} className="hover:text-amber-600 transition-colors inline-flex items-center gap-1.5">
+                    <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    {locating ? 'Locating...' : 'Use my location'}
+                  </button>
+                  {originMode === 'gps' && (
+                    <button onClick={() => setOriginMode('manual')} className="px-2 py-1 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors">
+                      Reset to Basel
+                    </button>
+                  )}
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-400 uppercase tracking-wider text-[9px]">Model</span>
+                    <button
+                      onClick={() => { setDemo(v => !v) }}
+                      className={`live-toggle scale-[0.8] origin-center ${demo ? 'is-demo' : 'is-live'}`}
+                      aria-label={`Switch to ${demo ? 'live' : 'demo'} mode`}
+                    >
+                      <span className={`live-toggle-label ${demo ? 'active' : ''}`}>Demo</span>
+                      <span className={`live-toggle-label ${!demo ? 'active' : ''}`}>Live</span>
+                      <span className={`live-toggle-thumb ${demo ? '' : 'on'}`} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 p-3 space-y-2 border border-slate-100">
+                  <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">System Status</p>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
+                    <div className="space-y-1">
+                      <p>Source: <span className="text-slate-700">{dataSourceLabel}</span></p>
+                      <p>Updated: <span className="text-slate-700">{dataUpdatedText}</span></p>
+                    </div>
+                    <div className="space-y-1">
+                      <p>ID: <span className="text-slate-700 font-mono">{data?._meta?.request_id?.slice(0, 8) || 'none'}</span></p>
+                      <p>Tier: <span className="text-slate-700">{resultTier || 'none'}</span></p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-400 mt-2">
+              Built with love and AI in Basel · <a href="https://fomosun.com" className="hover:text-slate-600 decoration-slate-200 underline underline-offset-4">fomosun.com</a>
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }
