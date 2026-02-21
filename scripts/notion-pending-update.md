@@ -9,6 +9,58 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V102 — commit `a5aaaa8` — 2026-02-21
+
+**Theme:** Public Semver Display (1.0.1)
+
+### 1. V88 Release Changelog — append after V101 entry
+
+```
+### V102 (a5aaaa8)
+Theme: Public Semver Display (1.0.1)
+
+Changes:
+- Footer: switched user-facing release label from internal `v101` to semantic version `1.0.1` per Notion roadmap strategy.
+- Internal release tracking remains commit-style in engineering logs; public surfaces now follow semver.
+
+Files: src/lib/release.ts
+Validation: npm run build passed; local smoke check confirmed footer shows `1.0.1`.
+Rollback: git revert a5aaaa8
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V102 | 2026-02-21 | Codex session
+- Updated public footer release display to semantic version `1.0.1`
+- Aligned with Notion “Versioning after v100” strategy
+- Commit: a5aaaa8
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Night (Codex session)
+
+**Deployed:** V102 (a5aaaa8)
+**Status:** Shipped and validated
+
+**What was done:**
+- Applied Notion versioning strategy in production by switching user-facing version display to `1.0.1`.
+- Kept internal v-style release sequencing for agent/dev coordination.
+- Confirmed footer output after build/start smoke check.
+
+**Next:**
+- Continue publishing public release notes using semver language while retaining internal V-number traceability.
+```
+
+---
+
 ## V101 — commit `d530c34` — 2026-02-21
 
 **Theme:** Stamp Redesign 2.0 + Footer Versioning
