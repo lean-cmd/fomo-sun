@@ -255,6 +255,31 @@ const STAMP_REGION_ALIAS: Record<string, string> = {
   'GRISONS': 'GRAUBUENDEN',
 }
 
+const MAJOR_CABLE_DESTINATION_IDS = new Set([
+  'pilatus',
+  'rigi',
+  'titlis',
+  'niesen',
+  'stockhorn',
+  'fronalpstock',
+  'harder-kulm',
+  'stoos-fronalpstock',
+  'weissenstein',
+  'muottas-muragl',
+  'st-moritz',
+  'moleson',
+  'chasseral',
+  'rochers-de-naye',
+  'pizol',
+  'flumserberg',
+  'santis',
+  'saentis',
+  'schauinsland',
+  'feldberg',
+])
+
+const MAJOR_CABLE_NAME_HINT = /\bpilatus|rigi|titlis|jungfrau|harder kulm|niesen|stockhorn|fronalpstock|stoos|weissenstein|muottas muragl|st\.?\s*moritz|chasseral|moleson|mole?son|rochers-de-naye|saentis|santis|feldberg|schauinsland\b/i
+
 const SWISS_CANTON_HINTS: Array<{ pattern: RegExp; code: string }> = [
   { pattern: /\bAARGAU\b/i, code: 'AG' },
   { pattern: /\bBASEL\b|\bBASEL UPLANDS\b/i, code: 'BL' },
@@ -399,7 +424,12 @@ function detectFeatures(type: StampType, text: string, altitude = 0, destination
   const river = /\briver|riverside|rhine|rhein|aare|limmat|rhone|rhône|fluss|fleuve\b/i.test(text)
   const lake = /\blake|see|lac|lago|shore|waterfront|harbor|harbour\b/i.test(text) || type === 'lake' || river
   const rail = /\btrain|rail|bahn|sbb|tram|cogwheel|rack railway|glacier express\b/i.test(text)
-  const cableCar = /\bcable car|gondola|funicular|lift|seilbahn|telepherique|funivia|aerial\b/i.test(text)
+  const cableCandidate = /\bcable car|gondola|funicular|lift|seilbahn|telepherique|funivia|aerial\b/i.test(text)
+  const majorCable = cableCandidate && (
+    MAJOR_CABLE_DESTINATION_IDS.has(id)
+    || MAJOR_CABLE_NAME_HINT.test(cityName)
+    || MAJOR_CABLE_NAME_HINT.test(text)
+  )
   const townLike = /\btown|city|old town|village|castle|burg|chateau|skyline|arcade\b/i.test(text) || type === 'town'
   const thermal = /\bthermal|spa|bath|wellness|terme\b/i.test(text) || type === 'thermal'
   const forest = /\bforest|wald|foret|pine|fir|wood\b/i.test(text)
@@ -418,13 +448,13 @@ function detectFeatures(type: StampType, text: string, altitude = 0, destination
 
   return {
     lake,
-    rail: rail || cableCar,
+    rail,
     town: townLike || cityVariant !== 'none',
     thermal,
     forest,
     snow,
     alpine,
-    cableCar,
+    cableCar: majorCable,
     river,
     cityVariant,
     stMoritz,
@@ -506,16 +536,57 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
   const railStartX = 8
   const railEndX = 92
   const railSlope = -2 / (railEndX - railStartX)
+  const yOnRidge = (points: Array<{ x: number; y: number }>, x: number) => {
+    for (let i = 1; i < points.length; i += 1) {
+      const left = points[i - 1]
+      const right = points[i]
+      if (x >= left.x && x <= right.x) {
+        const t = (x - left.x) / Math.max(0.001, right.x - left.x)
+        return left.y + (right.y - left.y) * t
+      }
+    }
+    return points[points.length - 1]?.y ?? 74
+  }
 
-  const cableX1 = 12
-  const cableY1 = features.alpine ? 35 : 38
-  const cableX2 = 88
-  const cableY2 = features.alpine ? 22 : 27
-  const cableYAt = (x: number) => cableY1 + ((x - cableX1) / (cableX2 - cableX1)) * (cableY2 - cableY1)
+  const cableX1 = features.alpine ? 22 : 26
+  const cableX2 = features.alpine ? 67 : 62
+  const cableY1 = yOnRidge(nearPoints, cableX1) + 1.8
+  const cableY2 = yOnRidge(midPoints, cableX2) - 1.5
+  const cableYAt = (x: number) => cableY1 + ((x - cableX1) / Math.max(0.001, (cableX2 - cableX1))) * (cableY2 - cableY1)
+  const cableSupportA = cableX1 + 4
+  const cableSupportB = cableX2 - 5
 
   const skylineBase = mixHex(palette.ridgeNear, '#0F172A', 0.22)
   const skylineAccent = mixHex(skylineBase, '#E2E8F0', 0.16)
   const riverColor = mixHex(palette.water, '#A3BCD3', 0.1)
+
+  if (features.stMoritz) {
+    const slopeY = horizon + 24
+    return (
+      <g>
+        <circle cx={sunX} cy={sunY} r="11.2" fill={palette.sun} opacity="0.9" />
+        <path d={farRidge} fill={palette.ridgeFar} />
+        <path d={midRidge} fill={palette.ridgeMid} />
+        <path d={nearRidge} fill={palette.ridgeNear} />
+        <path d={`M6 ${slopeY} C 24 ${slopeY - 4}, 46 ${slopeY + 6}, 94 ${slopeY + 1} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.water, 0.12)} opacity="0.96" />
+        <path d={`M6 ${slopeY + 4} C 22 ${slopeY + 2}, 43 ${slopeY + 8}, 94 ${slopeY + 5} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.meadow, 0.18)} opacity="0.86" />
+        <g opacity="0.98">
+          <circle cx="57" cy={horizon + 12} r="5.3" fill="#EEC9AA" />
+          <rect x="50.7" y={horizon + 9.6} width="12.6" height="3.1" rx="1.55" fill={mixHex(palette.water, '#0F172A', 0.26)} />
+          <path d={`M49.8 ${horizon + 22.2} C 53.2 ${horizon + 15.6}, 61.6 ${horizon + 15.4}, 66.7 ${horizon + 22.3} L 63.6 ${horizon + 30.2} L 52.1 ${horizon + 30.2} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.14)} />
+          <path d={`M52.6 ${horizon + 30.1} L49.4 ${horizon + 36.3} L53.6 ${horizon + 36.8} L57.2 ${horizon + 30.2} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M62.2 ${horizon + 30.1} L59.3 ${horizon + 36.6} L63.5 ${horizon + 37} L66.8 ${horizon + 30.2} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M45.8 ${horizon + 36.3} L71.6 ${horizon + 45}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.2)} strokeWidth="1.35" strokeLinecap="round" />
+          <path d={`M44.3 ${horizon + 38.2} L70 ${horizon + 47}`} stroke={mixHex(palette.frame, '#FFFFFF', 0.22)} strokeWidth="1.25" strokeLinecap="round" />
+          <path d={`M52.2 ${horizon + 25.8} L48.7 ${horizon + 35.1}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="0.95" strokeLinecap="round" />
+          <path d={`M66.5 ${horizon + 25.5} L70.1 ${horizon + 33.7}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="0.95" strokeLinecap="round" />
+          <circle cx="72.4" cy={horizon + 39.6} r="0.95" fill={mixHex(palette.snow, '#FFFFFF', 0.12)} />
+          <circle cx="74.3" cy={horizon + 41.1} r="1.05" fill={mixHex(palette.snow, '#FFFFFF', 0.15)} />
+          <circle cx="76.4" cy={horizon + 42.7} r="0.9" fill={mixHex(palette.snow, '#FFFFFF', 0.12)} />
+        </g>
+      </g>
+    )
+  }
 
   return (
     <g>
@@ -645,34 +716,24 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
       {features.cableCar && (
         <g opacity="0.94">
           <path d={`M${cableX1} ${cableY1} L${cableX2} ${cableY2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.3)} strokeWidth="1.1" strokeLinecap="round" />
-          <path d={`M${cableX1} ${cableY1} L${cableX1} ${cableY1 + 10}`} stroke={mixHex(palette.frame, '#0F172A', 0.15)} strokeWidth="1" />
-          <path d={`M${cableX2} ${cableY2} L${cableX2} ${cableY2 + 9}`} stroke={mixHex(palette.frame, '#0F172A', 0.15)} strokeWidth="1" />
-          {[42, 63].map((x, idx) => {
+          <path d={`M${cableSupportA.toFixed(1)} ${(cableYAt(cableSupportA) - 0.1).toFixed(1)} L${cableSupportA.toFixed(1)} ${(yOnRidge(nearPoints, cableSupportA) + 0.9).toFixed(1)}`} stroke={mixHex(palette.frame, '#0F172A', 0.16)} strokeWidth="1.05" />
+          <path d={`M${cableSupportB.toFixed(1)} ${(cableYAt(cableSupportB) - 0.1).toFixed(1)} L${cableSupportB.toFixed(1)} ${(yOnRidge(midPoints, cableSupportB) + 0.8).toFixed(1)}`} stroke={mixHex(palette.frame, '#0F172A', 0.16)} strokeWidth="1.05" />
+          {[cableX1 + 15, cableX2 - 10].map((x, idx) => {
             const y = cableYAt(x)
             return (
               <g key={`cabin-${idx}`}>
-                <path d={`M${x} ${y.toFixed(1)} L${x} ${(y + 3.6).toFixed(1)}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.35)} strokeWidth="0.8" />
+                <path d={`M${x.toFixed(1)} ${y.toFixed(1)} L${x.toFixed(1)} ${(y + 3.3).toFixed(1)}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.35)} strokeWidth="0.82" />
                 <rect
                   x={(x - 2.6).toFixed(1)}
-                  y={(y + 3.4).toFixed(1)}
+                  y={(y + 3.1).toFixed(1)}
                   width="5.2"
-                  height="3.7"
+                  height="3.5"
                   rx="0.8"
                   fill={mixHex(palette.roof, '#E2E8F0', 0.18)}
                 />
               </g>
             )
           })}
-        </g>
-      )}
-
-      {features.stMoritz && (
-        <g opacity="0.96">
-          <circle cx="72" cy={horizon + 11} r="3.9" fill="#EBC0A1" />
-          <rect x="68.7" y={horizon + 10.2} width="6.8" height="2.2" rx="1.1" fill={mixHex(palette.water, '#0F172A', 0.3)} />
-          <path d={`M67 ${horizon + 18.2} C 69 ${horizon + 15.4}, 75 ${horizon + 15.3}, 78 ${horizon + 18.2} L 75.5 ${horizon + 24.5} L 69.5 ${horizon + 24.5} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.12)} />
-          <path d={`M66.5 ${horizon + 25} L79.4 ${horizon + 31.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.2)} strokeWidth="1.1" strokeLinecap="round" />
-          <path d={`M65.2 ${horizon + 26.2} L78.2 ${horizon + 32.2}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.24)} strokeWidth="1.05" strokeLinecap="round" />
         </g>
       )}
 

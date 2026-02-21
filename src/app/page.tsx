@@ -115,6 +115,13 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+function toSlug(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
 function zurichClockParts(date = new Date()) {
   const parts = ZURICH_CLOCK_FORMATTER.formatToParts(date)
   const lookup: Record<string, string> = {}
@@ -1064,12 +1071,146 @@ export default function Home() {
   const resultTier = data?._meta?.result_tier
   const heroDayFocus: DayFocus = dayFocus
   const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
-  const heroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
   const heroOriginSunMin = dayFocus === 'tomorrow' ? originTomorrowMin : originSunMin
+  const defaultHeroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
+  const isBaselOrigin = /\bbasel\b/i.test(origin.name)
+  const hasTenPctBetterOption = resultRows.some((escape) => {
+    const candidateSunMin = escapeSunMinutes(escape)
+    if (heroOriginSunMin <= 0) return candidateSunMin > 0
+    return candidateSunMin >= heroOriginSunMin * 1.1
+  })
+  const shouldStayHomeHero = Boolean(data) && (resultRows.length === 0 || !hasTenPctBetterOption)
+  const stayHomeHero = useMemo<EscapeCard | null>(() => {
+    if (!shouldStayHomeHero || !data) return null
+    const sunMin = heroOriginSunMin
+    const fallbackScore = clamp(data.origin_conditions.sun_score || 0.55, 0, 1)
+    const base = defaultHeroEscape
+    const fallbackBreakdown = {
+      net_sun_pct: Math.round(fallbackScore * 100),
+      sunshine_pct: Math.round(fallbackScore * 100),
+      cloud_pct: Math.round((1 - fallbackScore) * 100),
+      altitude_bonus_pct: 0,
+      gain_pct: 0,
+    }
+    if (base) {
+      return {
+        ...base,
+        rank: 1,
+        destination: {
+          ...base.destination,
+          id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(origin.name || 'home')}`,
+          name: origin.name,
+          region: isBaselOrigin ? 'Basel-Stadt' : 'Home Base',
+          country: 'CH',
+          lat: origin.lat,
+          lon: origin.lon,
+          altitude_m: isBaselOrigin ? 260 : Math.max(200, Math.round(base.destination.altitude_m * 0.75)),
+          types: ['town', 'lake'],
+          plan_template: 'Stay local | Walk in the sun | Terrace break',
+          maps_name: `${origin.name}, Switzerland`,
+          sbb_name: origin.name,
+        },
+        sun_score: {
+          ...base.sun_score,
+          score: fallbackScore,
+          sunshine_forecast_min: sunMin,
+          altitude_bonus: 0,
+          score_breakdown: {
+            ...(base.sun_score.score_breakdown || fallbackBreakdown),
+            altitude_bonus_pct: 0,
+            gain_pct: 0,
+          },
+        },
+        conditions: `${sunMin} min sunshine | no nearby option offers 10% more sun`,
+        net_sun_min: sunMin,
+        optimal_departure: undefined,
+        tier_eligibility: 'best_available',
+        weather_now: {
+          ...base.weather_now,
+          summary: data.origin_conditions.description || base.weather_now.summary,
+        },
+        tourism: {
+          ...base.tourism,
+          description_short: `Stay in ${origin.name}`,
+          description_long: `No destination in range is at least 10% sunnier than ${origin.name} right now.`,
+          highlights: [
+            `${origin.name} is already one of the sunniest options`,
+            'Save travel time and keep full daylight',
+            'Great day for a local riverside or city walk',
+          ],
+          tags: ['town', 'local', 'sun'],
+        },
+        travel: {},
+        plan: [
+          `Stay in ${origin.name}`,
+          'Use the sunniest local window',
+          'Skip travel and keep net sun',
+        ],
+        links: {},
+        sun_timeline: data.origin_timeline,
+        tomorrow_sun_hours: data.tomorrow_sun_hours,
+      }
+    }
+    return {
+      rank: 1,
+      destination: {
+        id: isBaselOrigin ? 'basel' : `stay-home-${toSlug(origin.name || 'home')}`,
+        name: origin.name,
+        region: isBaselOrigin ? 'Basel-Stadt' : 'Home Base',
+        country: 'CH',
+        lat: origin.lat,
+        lon: origin.lon,
+        altitude_m: isBaselOrigin ? 260 : 420,
+        types: ['town', 'lake'],
+        plan_template: 'Stay local | Walk in the sun | Terrace break',
+        maps_name: `${origin.name}, Switzerland`,
+        sbb_name: origin.name,
+      },
+      sun_score: {
+        score: fallbackScore,
+        confidence: 'medium',
+        sunshine_forecast_min: sunMin,
+        low_cloud_cover_pct: 35,
+        altitude_bonus: 0,
+        data_freshness: 'live',
+        score_breakdown: fallbackBreakdown,
+      },
+      conditions: `${sunMin} min sunshine | no nearby option offers 10% more sun`,
+      net_sun_min: sunMin,
+      tier_eligibility: 'best_available',
+      weather_now: {
+        summary: data.origin_conditions.description || 'Local sun window available',
+        temp_c: 0,
+      },
+      tourism: {
+        description_short: `Stay in ${origin.name}`,
+        description_long: `No destination in range is at least 10% sunnier than ${origin.name} right now.`,
+        highlights: ['Stay local', 'Keep full daylight', 'No net-sun gain from travel'],
+        tags: ['town', 'local', 'sun'],
+        hero_image: '',
+        official_url: '',
+        pois_nearby: [],
+        source: 'fallback',
+      },
+      travel: {},
+      plan: [
+        `Stay in ${origin.name}`,
+        'Use the sunniest local window',
+        'Skip travel and keep net sun',
+      ],
+      links: {},
+      sun_timeline: data.origin_timeline,
+      tomorrow_sun_hours: data.tomorrow_sun_hours,
+    }
+  }, [data, defaultHeroEscape, heroOriginSunMin, isBaselOrigin, origin.lat, origin.lon, origin.name, shouldStayHomeHero])
+  const isStayHomeHero = shouldStayHomeHero && Boolean(stayHomeHero)
+  const heroEscape = isStayHomeHero ? stayHomeHero : defaultHeroEscape
 
-  const topBestTravel = heroEscape ? getBestTravel(heroEscape) : null
+  const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
   const topSunMin = heroEscape
-    ? (dayFocus === 'tomorrow' ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : heroEscape.sun_score.sunshine_forecast_min)
+    ? (isStayHomeHero
+      ? heroOriginSunMin
+      : (dayFocus === 'tomorrow' ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : heroEscape.sun_score.sunshine_forecast_min))
     : 0
   const resolvedTopSunMin = topSunMin
   const sunGainMin = Math.max(0, resolvedTopSunMin - heroOriginSunMin)
@@ -1096,6 +1237,17 @@ export default function Home() {
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
+    if (isStayHomeHero) {
+      const dayLabel = heroDayFocus === 'today' ? 'today' : 'tomorrow'
+      const city = compactLabel(origin.name, 14)
+      const templates = [
+        `STAY HOME. ${city} is already one of the sunniest options ${dayLabel}.`,
+        `No destination is at least 10% sunnier than ${city} ${dayLabel}.`,
+        `${city} wins on net sun ${dayLabel}. Skip travel and keep the daylight.`,
+      ]
+      const idx = Math.abs((heroFlowTick + city.length) % templates.length)
+      return templates[idx] || templates[0]
+    }
     const travel = topBestTravel
       ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}`
       : 'a short trip'
@@ -1115,14 +1267,14 @@ export default function Home() {
       ]
     const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [heroEscape, heroDayFocus, origin.name, topBestTravel, sunGainMin, heroFlowTick])
+  }, [heroEscape, heroDayFocus, heroFlowTick, isStayHomeHero, origin.name, sunGainMin, topBestTravel])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
   const jumpToBestDetails = () => {
-    if (heroEscape) setOpenCardId(heroEscape.destination.id)
+    if (heroEscape && !isStayHomeHero) setOpenCardId(heroEscape.destination.id)
     requestAnimationFrame(() => {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
@@ -1378,10 +1530,10 @@ export default function Home() {
           >
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
-                name={heroEscape.destination.name}
-                destinationId={heroEscape.destination.id}
+                name={isStayHomeHero ? origin.name : heroEscape.destination.name}
+                destinationId={isStayHomeHero && isBaselOrigin ? 'basel' : heroEscape.destination.id}
                 altitude={heroEscape.destination.altitude_m}
-                region={heroEscape.destination.region}
+                region={isStayHomeHero && isBaselOrigin ? 'Basel-Stadt' : heroEscape.destination.region}
                 type={stampTypeFromDestination(heroEscape.destination)}
                 country={heroEscape.destination.country}
                 types={heroEscape.destination.types}
@@ -1396,24 +1548,30 @@ export default function Home() {
             <div className="flex items-start justify-between gap-3 pr-[88px] sm:pr-[96px]">
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">
-                  {heroDayFocus === 'today' ? 'Best escape today' : 'Best escape tomorrow'}
+                  {isStayHomeHero
+                    ? (heroDayFocus === 'today' ? 'Best move today' : 'Best move tomorrow')
+                    : (heroDayFocus === 'today' ? 'Best escape today' : 'Best escape tomorrow')}
                 </p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <h1 className="text-[19px] leading-tight font-semibold text-slate-900 truncate" style={{ fontFamily: 'Sora, sans-serif' }}>
-                    {heroEscape.destination.name}
+                    {isStayHomeHero ? 'STAY HOME' : heroEscape.destination.name}
                   </h1>
-                  <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
-                    {heroEscape.destination.altitude_m}m
-                  </span>
+                  {!isStayHomeHero && (
+                    <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                      {heroEscape.destination.altitude_m}m
+                    </span>
+                  )}
                   <span className="text-[11px] text-slate-500">
-                    {heroEscape.destination.region} · {FLAG[heroEscape.destination.country]}
+                    {isStayHomeHero
+                      ? `${origin.name} · HOME`
+                      : `${heroEscape.destination.region} · ${FLAG[heroEscape.destination.country]}`}
                   </span>
                 </div>
 
                 <p className="mt-1 text-[12px] text-slate-600">
                   {heroInfoLine}
                 </p>
-                {heroDayFocus === 'tomorrow' && heroEscape.optimal_departure && (
+                {heroDayFocus === 'tomorrow' && heroEscape.optimal_departure && !isStayHomeHero && (
                   <p className="mt-1 text-[11px] text-slate-500">
                     Leave by <span className="font-semibold text-slate-700">{heroEscape.optimal_departure}</span> to catch full sun.
                   </p>
@@ -1428,13 +1586,13 @@ export default function Home() {
                 dayFocus={heroDayFocus}
                 sunWindow={data?.sun_window}
                 originLabel={origin.name}
-                destinationLabel={heroEscape.destination.name}
+                destinationLabel={isStayHomeHero ? 'Stay Home' : heroEscape.destination.name}
                 originSunLabel={formatSunHours(heroOriginSunMin)}
                 destinationSunLabel={formatSunHours(resolvedTopSunMin)}
                 travelMin={topBestTravel?.min}
                 travelMode={topBestTravel?.mode}
-                travelStartHour={heroDayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
-                travelUntilHour={heroDayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
+                travelStartHour={heroDayFocus === 'tomorrow' && !isStayHomeHero ? (heroLeaveByHour ?? undefined) : undefined}
+                travelUntilHour={heroDayFocus === 'tomorrow' && !isStayHomeHero ? (heroSunBlockStartHour ?? undefined) : undefined}
                 destinationShowTicks
                 inlineSunLabels
                 showNowMarker={dayFocus === 'today'}
@@ -1447,17 +1605,19 @@ export default function Home() {
                 onClick={jumpToBestDetails}
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
-                Escape now ↓
+                {isStayHomeHero ? 'See alternatives ↓' : 'Escape now ↓'}
               </button>
-              <a
-                href={buildWhatsAppHref(heroEscape, heroDayFocus)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
-              >
-                <WhatsAppIcon className="w-3.5 h-3.5" />
-                Share ↗
-              </a>
+              {!isStayHomeHero && (
+                <a
+                  href={buildWhatsAppHref(heroEscape, heroDayFocus)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
+                >
+                  <WhatsAppIcon className="w-3.5 h-3.5" />
+                  Share ↗
+                </a>
+              )}
             </div>
           </section>
         )}
