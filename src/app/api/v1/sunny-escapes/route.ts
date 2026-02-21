@@ -1441,7 +1441,8 @@ export async function GET(request: NextRequest) {
       return a.bestTravelMin - b.bestTravelMin
     })
     .slice(0, topLimit)
-  const eligibleRows = withTravel
+  const visibleSunRows = withTravel.filter(r => sunshineForSurfaceMin(r) > 0)
+  const eligibleRows = adminView ? withTravel : visibleSunRows
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin

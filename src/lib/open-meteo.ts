@@ -360,10 +360,33 @@ export async function getHourlyForecast(
 
   const payload = await fetchOpenMeteoForecast(url, 300, modelForPoint(lat, lon, policy))
 
-  const hours = parseHourly(payload)
+  let hours = parseHourly(payload)
+  let totals = computeSunTotals(hours)
+
+  // Guardrail: if the Swiss model returns all-zero sunshine for both days, retry
+  // once without model pinning before trusting the payload.
+  if (
+    policy !== 'openmeteo'
+    && inSwissModelBounds(lat, lon)
+    && totals.total_sunshine_today_min === 0
+    && totals.total_sunshine_tomorrow_min === 0
+  ) {
+    try {
+      const fallbackPayload = await fetchOpenMeteoJson(url, 300)
+      const fallbackHours = parseHourly(fallbackPayload)
+      const fallbackTotals = computeSunTotals(fallbackHours)
+      if (fallbackTotals.total_sunshine_today_min > 0 || fallbackTotals.total_sunshine_tomorrow_min > 0) {
+        hours = fallbackHours
+        totals = fallbackTotals
+      }
+    } catch {
+      // Keep model payload if fallback lookup fails.
+    }
+  }
+
   const result: LiveHourlyForecastResult = {
     hours,
-    ...computeSunTotals(hours),
+    ...totals,
   }
 
   hourlyCache.set(key, { expires_at: now + HOURLY_TTL_MS, data: result })

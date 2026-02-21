@@ -95,8 +95,8 @@ async function loadStationMeta(): Promise<StationMeta[]> {
   for (const row of rows) {
     const code = firstDefined(row, ['station_abbr', 'station', 'stn', 'Station'])
     const name = firstDefined(row, ['station_fullname', 'station_name', 'name', 'StationName']) || code
-    const lat = parseNum(firstDefined(row, ['lat', 'latitude', 'lat_wgs84', 'station_latitude']))
-    const lon = parseNum(firstDefined(row, ['lon', 'longitude', 'lon_wgs84', 'station_longitude']))
+    const lat = parseNum(firstDefined(row, ['lat', 'latitude', 'lat_wgs84', 'station_latitude', 'station_coordinates_wgs84_lat']))
+    const lon = parseNum(firstDefined(row, ['lon', 'longitude', 'lon_wgs84', 'station_longitude', 'station_coordinates_wgs84_lon']))
     if (!code || !Number.isFinite(lat) || !Number.isFinite(lon)) continue
     stations.push({ code, name, lat, lon })
   }
@@ -116,14 +116,14 @@ async function loadObservations(): Promise<Map<string, StationObs>> {
   const map = new Map<string, StationObs>()
 
   for (const row of rows) {
-    const code = firstDefined(row, ['stn', 'station', 'station_abbr', 'Station'])
+    const code = firstDefined(row, ['stn', 'station', 'station_abbr', 'Station', 'Station/Location'])
     if (!code) continue
 
     const observedAt = firstDefined(row, ['reference_timestamp', 'time', 'timestamp', 'Date'])
     const temp = parseNum(firstDefined(row, ['tre200s0', 'tre200h0', 'temperature_2m']))
     const sunshine10m = parseNum(firstDefined(row, ['sre000z0', 'sre000h0', 'sunshine_duration']))
     const humidity = parseNum(firstDefined(row, ['ure200s0', 'humidity']))
-    const wind = parseNum(firstDefined(row, ['fkl010z0', 'fkl010h0', 'wind_speed_10m']))
+    const wind = parseNum(firstDefined(row, ['fkl010z0', 'fkl010h0', 'fu3010z0', 'fu3010z1', 'wind_speed_10m']))
 
     map.set(code, {
       code,
