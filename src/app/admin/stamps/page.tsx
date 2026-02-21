@@ -130,7 +130,7 @@ export default async function StampGalleryPage({
               Stamp Gallery
             </h1>
             <p className="text-sm text-slate-500 mt-1">
-              Swiss vintage poster language: condensed title typography, limited lithograph palette, destination silhouette, and perforated stamp framing.
+              Swiss vintage poster language: condensed title typography, colorful lithograph palette, scenic landscape layers, and perforated stamp framing.
             </p>
             <p className="text-xs text-slate-500 mt-1">
               Tourism cues are enriched from Discover Swiss when available (fallback: geo.admin.ch or curated catalog).

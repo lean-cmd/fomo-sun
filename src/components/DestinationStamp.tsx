@@ -1,6 +1,13 @@
 type StampType = 'mountain' | 'lake' | 'town' | 'thermal' | 'ski' | 'viewpoint' | 'default'
 type CountryCode = 'CH' | 'DE' | 'FR' | 'IT'
-type StampMotif = 'sunburst' | 'rail' | 'castle' | 'forest' | 'wave' | 'spa'
+type StampFeatures = {
+  lake: boolean
+  rail: boolean
+  town: boolean
+  thermal: boolean
+  forest: boolean
+  snow: boolean
+}
 
 interface StampProps {
   name: string
@@ -16,33 +23,185 @@ interface StampProps {
   className?: string
 }
 
-type StampPalette = {
+type PosterPalette = {
   paper: string
-  paperShade: string
-  ink: string
-  accent: string
-  accentMuted: string
   frame: string
+  skyTop: string
+  skyBottom: string
   sun: string
+  ridgeFar: string
+  ridgeMid: string
+  ridgeNear: string
+  meadow: string
+  water: string
+  rail: string
+  roof: string
+  text: string
+  subtext: string
+  snow: string
 }
 
-const COUNTRY_PALETTES: Record<CountryCode, StampPalette[]> = {
+const COUNTRY_PALETTES: Record<CountryCode, PosterPalette[]> = {
   CH: [
-    { paper: '#F4EBDD', paperShade: '#EBDCC6', ink: '#1F2937', accent: '#B45309', accentMuted: '#8A3B12', frame: '#7A5A40', sun: '#D8A047' },
-    { paper: '#F2EDE2', paperShade: '#E5DCC9', ink: '#233447', accent: '#A33B2C', accentMuted: '#7F2D23', frame: '#71563F', sun: '#DAAE62' },
-    { paper: '#F3EEE5', paperShade: '#E9DFCE', ink: '#22313F', accent: '#0F766E', accentMuted: '#155E75', frame: '#69523D', sun: '#D0A45D' },
+    {
+      paper: '#F4EBDD',
+      frame: '#7A5A40',
+      skyTop: '#6A8CB4',
+      skyBottom: '#A8C2D8',
+      sun: '#E4B15A',
+      ridgeFar: '#7B8D92',
+      ridgeMid: '#5C6F7A',
+      ridgeNear: '#3F5563',
+      meadow: '#7A966D',
+      water: '#4C7A98',
+      rail: '#60493E',
+      roof: '#93473A',
+      text: '#1F2937',
+      subtext: '#475569',
+      snow: '#F7F7F5',
+    },
+    {
+      paper: '#F3EBDD',
+      frame: '#6E5340',
+      skyTop: '#577BA0',
+      skyBottom: '#9FC2DB',
+      sun: '#E1A354',
+      ridgeFar: '#7D8F96',
+      ridgeMid: '#597183',
+      ridgeNear: '#2F475C',
+      meadow: '#6F8F63',
+      water: '#3E6E8F',
+      rail: '#5A463B',
+      roof: '#9C4D33',
+      text: '#1E293B',
+      subtext: '#4B5563',
+      snow: '#F5F7FA',
+    },
+    {
+      paper: '#F2E9DB',
+      frame: '#6D553F',
+      skyTop: '#5C7D9F',
+      skyBottom: '#A2C6DE',
+      sun: '#DBA05A',
+      ridgeFar: '#7E8E94',
+      ridgeMid: '#5C6A78',
+      ridgeNear: '#364D60',
+      meadow: '#6C8D6C',
+      water: '#416F8C',
+      rail: '#56443A',
+      roof: '#8B4335',
+      text: '#1F2A37',
+      subtext: '#475569',
+      snow: '#F6F8FA',
+    },
   ],
   DE: [
-    { paper: '#F2EADF', paperShade: '#E6D8C4', ink: '#1E293B', accent: '#B45309', accentMuted: '#7C2D12', frame: '#6A4A34', sun: '#D4A15A' },
-    { paper: '#EFE8DD', paperShade: '#E2D4C1', ink: '#1F2937', accent: '#475569', accentMuted: '#334155', frame: '#66503C', sun: '#CFA061' },
+    {
+      paper: '#F2EADF',
+      frame: '#6A4A34',
+      skyTop: '#5D7A9E',
+      skyBottom: '#A7BFD6',
+      sun: '#D49D56',
+      ridgeFar: '#7A8891',
+      ridgeMid: '#576873',
+      ridgeNear: '#334654',
+      meadow: '#76885E',
+      water: '#456B87',
+      rail: '#514036',
+      roof: '#8D3F33',
+      text: '#1F2937',
+      subtext: '#4B5563',
+      snow: '#F5F6F8',
+    },
+    {
+      paper: '#EEE6D8',
+      frame: '#66503C',
+      skyTop: '#4F7098',
+      skyBottom: '#9BB8D1',
+      sun: '#D9A35D',
+      ridgeFar: '#75858D',
+      ridgeMid: '#566874',
+      ridgeNear: '#314552',
+      meadow: '#6B8659',
+      water: '#3E6785',
+      rail: '#4F3D33',
+      roof: '#7F3A2F',
+      text: '#1F2937',
+      subtext: '#52525B',
+      snow: '#F6F7F8',
+    },
   ],
   FR: [
-    { paper: '#F3ECE2', paperShade: '#E8DBCA', ink: '#22303C', accent: '#9A3412', accentMuted: '#7C2D12', frame: '#6C513B', sun: '#D3A55F' },
-    { paper: '#F1EBE0', paperShade: '#E6D9C6', ink: '#1F3348', accent: '#1D4E89', accentMuted: '#1E3A8A', frame: '#6F5640', sun: '#D9AF68' },
+    {
+      paper: '#F3ECE2',
+      frame: '#6C513B',
+      skyTop: '#5D78A4',
+      skyBottom: '#A8C0D8',
+      sun: '#D8A963',
+      ridgeFar: '#7F8B8E',
+      ridgeMid: '#5D6A74',
+      ridgeNear: '#364B5C',
+      meadow: '#789068',
+      water: '#497091',
+      rail: '#5A463A',
+      roof: '#9B493A',
+      text: '#22303C',
+      subtext: '#4B5563',
+      snow: '#F7F8FB',
+    },
+    {
+      paper: '#F0E8DD',
+      frame: '#6F5640',
+      skyTop: '#52739C',
+      skyBottom: '#9DBBD6',
+      sun: '#DBA95E',
+      ridgeFar: '#7C8C92',
+      ridgeMid: '#576D7A',
+      ridgeNear: '#334859',
+      meadow: '#6F8B64',
+      water: '#406C8C',
+      rail: '#574336',
+      roof: '#93443A',
+      text: '#1F3348',
+      subtext: '#52525B',
+      snow: '#F7F7FA',
+    },
   ],
   IT: [
-    { paper: '#F4ECDF', paperShade: '#E9DDC9', ink: '#1F2A37', accent: '#0F766E', accentMuted: '#14532D', frame: '#6A4F39', sun: '#D9A960' },
-    { paper: '#F2EBDD', paperShade: '#E7D8C3', ink: '#2A3442', accent: '#9F1239', accentMuted: '#7A1130', frame: '#705740', sun: '#D3A053' },
+    {
+      paper: '#F4ECDF',
+      frame: '#6A4F39',
+      skyTop: '#5D7DA0',
+      skyBottom: '#A9C8DF',
+      sun: '#DFAD5A',
+      ridgeFar: '#7C888E',
+      ridgeMid: '#5A6B75',
+      ridgeNear: '#344A57',
+      meadow: '#789461',
+      water: '#467290',
+      rail: '#584538',
+      roof: '#A34B39',
+      text: '#1F2A37',
+      subtext: '#4B5563',
+      snow: '#F7F8FB',
+    },
+    {
+      paper: '#F2EBDD',
+      frame: '#705740',
+      skyTop: '#5879A3',
+      skyBottom: '#A1C4DE',
+      sun: '#DDA555',
+      ridgeFar: '#7A888D',
+      ridgeMid: '#5A6870',
+      ridgeNear: '#314554',
+      meadow: '#718E5F',
+      water: '#3F6F8D',
+      rail: '#584436',
+      roof: '#A14136',
+      text: '#2A3442',
+      subtext: '#52525B',
+      snow: '#F7F9FA',
+    },
   ],
 }
 
@@ -135,6 +294,38 @@ function seeded(seed: number, salt = 0) {
   return (mixed % 1000) / 1000
 }
 
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n))
+}
+
+function hexToRgb(hex: string) {
+  const m = hex.replace('#', '')
+  const safe = m.length === 3
+    ? m.split('').map((ch) => `${ch}${ch}`).join('')
+    : m
+  const int = Number.parseInt(safe, 16)
+  const r = (int >> 16) & 255
+  const g = (int >> 8) & 255
+  const b = int & 255
+  return { r, g, b }
+}
+
+function rgbToHex(r: number, g: number, b: number) {
+  const to = (n: number) => clamp(Math.round(n), 0, 255).toString(16).padStart(2, '0')
+  return `#${to(r)}${to(g)}${to(b)}`
+}
+
+function mixHex(a: string, b: string, t: number) {
+  const aa = hexToRgb(a)
+  const bb = hexToRgb(b)
+  const p = clamp(t, 0, 1)
+  return rgbToHex(
+    aa.r + (bb.r - aa.r) * p,
+    aa.g + (bb.g - aa.g) * p,
+    aa.b + (bb.b - aa.b) * p
+  )
+}
+
 function stampNameStyle(name: string) {
   const len = name.length
   if (len >= 18) return { size: 12.6, spacing: 0.85 }
@@ -189,135 +380,125 @@ function regionToken(country: CountryCode, region?: string) {
   return `${words[0][0]}${words[1][0]}${words[0].slice(1, 2)}`
 }
 
-function stampMotif(type: StampType, text: string): StampMotif {
-  if (/\bthermal|spa|bath|wellness|terme\b/i.test(text) || type === 'thermal') return 'spa'
-  if (/\blake|see|lac|lago|shore|river|rhein|rhine\b/i.test(text) || type === 'lake') return 'wave'
-  if (/\bcastle|chateau|burg|fort\b/i.test(text) || type === 'town') return 'castle'
-  if (/\btrain|rail|bahn|funicular|gondola\b/i.test(text)) return 'rail'
-  if (/\bforest|wald|foret|pine|fir\b/i.test(text)) return 'forest'
-  if (type === 'ski' || type === 'viewpoint' || type === 'mountain') return 'sunburst'
-  return 'sunburst'
+function detectFeatures(type: StampType, text: string, altitude = 0): StampFeatures {
+  const lake = /\blake|see|lac|lago|shore|river|rhein|rhine|water\b/i.test(text) || type === 'lake'
+  const rail = /\btrain|rail|bahn|funicular|gondola|cable car|sbb\b/i.test(text)
+  const town = /\btown|city|old town|village|castle|burg|chateau\b/i.test(text) || type === 'town'
+  const thermal = /\bthermal|spa|bath|wellness|terme\b/i.test(text) || type === 'thermal'
+  const forest = /\bforest|wald|foret|pine|fir|wood\b/i.test(text)
+  const snow = type === 'ski' || altitude >= 1650 || /\bski|snow|glacier\b/i.test(text)
+  return { lake, rail, town, thermal, forest, snow }
 }
 
-function pickPalette(country: CountryCode, seed: number, cantonCode: string) {
+function pickPalette(country: CountryCode, seed: number, cantonCode: string): PosterPalette {
   const variants = COUNTRY_PALETTES[country] || COUNTRY_PALETTES.CH
   const base = variants[seed % variants.length]
   if (country !== 'CH') return base
-  const cantonColor = CANTON_ACCENT[cantonCode]
-  if (!cantonColor) return base
-  return { ...base, accent: cantonColor }
-}
-
-function renderSilhouette(
-  type: StampType,
-  palette: StampPalette,
-  seed: number,
-  altitude?: number
-) {
-  const jitterA = Math.round(seeded(seed, 21) * 5)
-  const jitterB = Math.round(seeded(seed, 37) * 5)
-  const hasSnow = (altitude || 0) >= 1650 || type === 'ski'
-
-  switch (type) {
-    case 'mountain':
-    case 'ski':
-      return (
-        <g>
-          <path d={`M8 45 L24 ${25 + jitterA} L36 36 L53 ${17 + jitterB} L76 45 Z`} fill={palette.ink} />
-          <path d={`M8 45 L20 ${32 + jitterA} L32 40 L47 ${28 + jitterB} L64 42 L76 45 Z`} fill={palette.accent} opacity="0.42" />
-          {hasSnow && (
-            <g fill="#F6F7F9" opacity="0.9">
-              <path d={`M52 ${18 + jitterB} L58 ${27 + jitterB} L47 ${27 + jitterB} Z`} />
-              <path d={`M24 ${26 + jitterA} L29 ${33 + jitterA} L20 ${33 + jitterA} Z`} />
-            </g>
-          )}
-        </g>
-      )
-    case 'lake':
-      return (
-        <g>
-          <path d={`M8 36 L24 ${24 + jitterA} L42 33 L60 ${22 + jitterB} L76 36 L76 45 L8 45 Z`} fill={palette.ink} opacity="0.86" />
-          <path d="M11 47c5 0 6-2 11-2 5 0 6 2 11 2 5 0 6-2 11-2 5 0 6 2 11 2 5 0 6-2 11-2" fill="none" stroke={palette.accent} strokeWidth="2.3" strokeLinecap="round" />
-        </g>
-      )
-    case 'town':
-      return (
-        <g>
-          <path d="M8 45h68v6H8z" fill={palette.accent} opacity="0.24" />
-          <path d={`M12 45 L21 ${36 + jitterA} L30 45 Z`} fill={palette.ink} />
-          <path d={`M31 45 L40 ${33 + jitterB} L49 45 Z`} fill={palette.ink} />
-          <path d={`M50 45 L57 ${37 + jitterA} L64 45 Z`} fill={palette.ink} />
-          <path d="M66 45 L66 26 L71 20 L76 26 L76 45 Z" fill={palette.ink} />
-        </g>
-      )
-    case 'thermal':
-      return (
-        <g>
-          <path d="M8 45h68" stroke={palette.accent} strokeWidth="3.1" strokeLinecap="round" />
-          <path d={`M24 42c3-5-2-8 1-${11 + jitterA}M40 42c3-5-2-8 1-${11 + jitterB}M56 42c3-5-2-8 1-13`} stroke={palette.ink} strokeWidth="2" strokeLinecap="round" fill="none" />
-        </g>
-      )
-    case 'viewpoint':
-      return (
-        <g>
-          <path d="M8 45 C20 31, 35 30, 50 36 C60 39, 68 42, 76 45 Z" fill={palette.ink} />
-          <path d="M58 40v-11h6v11M56 29h10" stroke={palette.accent} strokeWidth="1.8" strokeLinecap="round" />
-        </g>
-      )
-    default:
-      return (
-        <g>
-          <path d="M8 45h68" stroke={palette.ink} strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M23 45a18 18 0 0 1 36 0" fill={palette.accent} />
-        </g>
-      )
+  const tint = CANTON_ACCENT[cantonCode]
+  if (!tint) return base
+  return {
+    ...base,
+    skyBottom: mixHex(base.skyBottom, tint, 0.14),
+    meadow: mixHex(base.meadow, tint, 0.16),
+    water: mixHex(base.water, tint, 0.18),
+    roof: mixHex(base.roof, tint, 0.2),
   }
 }
 
-function renderMotif(motif: StampMotif, palette: StampPalette, seed: number) {
-  const nudge = Math.round(seeded(seed, 84) * 3)
-  if (motif === 'rail') {
-    return (
-      <g transform={`translate(${nudge},0)`}>
-        <path d="M13 25h22" stroke={palette.accent} strokeWidth="1.8" strokeLinecap="round" />
-        <path d="M15 27v5h18v-5z" fill={palette.accentMuted} />
-        <circle cx="20" cy="33.8" r="1.2" fill={palette.ink} />
-        <circle cx="28" cy="33.8" r="1.2" fill={palette.ink} />
-      </g>
-    )
-  }
-  if (motif === 'castle') {
-    return (
-      <g transform={`translate(${nudge},0)`}>
-        <path d="M14 33h18v-10h-4v3h-3v-3h-4v3h-3v-3h-4z" fill={palette.accentMuted} />
-        <rect x="21.5" y="28" width="3" height="5" fill={palette.paperShade} />
-      </g>
-    )
-  }
-  if (motif === 'forest') {
-    return (
-      <g transform={`translate(${nudge},0)`}>
-        <path d="M16 34 L21 24 L26 34 ZM24 34 L29 23 L34 34 Z" fill={palette.accentMuted} />
-        <path d="M21 34v3M29 34v3" stroke={palette.ink} strokeWidth="1.3" strokeLinecap="round" />
-      </g>
-    )
-  }
-  if (motif === 'wave') {
-    return (
-      <path d={`M13 ${33 + nudge}c4 0 4-1.5 8-1.5s4 1.5 8 1.5 4-1.5 8-1.5`} fill="none" stroke={palette.accentMuted} strokeWidth="1.8" strokeLinecap="round" />
-    )
-  }
-  if (motif === 'spa') {
-    return (
-      <g>
-        <path d={`M20 ${35 + nudge}c2.5-4-1.5-6.5 0.8-10M28 ${35 + nudge}c2.5-4-1.5-6.5 0.8-10`} fill="none" stroke={palette.accentMuted} strokeWidth="1.6" strokeLinecap="round" />
-      </g>
-    )
-  }
+function renderScene(seed: number, palette: PosterPalette, features: StampFeatures) {
+  const horizon = 50 + Math.round(seeded(seed, 11) * 7)
+  const farLift = Math.round(seeded(seed, 17) * 6)
+  const midLift = Math.round(seeded(seed, 23) * 8)
+  const nearLift = Math.round(seeded(seed, 29) * 10)
+  const sunX = 70 + Math.round(seeded(seed, 31) * 14)
+  const sunY = 20 + Math.round(seeded(seed, 37) * 8)
+  const lakeY = horizon + 20
+  const railY = horizon + 18
+
+  const farRidge = [
+    `M6 ${horizon + 8}`,
+    `C 20 ${horizon - 10 - farLift}, 33 ${horizon - 8 + farLift}, 48 ${horizon - 12 - farLift}`,
+    `C 62 ${horizon - 6 + farLift}, 77 ${horizon - 9 - farLift}, 94 ${horizon + 6}`,
+    'L 94 80 L 6 80 Z',
+  ].join(' ')
+
+  const midRidge = [
+    `M6 ${horizon + 14}`,
+    `C 17 ${horizon + 4 - midLift}, 28 ${horizon + 6 + midLift}, 42 ${horizon + 2 - midLift}`,
+    `C 58 ${horizon + 7 + midLift}, 76 ${horizon + 2 - midLift}, 94 ${horizon + 14}`,
+    'L 94 80 L 6 80 Z',
+  ].join(' ')
+
+  const nearRidge = [
+    `M6 ${horizon + 24}`,
+    `C 20 ${horizon + 9 - nearLift}, 37 ${horizon + 15 + nearLift}, 52 ${horizon + 8 - nearLift}`,
+    `C 66 ${horizon + 16 + nearLift}, 80 ${horizon + 8 - nearLift}, 94 ${horizon + 24}`,
+    'L 94 80 L 6 80 Z',
+  ].join(' ')
+
+  const lakePath = [
+    `M6 ${lakeY}`,
+    `C 23 ${lakeY - 4}, 39 ${lakeY + 5}, 55 ${lakeY + 1}`,
+    `C 69 ${lakeY - 2}, 80 ${lakeY + 2}, 94 ${lakeY}`,
+    'L 94 80 L 6 80 Z',
+  ].join(' ')
+
+  const railTrack1 = `M6 ${railY} C 25 ${railY - 6}, 48 ${railY + 5}, 94 ${railY - 2}`
+  const railTrack2 = `M6 ${railY + 2.8} C 25 ${railY - 3.2}, 48 ${railY + 7.8}, 94 ${railY + 0.8}`
+
   return (
     <g>
-      <circle cx={22 + nudge} cy="25" r="4.8" fill={palette.sun} opacity="0.92" />
-      <path d={`M22 ${17 + nudge}v3M22 ${30 + nudge}v3M14 ${25 + nudge}h3M27 ${25 + nudge}h3`} stroke={palette.accentMuted} strokeWidth="1.2" strokeLinecap="round" />
+      <circle cx={sunX} cy={sunY} r="11.2" fill={palette.sun} opacity="0.92" />
+      <path d={farRidge} fill={palette.ridgeFar} />
+      <path d={midRidge} fill={palette.ridgeMid} />
+      <path d={nearRidge} fill={palette.ridgeNear} />
+
+      {features.snow && (
+        <g fill={palette.snow} opacity="0.92">
+          <path d={`M34 ${horizon - 10} L39 ${horizon - 1} L30 ${horizon - 1} Z`} />
+          <path d={`M56 ${horizon - 14} L62 ${horizon - 3} L51 ${horizon - 3} Z`} />
+          <path d={`M73 ${horizon - 11} L78 ${horizon - 2} L69 ${horizon - 2} Z`} />
+        </g>
+      )}
+
+      <path d={`M6 ${horizon + 26} C 24 ${horizon + 20}, 45 ${horizon + 29}, 64 ${horizon + 22} C 75 ${horizon + 19}, 84 ${horizon + 23}, 94 ${horizon + 25} L94 80 L6 80 Z`} fill={palette.meadow} opacity="0.78" />
+
+      {features.lake && <path d={lakePath} fill={palette.water} opacity="0.85" />}
+
+      {features.rail && (
+        <g>
+          <path d={railTrack1} stroke={palette.rail} strokeWidth="1.6" strokeLinecap="round" fill="none" />
+          <path d={railTrack2} stroke={palette.rail} strokeWidth="1.4" strokeLinecap="round" fill="none" opacity="0.85" />
+          <path d="M10 66h4M19 65h4M28 66h4M38 67h4M49 68h4M61 68h4M73 67h4M84 66h4" stroke={palette.rail} strokeWidth="1.05" strokeLinecap="round" opacity="0.66" />
+        </g>
+      )}
+
+      {features.town && (
+        <g opacity="0.95">
+          <path d={`M18 ${horizon + 23} L22 ${horizon + 19} L26 ${horizon + 23} Z`} fill={palette.roof} />
+          <rect x="19.4" y={horizon + 23} width="5.1" height="4.8" fill={mixHex(palette.roof, '#FFFFFF', 0.25)} />
+          <path d={`M28 ${horizon + 23} L32 ${horizon + 18} L37 ${horizon + 23} Z`} fill={palette.roof} />
+          <rect x="29.8" y={horizon + 23} width="5.8" height="5.8" fill={mixHex(palette.roof, '#FFFFFF', 0.22)} />
+          <path d={`M39 ${horizon + 23} L43 ${horizon + 15} L47 ${horizon + 23} Z`} fill={palette.roof} />
+          <rect x="41.2" y={horizon + 23} width="4.3" height="7.2" fill={mixHex(palette.roof, '#FFFFFF', 0.2)} />
+        </g>
+      )}
+
+      {features.forest && (
+        <g fill={mixHex(palette.meadow, '#0F172A', 0.38)} opacity="0.95">
+          <path d={`M68 ${horizon + 25} L71 ${horizon + 19} L74 ${horizon + 25} Z`} />
+          <path d={`M73 ${horizon + 25} L76 ${horizon + 18} L79 ${horizon + 25} Z`} />
+          <path d={`M78 ${horizon + 25} L81 ${horizon + 20} L84 ${horizon + 25} Z`} />
+        </g>
+      )}
+
+      {features.thermal && (
+        <g stroke={mixHex(palette.water, '#FFFFFF', 0.35)} strokeWidth="1.3" strokeLinecap="round" fill="none" opacity="0.86">
+          <path d={`M74 ${horizon + 12}c2.2-3-1.2-5.2 0.7-8.1`} />
+          <path d={`M79 ${horizon + 13}c2.2-3-1.2-5.2 0.7-8.1`} />
+          <path d={`M84 ${horizon + 12}c2.2-3-1.2-5.2 0.7-8.1`} />
+        </g>
+      )}
     </g>
   )
 }
@@ -389,13 +570,12 @@ export function DestinationStamp({
   ].join(' ')
   const seed = hashCode(`${destinationId || safeName}|${country}|${regionCode}|${type}|${contextText.toLowerCase()}`)
   const palette = pickPalette(country, seed, cantonCode)
-  const motif = stampMotif(type, contextText)
+  const features = detectFeatures(type, contextText, altitude)
   const idBase = sanitizeId(`${destinationId || safeName}-${country}-${regionCode}-${type}`)
   const grainId = `grain-${idBase}`
-  const paperId = `paper-${idBase}`
-  const topBandId = `top-${idBase}`
-  const sunX = 60 + Math.round(seeded(seed, 49) * 14)
-  const sunY = 18 + Math.round(seeded(seed, 57) * 5)
+  const paperId = `paper-grad-${idBase}`
+  const skyId = `sky-grad-${idBase}`
+  const artClip = `art-clip-${idBase}`
 
   return (
     <svg
@@ -407,46 +587,36 @@ export function DestinationStamp({
       <defs>
         <linearGradient id={paperId} x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor={palette.paper} />
-          <stop offset="100%" stopColor={palette.paperShade} />
+          <stop offset="100%" stopColor={mixHex(palette.paper, '#D6C8AF', 0.28)} />
         </linearGradient>
-        <linearGradient id={topBandId} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor={palette.accent} stopOpacity="0.86" />
-          <stop offset="100%" stopColor={palette.accentMuted} stopOpacity="0.72" />
+        <linearGradient id={skyId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={palette.skyTop} />
+          <stop offset="100%" stopColor={palette.skyBottom} />
         </linearGradient>
+        <clipPath id={artClip}>
+          <rect x="6" y="8" width="88" height="72" rx="3.2" />
+        </clipPath>
         <filter id={grainId}>
-          <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="3" result="noise" />
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" result="noise" />
           <feColorMatrix type="saturate" values="0" in="noise" result="grey" />
           <feBlend in="SourceGraphic" in2="grey" mode="multiply" />
         </filter>
       </defs>
 
       <rect x="1.5" y="1.5" width="97" height="121" rx="5" fill={`url(#${paperId})`} stroke={palette.frame} strokeWidth="1.5" strokeDasharray="4 3" />
-      <rect x="4.5" y="4.5" width="91" height="13.8" rx="2.4" fill={`url(#${topBandId})`} />
+
+      <g clipPath={`url(#${artClip})`}>
+        <rect x="6" y="8" width="88" height="72" fill={`url(#${skyId})`} />
+        {renderScene(seed, palette, features)}
+      </g>
+
+      <rect x="6" y="8" width="88" height="72" rx="3.2" fill="none" stroke={mixHex(palette.frame, '#FFFFFF', 0.28)} strokeWidth="0.8" />
       {renderFlag(country)}
-
-      {country === 'CH' && cantonCode && (
-        <g>
-          <rect x="8" y="8.8" width="17" height="13.2" rx="2.2" fill={CANTON_ACCENT[cantonCode] || palette.accentMuted} />
-          <text x="16.5" y="17.8" textAnchor="middle" fill="#F8FAFC" fontSize="7.6" style={{ fontFamily: '"Jost", sans-serif', fontWeight: 700, letterSpacing: '0.5px' }}>
-            {cantonCode}
-          </text>
-        </g>
-      )}
-
-      <circle cx={sunX} cy={sunY} r="8.6" fill={palette.sun} opacity="0.9" />
-
-      <g transform="translate(8,26)">
-        {renderMotif(motif, palette, seed)}
-      </g>
-
-      <g transform="translate(8,18) scale(1.08)">
-        {renderSilhouette(type, palette, seed, altitude)}
-      </g>
 
       <text
         x="50"
-        y="92"
-        fill={palette.ink}
+        y="95"
+        fill={palette.text}
         textAnchor="middle"
         fontSize={style.size}
         lengthAdjust="spacingAndGlyphs"
@@ -461,10 +631,10 @@ export function DestinationStamp({
 
       <text
         x="50"
-        y="104.6"
-        fill={palette.accentMuted}
+        y="107.2"
+        fill={palette.subtext}
         textAnchor="middle"
-        fontSize="8"
+        fontSize="7.8"
         style={{ fontFamily: '"Jost", sans-serif', fontWeight: 500, letterSpacing: '1.05px' }}
       >
         · {safeRegion || regionCode} ·
@@ -473,11 +643,11 @@ export function DestinationStamp({
       {country !== 'CH' && (
         <text
           x="50"
-          y="112.6"
-          fill={palette.ink}
+          y="114.2"
+          fill={palette.subtext}
           textAnchor="middle"
-          fontSize="6.6"
-          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 500, letterSpacing: '1px', opacity: 0.7 }}
+          fontSize="6.2"
+          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 500, letterSpacing: '0.9px', opacity: 0.78 }}
         >
           {country} REGION {regionCode}
         </text>
@@ -490,7 +660,7 @@ export function DestinationStamp({
         height="118"
         rx="4"
         fill="#000"
-        opacity="0.07"
+        opacity="0.08"
         filter={`url(#${grainId})`}
       />
     </svg>

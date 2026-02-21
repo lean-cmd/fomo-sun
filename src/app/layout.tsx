@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { APP_RELEASE_VERSION } from '@/lib/release'
 
 export const metadata: Metadata = {
   title: 'FOMO Sun — Stop chasing clouds. Find sun.',
@@ -50,7 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <span className="text-slate-200">·</span>
             <span>Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel</span>
             <span className="text-slate-200">·</span>
-            <span>fomosun.com &copy; {new Date().getFullYear()}</span>
+            <span>fomosun.com &copy; {new Date().getFullYear()} · {APP_RELEASE_VERSION}</span>
           </div>
         </footer>
       </body>
