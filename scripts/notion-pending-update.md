@@ -9,6 +9,63 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V99 — commit `820c778` — 2026-02-21
+
+**Theme:** Weather API Policy Split + Admin Source Controls
+
+### 1. V88 Release Changelog — append after V98 entry
+
+```
+### V99 (820c778)
+Theme: Weather API Policy Split + Admin Source Controls
+
+Changes:
+- API: Split weather control into `forecast_policy` (forecast model) and `origin_snapshot_source` (origin now-condition source), while preserving legacy `weather_source` compatibility.
+- API: Added explicit response headers `x-fomo-forecast-policy` and `x-fomo-origin-snapshot-source`; retained `x-fomo-weather-source` as legacy compatibility output.
+- Admin: Replaced single weather-source selector with two independent controls (Forecast policy + Origin snapshot) and surfaced both values in diagnostics metadata.
+- Diagnostics: Updated scripts/weather-api-diff.mjs to test all source combinations via the new query parameters.
+
+Files: src/app/api/v1/sunny-escapes/route.ts, src/app/admin/page.tsx, scripts/weather-api-diff.mjs
+Validation: npm run build passed; local smoke checks confirmed new params and legacy `weather_source` paths.
+Rollback: git revert 820c778
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V99 | 2026-02-21 | Codex session
+- Split weather policy into forecast_policy + origin_snapshot_source
+- Preserved legacy weather_source compatibility path
+- Admin diagnostics now has separate Forecast policy and Origin snapshot controls
+- Updated weather-api-diff script to use new source matrix params
+- Commit: 820c778
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Night (Codex session)
+
+**Deployed:** V99 (820c778)
+**Status:** Shipped and validated
+
+**What was done:**
+- Removed duplicated weather-source semantics by separating forecast model policy from origin snapshot source.
+- Kept backward compatibility for existing consumers still sending `weather_source`.
+- Improved admin tuning clarity with independent selectors for forecast and origin source paths.
+- Updated the weather comparison script so source-difference checks run against the same split-policy model used in production.
+
+**Next:**
+- Monitor `x-fomo-forecast-policy` and `x-fomo-origin-snapshot-source` distributions in admin diagnostics.
+```
+
+---
+
 ## V98 — commit `1674738` — 2026-02-21
 
 **Theme:** Weather Source Validation + Origin Data Reliability
