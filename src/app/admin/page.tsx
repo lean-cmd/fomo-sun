@@ -825,23 +825,6 @@ export default function AdminDiagnosticsPage() {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-slate-600">
-            Sort
-            <select value={sortMode} onChange={e => handleSortChange(e.target.value as SortMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
-              <option value="score">FOMO score</option>
-              <option value="sun">Sunshine</option>
-              <option value="net">Net sun</option>
-              <option value="name">Name</option>
-              <option value="country">Country</option>
-              <option value="quality">Quality</option>
-              <option value="altitude">Altitude</option>
-              <option value="temp">Temperature</option>
-              <option value="car">Car travel</option>
-              <option value="train">Train travel</option>
-              <option value="model">Model</option>
-              <option value="tier">Tier eligibility</option>
-            </select>
-          </label>
 
           <label className="flex items-center gap-2 text-xs text-slate-600">
             Origin
@@ -861,15 +844,6 @@ export default function AdminDiagnosticsPage() {
             </select>
           </label>
 
-          <label className="flex items-center gap-2 text-xs text-slate-600">
-            Page size
-            <select value={pageSizeMode} onChange={e => setPageSizeMode(e.target.value as PageSizeMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="200">200</option>
-              <option value="all">All rows</option>
-            </select>
-          </label>
 
           <label className="flex items-center gap-2 text-xs text-slate-600">
             Weather source
@@ -877,6 +851,16 @@ export default function AdminDiagnosticsPage() {
               <option value="openmeteo">Open-Meteo only</option>
               <option value="meteoswiss">MeteoSwiss model for CH</option>
               <option value="meteoswiss_api">MeteoSwiss OGD origin + model forecast</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Show
+            <select value={pageSizeMode} onChange={e => setPageSizeMode(e.target.value as PageSizeMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+              <option value="10">10</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="all">All</option>
             </select>
           </label>
 

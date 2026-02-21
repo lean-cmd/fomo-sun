@@ -53,32 +53,33 @@ const TRAVEL_BANDS = [
 ] as const
 
 const MANUAL_ORIGIN_CITIES: CitySeed[] = [
-  { name: 'Basel', lat: 47.5596, lon: 7.5886 },
-  { name: 'Binningen', lat: 47.5327, lon: 7.5692 },
-  { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
-  { name: 'Bern', lat: 46.948, lon: 7.4474 },
-  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
   { name: 'Aarau', lat: 47.3925, lon: 8.0442 },
-  { name: 'Olten', lat: 47.3505, lon: 7.9032 },
-  { name: 'Solothurn', lat: 47.2088, lon: 7.537 },
-  { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
-  { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
   { name: 'Baden', lat: 47.4738, lon: 8.3077 },
+  { name: 'Basel', lat: 47.5596, lon: 7.5886 },
+  { name: 'Bern', lat: 46.948, lon: 7.4474 },
   { name: 'Biel/Bienne', lat: 47.1368, lon: 7.2468 },
-  { name: 'Thun', lat: 46.7579, lon: 7.627 },
-  { name: 'Zug', lat: 47.1662, lon: 8.5155 },
-  { name: 'Schaffhausen', lat: 47.6973, lon: 8.6349 },
+  { name: 'Binningen', lat: 47.5327, lon: 7.5692 },
   { name: 'Frauenfeld', lat: 47.5552, lon: 8.8988 },
-]
+  { name: 'Luzern', lat: 47.0502, lon: 8.3093 },
+  { name: 'Olten', lat: 47.3505, lon: 7.9032 },
+  { name: 'Schaffhausen', lat: 47.6973, lon: 8.6349 },
+  { name: 'Solothurn', lat: 47.2088, lon: 7.537 },
+  { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
+  { name: 'Thun', lat: 46.7579, lon: 7.627 },
+  { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
+  { name: 'Zug', lat: 47.1662, lon: 8.5155 },
+  { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
+].sort((a, b) => a.name.localeCompare(b.name))
 
 const SWISS_CITY_FALLBACKS: CitySeed[] = [
   ...MANUAL_ORIGIN_CITIES,
+  { name: 'Fribourg', lat: 46.8065, lon: 7.161 },
   { name: 'Geneva', lat: 46.2044, lon: 6.1432 },
   { name: 'Lausanne', lat: 46.5197, lon: 6.6323 },
   { name: 'Lugano', lat: 46.0037, lon: 8.9511 },
-  { name: 'Fribourg', lat: 46.8065, lon: 7.161 },
   { name: 'Neuchâtel', lat: 46.9896, lon: 6.9293 },
-]
+  { name: 'Sion', lat: 46.233, lon: 7.3606 },
+].sort((a, b) => a.name.localeCompare(b.name))
 
 const TYPE_FILTER_CHIPS: { id: EscapeFilterChip; label: string }[] = [
   { id: 'mountain', label: '⛰️ Mountain' },
@@ -1308,23 +1309,25 @@ export default function Home() {
               <select
                 ref={originSelectRef}
                 value={selectedCity}
-                onChange={e => selectManualCity(e.target.value)}
-                className="appearance-none bg-transparent text-[11px] text-slate-600 font-medium min-w-0 max-w-[104px] pr-2.5 cursor-pointer focus:outline-none"
-                aria-label="Select origin city"
+                onChange={(e) => {
+                  setSelectedCity(e.target.value)
+                  setOriginMode('manual')
+                }}
+                className="w-full pl-8 pr-10 py-2.5 bg-white border border-slate-200 rounded-xl text-[15px] font-semibold text-slate-900 appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm"
               >
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={openOriginPicker}
-                className="absolute right-0 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-4 w-4 text-slate-400 hover:text-slate-600 transition-colors"
-                aria-label="Open city picker"
-              >
-                <ChevronDown className="w-3 h-3" />
-              </button>
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <ChevronDown className="w-4 h-4 text-slate-400" />
+              </div>
             </div>
+            {originMode === 'manual' && (
+              <p className="mt-1.5 px-1 text-[10px] text-slate-400 font-medium">
+                Missing your city? Open a PR on GitHub to add it.
+              </p>
+            )}
           </div>
 
           <div className="relative justify-self-center flex items-center h-full">
@@ -1736,6 +1739,10 @@ export default function Home() {
                             destinationSunLabel={formatSunHours(escapeTimelineSunMin)}
                             travelMin={bestTravel?.min}
                             travelMode={bestTravel?.mode}
+                            travelStartHour={dayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
+                            travelUntilHour={dayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
+                            destinationShowTicks
+                            inlineSunLabels
                           />
                         </div>
 
