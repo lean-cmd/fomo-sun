@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import './globals.css'
 import { APP_RELEASE_VERSION } from '@/lib/release'
 
@@ -20,6 +21,12 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const umamiScriptUrl = process.env.NEXT_PUBLIC_UMAMI_SCRIPT_URL || ''
+  const umamiWebsiteId = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID || ''
+  const umamiHostUrl = process.env.NEXT_PUBLIC_UMAMI_HOST_URL || ''
+  const umamiDomains = process.env.NEXT_PUBLIC_UMAMI_DOMAINS || ''
+  const umamiEnabled = Boolean(umamiScriptUrl && umamiWebsiteId)
+
   return (
     <html lang="en" data-theme="light" className="light">
       <head>
@@ -40,6 +47,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             }),
           }}
         />
+        {umamiEnabled ? (
+          <Script
+            id="umami-analytics"
+            src={umamiScriptUrl}
+            strategy="afterInteractive"
+            data-website-id={umamiWebsiteId}
+            {...(umamiHostUrl ? { 'data-host-url': umamiHostUrl } : {})}
+            {...(umamiDomains ? { 'data-domains': umamiDomains } : {})}
+          />
+        ) : null}
       </head>
       <body className="antialiased min-h-screen flex flex-col">
         <main className="flex-1">{children}</main>

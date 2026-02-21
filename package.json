@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "poi:prepare": "node scripts/prepare-poi-import.mjs",
-    "smoke:test": "node scripts/smoke-test.mjs"
+    "smoke:test": "node scripts/smoke-test.mjs",
+    "umami:setup": "node scripts/setup-umami-env.mjs",
+    "umami:check": "node scripts/check-umami-script.mjs"
   },
   "dependencies": {
     "@notionhq/client": "^5.9.0",
