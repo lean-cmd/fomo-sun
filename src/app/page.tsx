@@ -1869,7 +1869,21 @@ export default function Home() {
 
             {showDebug && (
               <div className="w-full space-y-5 py-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[10px] text-slate-500 font-medium">
+                <div className="rounded-xl bg-slate-50 p-3 space-y-3 border border-slate-100">
+                  <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">System Status</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] text-slate-500">
+                    <div className="space-y-1">
+                      <p>Source: <span className="text-slate-700">{dataSourceLabel}</span></p>
+                      <p>Updated: <span className="text-slate-700">{dataUpdatedText}</span></p>
+                    </div>
+                    <div className="space-y-1">
+                      <p>ID: <span className="text-slate-700 font-mono">{data?._meta?.request_id?.slice(0, 8) || 'none'}</span></p>
+                      <p>Tier: <span className="text-slate-700">{resultTier || 'none'}</span></p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[10px] text-slate-500 font-medium pt-1">
                   <button onClick={detectLocation} disabled={locating} className="hover:text-amber-600 transition-colors inline-flex items-center gap-1.5">
                     <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
                     {locating ? 'Locating...' : 'Use my location'}
@@ -1893,18 +1907,20 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-slate-50 p-3 space-y-2 border border-slate-100">
-                  <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">System Status</p>
-                  <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
-                    <div className="space-y-1">
-                      <p>Source: <span className="text-slate-700">{dataSourceLabel}</span></p>
-                      <p>Updated: <span className="text-slate-700">{dataUpdatedText}</span></p>
-                    </div>
-                    <div className="space-y-1">
-                      <p>ID: <span className="text-slate-700 font-mono">{data?._meta?.request_id?.slice(0, 8) || 'none'}</span></p>
-                      <p>Tier: <span className="text-slate-700">{resultTier || 'none'}</span></p>
-                    </div>
-                  </div>
+                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                  <a href="/api/v1/sunny-escapes" className="hover:text-amber-600 transition-colors">API Access</a>
+                  <span className="text-slate-200">·</span>
+                  <a href="/admin" className="hover:text-amber-600 transition-colors">Admin Diagnostics</a>
+                  <span className="text-slate-200">·</span>
+                  <a href="/llms.txt" className="hover:text-amber-600 transition-colors">llms.txt</a>
+                  <span className="text-slate-200">·</span>
+                  <span className="whitespace-nowrap">
+                    Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-amber-600 transition-colors">MeteoSwiss</a>
+                  </span>
+                  <span className="text-slate-200">·</span>
+                  <span className="whitespace-nowrap">
+                    Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-amber-600 transition-colors">OJP</a>
+                  </span>
                 </div>
               </div>
             )}

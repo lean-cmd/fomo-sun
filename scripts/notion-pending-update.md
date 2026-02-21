@@ -9,6 +9,59 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V93 — commit `bd1c2d1` — 2026-02-21
+
+**Theme:** Footer Deduplication & Cleanup
+
+### 1. V88 Release Changelog — append after V92 entry
+
+```
+### V93 (bd1c2d1)
+Theme: Footer Deduplication & Cleanup
+
+Changes:
+- Footer: Consolidated technical links (API, Admin, Weather, Routing) into the collapsible "Debug & Settings" panel in page.tsx.
+- Footer: Deduplicated attribution line; removed it from the hero page debug section as it's already in the global layout footer.
+- Layout: Simplified global footer in layout.tsx, focusing on core links (Blog, About, GitHub).
+
+Files: src/app/page.tsx, src/app/layout.tsx
+Validation: npm run build passed; Verified link accessibility in Debug panel.
+Rollback: git revert bd1c2d1
+Agent: Antigravity (Google DeepMind)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V93 | 2026-02-21 | Antigravity session
+- Footer deduplication and consolidation of technical links into Debug panel
+- Simplified global footer in layout.tsx
+- Commit: bd1c2d1
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Late Morning (Antigravity session)
+
+**Deployed:** V93 (bd1c2d1)
+**Status:** Shipped and deployed to Vercel
+
+**What was done:**
+- Cleaned up the footer architecture. By moving technical links like "API Access" and "Admin Diagnostics" into the hidden Debug panel, the main site experience remains clean and focused for average users while keeping tools accessible for developers.
+- Removed duplicate "Built with love" lines, ensuring a single, authoritative footer at the bottom of the page.
+- Added a GitHub link to the footer to encourage open-source contributions.
+
+**Next:**
+- Monitor usage of the Debug & Settings panel
+```
+
+---
+
 ## V92 — commit `2f25ef7` — 2026-02-21
 
 **Theme:** Timeline Visuals + Header Polish + Debug Panel

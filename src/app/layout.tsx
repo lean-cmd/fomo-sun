@@ -42,32 +42,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased min-h-screen flex flex-col">
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-slate-200/60 bg-white/50 py-4 px-4 mt-8">
-          <div className="max-w-xl mx-auto flex flex-wrap items-center justify-center gap-x-3 gap-y-2 text-[10px] text-slate-500">
-            <div>
-              <span className="font-semibold tracking-wide text-slate-500">FOMO Sun</span> &copy; {new Date().getFullYear()}
+        <footer className="border-t border-slate-200/60 bg-white/50 py-6 px-4 mt-8">
+          <div className="max-w-xl mx-auto flex flex-col items-center gap-3 text-[11px] text-slate-500 font-medium">
+            <div className="flex items-center gap-4">
+              <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
+              <span className="text-slate-200">·</span>
+              <a href="/about" className="transition-colors hover:text-amber-600">About</a>
+              <span className="text-slate-200">·</span>
+              <a href="https://github.com" className="transition-colors hover:text-amber-600">GitHub</a>
             </div>
-            <span className="text-slate-300 hidden sm:inline">|</span>
-            <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <a href="/about" className="transition-colors hover:text-amber-600">About</a>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <a href="/api/v1/sunny-escapes" className="transition-colors hover:text-amber-600">API Access</a>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <a href="/admin" className="transition-colors hover:text-amber-600">Admin Diagnostics</a>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <a href="/llms.txt" className="transition-colors hover:text-amber-600">llms.txt</a>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <span className="whitespace-nowrap">
-              Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-amber-600 transition-colors">MeteoSwiss</a>
-            </span>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <span className="whitespace-nowrap">
-              Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-amber-600 transition-colors">OJP</a>
-            </span>
-            <span className="text-slate-300 hidden sm:inline">|</span>
-            <div>
-              Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel
+            <div className="text-[10px] text-slate-400 font-normal">
+              Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel · fomosun.com &copy; {new Date().getFullYear()}
             </div>
           </div>
         </footer>
