@@ -14,7 +14,11 @@ const SAMPLE_TARGETS = {
   IT: Number(process.env.SAMPLE_IT || 5),
 }
 
-const SOURCES = ['openmeteo', 'meteoswiss', 'meteoswiss_api']
+const SOURCES = [
+  { label: 'openmeteo', forecast_policy: 'openmeteo', origin_snapshot_source: 'openmeteo' },
+  { label: 'meteoswiss', forecast_policy: 'meteoswiss', origin_snapshot_source: 'openmeteo' },
+  { label: 'meteoswiss_api', forecast_policy: 'meteoswiss', origin_snapshot_source: 'meteoswiss_ogd' },
+]
 
 function dayStringZurich(offsetDays = 0) {
   const date = new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000)
@@ -80,7 +84,7 @@ async function fetchJsonWithHeaders(url, retries = 2) {
   throw lastErr || new Error('unknown fetch error')
 }
 
-function buildLocalUrl(source) {
+function buildLocalUrl(sourceConfig) {
   const sp = new URLSearchParams({
     lat: String(ORIGIN.lat),
     lon: String(ORIGIN.lon),
@@ -95,7 +99,8 @@ function buildLocalUrl(source) {
     limit: '500',
     admin: 'true',
     admin_all: 'true',
-    weather_source: source,
+    forecast_policy: sourceConfig.forecast_policy,
+    origin_snapshot_source: sourceConfig.origin_snapshot_source,
   })
   return `${BASE_URL}/api/v1/sunny-escapes?${sp.toString()}`
 }
@@ -208,7 +213,7 @@ async function main() {
   for (const source of SOURCES) {
     const { json, headers } = await fetchJsonWithHeaders(buildLocalUrl(source))
     const rows = json.escapes || []
-    local[source] = {
+    local[source.label] = {
       json,
       rows,
       map: rowById(rows),
@@ -229,11 +234,11 @@ async function main() {
   const sampleIds = pickSampleIds(baseline.rows)
 
   const sourceSummaryRows = SOURCES.map(source => {
-    const s = local[source]
+    const s = local[source.label]
     const top = s.top
     const topLabel = top ? `${top.destination.name} (${top.destination.country})` : '-'
     return [
-      source,
+      source.label,
       s.header.origin_source || '-',
       s.header.weather_source || '-',
       s.header.model_policy || '-',
@@ -250,7 +255,7 @@ async function main() {
   })
 
   const consistencyRows = SOURCES.map(source => {
-    const s = local[source]
+    const s = local[source.label]
     let compared = 0
     let missing = 0
     let zeroSun = 0
@@ -268,7 +273,7 @@ async function main() {
       diffs.push(Math.abs(apiMin - hourlyMin))
     }
     return [
-      source,
+      source.label,
       String(compared),
       String(missing),
       String(zeroSun),

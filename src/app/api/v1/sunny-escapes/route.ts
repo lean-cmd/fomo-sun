@@ -299,9 +299,9 @@ function isBaselLikeOrigin(originName: string, lat: number, lon: number) {
 
 function weatherModelForDestination(
   destination: typeof destinations[number],
-  weatherSource: 'openmeteo' | 'meteoswiss' | 'meteoswiss_api'
+  forecastPolicy: 'openmeteo' | 'meteoswiss'
 ): 'meteoswiss_seamless' | 'best_match' {
-  if (weatherSource === 'openmeteo') return 'best_match'
+  if (forecastPolicy === 'openmeteo') return 'best_match'
   return destination.country === 'CH' ? 'meteoswiss_seamless' : 'best_match'
 }
 
@@ -493,7 +493,8 @@ function normalizeQueryCacheKey(input: {
   tripSpan: TripSpan
   originName: string
   originKind: 'manual' | 'gps' | 'default'
-  weatherSource: WeatherSourcePolicy | 'meteoswiss_api'
+  forecastPolicy: 'openmeteo' | 'meteoswiss'
+  originSnapshotSource: 'openmeteo' | 'meteoswiss_ogd'
   agentPrefsKey: string
 }) {
   const latKey = input.lat.toFixed(3)
@@ -518,7 +519,8 @@ function normalizeQueryCacheKey(input: {
     `span=${input.tripSpan}`,
     `origin=${input.originName.toLowerCase() || '-'}`,
     `origin_kind=${input.originKind}`,
-    `weather_source=${input.weatherSource}`,
+    `forecast_policy=${input.forecastPolicy}`,
+    `origin_snapshot_source=${input.originSnapshotSource}`,
     `agent=${input.agentPrefsKey || '-'}`,
   ].join('&')
 }
@@ -899,17 +901,28 @@ export async function GET(request: NextRequest) {
   const typesParam = sp.get('types')
   let types = typesParam ? typesParam.split(',') : []
   const forceRefresh = sp.get('force') === 'true'
-  const weatherSourceRaw = (sp.get('weather_source') || '').toLowerCase()
-  const weatherSource = (
-    weatherSourceRaw === 'openmeteo' || weatherSourceRaw === 'open-meteo'
+  const legacyWeatherSourceRaw = (sp.get('weather_source') || '').toLowerCase()
+  const forecastPolicyRaw = (sp.get('forecast_policy') || '').toLowerCase()
+  const originSnapshotRaw = (sp.get('origin_snapshot_source') || '').toLowerCase()
+  const forecastPolicy = (
+    forecastPolicyRaw === 'openmeteo' || forecastPolicyRaw === 'open-meteo'
       ? 'openmeteo'
-      : weatherSourceRaw === 'meteoswiss'
+      : forecastPolicyRaw === 'meteoswiss'
         ? 'meteoswiss'
-        : weatherSourceRaw === 'meteoswiss_api' || weatherSourceRaw === 'meteoswiss-ogd'
-          ? 'meteoswiss_api'
+        : legacyWeatherSourceRaw === 'openmeteo' || legacyWeatherSourceRaw === 'open-meteo'
+          ? 'openmeteo'
           : 'meteoswiss'
-  ) as 'openmeteo' | 'meteoswiss' | 'meteoswiss_api'
-  const forecastWeatherSource: WeatherSourcePolicy = weatherSource === 'openmeteo' ? 'openmeteo' : 'meteoswiss'
+  ) as 'openmeteo' | 'meteoswiss'
+  const requestedOriginSnapshotSource = (
+    originSnapshotRaw === 'openmeteo' || originSnapshotRaw === 'open-meteo'
+      ? 'openmeteo'
+      : originSnapshotRaw === 'meteoswiss_ogd' || originSnapshotRaw === 'meteoswiss-ogd' || originSnapshotRaw === 'meteoswissapi'
+        ? 'meteoswiss_ogd'
+        : legacyWeatherSourceRaw === 'meteoswiss_api' || legacyWeatherSourceRaw === 'meteoswiss-ogd'
+          ? 'meteoswiss_ogd'
+          : 'openmeteo'
+  ) as 'openmeteo' | 'meteoswiss_ogd'
+  const forecastWeatherSource: WeatherSourcePolicy = forecastPolicy === 'openmeteo' ? 'openmeteo' : 'meteoswiss'
   const agentPrefsRaw = request.headers.get('X-FOMO-Agent-Preferences')
   let agentPrefs: Record<string, unknown> = {}
   if (agentPrefsRaw) {
@@ -951,7 +964,12 @@ export async function GET(request: NextRequest) {
   })
   const adminView = sp.get('admin') === 'true'
   const adminAll = adminView && sp.get('admin_all') === 'true'
-  const useMeteoSwissOriginApi = adminView && weatherSource === 'meteoswiss_api'
+  const originSnapshotSource: 'openmeteo' | 'meteoswiss_ogd' = (
+    adminView && requestedOriginSnapshotSource === 'meteoswiss_ogd'
+      ? 'meteoswiss_ogd'
+      : 'openmeteo'
+  )
+  const useMeteoSwissOriginApi = originSnapshotSource === 'meteoswiss_ogd'
   const rawLimit = parseInt(sp.get('limit') || '6')
   const limit = adminView
     ? Math.min(adminAll ? 5000 : 500, Math.max(1, rawLimit))
@@ -1001,7 +1019,7 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, weatherSource, agentPrefsKey,
+    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, forecastPolicy, originSnapshotSource, agentPrefsKey,
   })
   if (!forceRefresh) {
     const cached = queryResponseCache.get(cacheKey)
@@ -1057,11 +1075,17 @@ export async function GET(request: NextRequest) {
   let inversionLikely = true
   let originDataSource: 'open-meteo' | 'meteoswiss' | 'mock' = demoMode ? 'mock' : 'open-meteo'
   let fogHeuristicApplied = false
-  const liveModelPolicy = weatherSource === 'openmeteo'
-    ? 'all:open-meteo-default(best_match)'
-    : weatherSource === 'meteoswiss'
-      ? 'forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
-      : 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
+  const liveModelPolicy = forecastPolicy === 'openmeteo'
+    ? (
+      originSnapshotSource === 'meteoswiss_ogd'
+        ? 'origin:meteoswiss-ogd|forecast:all:open-meteo-default(best_match)'
+        : 'forecast:all:open-meteo-default(best_match)'
+    )
+    : (
+      originSnapshotSource === 'meteoswiss_ogd'
+        ? 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
+        : 'forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
+    )
 
   // Pre-filter by rough distance and user filters
   let candidates = adminAll
@@ -1776,7 +1800,7 @@ export async function GET(request: NextRequest) {
       net_sun_min: netSun,
       optimal_departure: full.optimalDeparture,
       tier_eligibility: tierEligibilityForRow(full),
-      weather_model: weatherModelForDestination(full.destination, weatherSource),
+      weather_model: weatherModelForDestination(full.destination, forecastPolicy),
       weather_now: {
         summary: full.conditions,
         temp_c: full.temp_c,
@@ -1914,6 +1938,11 @@ export async function GET(request: NextRequest) {
   const cacheControl = isNearMidnightZurich()
     ? 'public, s-maxage=60, stale-while-revalidate=3600'
     : 'public, s-maxage=300, stale-while-revalidate=3600'
+  const legacyWeatherSourceLabel = forecastPolicy === 'openmeteo'
+    ? 'openmeteo'
+    : originSnapshotSource === 'meteoswiss_ogd'
+      ? 'meteoswiss_api'
+      : 'meteoswiss'
   const headers: Record<string, string> = {
     'Cache-Control': cacheControl,
     'X-FOMO-Sun-Version': '0.6.2',
@@ -1930,7 +1959,9 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Live-Pool-Count': String(livePoolCount),
     'X-FOMO-Debug-Live-Path': liveDebugPath,
     'X-FOMO-Origin-Source': originDataSource,
-    'X-FOMO-Weather-Source': weatherSource,
+    'X-FOMO-Weather-Source': legacyWeatherSourceLabel,
+    'X-FOMO-Forecast-Policy': forecastPolicy,
+    'X-FOMO-Origin-Snapshot-Source': originSnapshotSource,
     'X-FOMO-Weather-Model-Policy': liveModelPolicy,
     'X-FOMO-Fog-Heuristic': fogHeuristicApplied ? 'applied' : 'off',
     'X-FOMO-Trip-Horizon': tripSpan === 'plus1day' ? 'tomorrow-only' : 'today-remaining-daylight',

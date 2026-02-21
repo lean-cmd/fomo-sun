@@ -12,7 +12,8 @@ type PageSizeMode = '50' | '100' | '200' | 'all'
 type ForecastDay = 'today' | 'tomorrow'
 type DestinationQuality = 'verified' | 'curated' | 'generated'
 type AdminTypeChip = 'mountain' | 'town' | 'ski' | 'thermal' | 'lake'
-type WeatherSourceMode = 'meteoswiss' | 'openmeteo' | 'meteoswiss_api'
+type ForecastPolicyMode = 'meteoswiss' | 'openmeteo'
+type OriginSnapshotMode = 'openmeteo' | 'meteoswiss_ogd'
 type AdminTravelMode = 'both' | 'car' | 'train'
 type DataCheckSampleRow = {
   destination: string
@@ -179,7 +180,8 @@ export default function AdminDiagnosticsPage() {
     generated: true,
   })
   const [page, setPage] = useState(1)
-  const [weatherSource, setWeatherSource] = useState<WeatherSourceMode>('openmeteo')
+  const [forecastPolicy, setForecastPolicy] = useState<ForecastPolicyMode>('openmeteo')
+  const [originSnapshotSource, setOriginSnapshotSource] = useState<OriginSnapshotMode>('openmeteo')
   const [adminOrigin, setAdminOrigin] = useState<string>('Basel')
   const [adminMode, setAdminMode] = useState<AdminTravelMode>('both')
   const weatherSourceInitRef = useRef(false)
@@ -193,6 +195,8 @@ export default function AdminDiagnosticsPage() {
     responseAt: '',
     weatherFreshness: '',
     weatherSource: '',
+    forecastPolicy: '',
+    originSnapshotSource: '',
     modelPolicy: '',
     candidateCount: '',
     livePoolCount: '',
@@ -242,7 +246,8 @@ export default function AdminDiagnosticsPage() {
       admin: 'true',
       admin_all: 'true',
       trip_span: day === 'tomorrow' ? 'plus1day' : 'daytrip',
-      weather_source: weatherSource,
+      forecast_policy: forecastPolicy,
+      origin_snapshot_source: originSnapshotSource,
     })
     return p.toString()
   }
@@ -271,6 +276,8 @@ export default function AdminDiagnosticsPage() {
           'x-fomo-live-pool-count',
           'x-fomo-result-tier',
           'x-fomo-weather-source',
+          'x-fomo-forecast-policy',
+          'x-fomo-origin-snapshot-source',
           'x-fomo-weather-model-policy',
           'x-fomo-request-ms',
         ].forEach(h => {
@@ -301,6 +308,8 @@ export default function AdminDiagnosticsPage() {
         responseAt: payload._meta?.generated_at || '',
         weatherFreshness: payload._meta?.weather_data_freshness || '',
         weatherSource: res.headers.get('x-fomo-weather-source') || '',
+        forecastPolicy: res.headers.get('x-fomo-forecast-policy') || '',
+        originSnapshotSource: res.headers.get('x-fomo-origin-snapshot-source') || '',
         modelPolicy: res.headers.get('x-fomo-weather-model-policy') || '',
         candidateCount: res.headers.get('x-fomo-candidate-count') || '',
         livePoolCount: res.headers.get('x-fomo-live-pool-count') || '',
@@ -451,7 +460,7 @@ export default function AdminDiagnosticsPage() {
       return
     }
     fetchData()
-  }, [weatherSource, forecastDay, adminOrigin, adminMode])
+  }, [forecastPolicy, originSnapshotSource, forecastDay, adminOrigin, adminMode])
 
   const byCountryCount = useMemo(() => {
     const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
@@ -846,11 +855,17 @@ export default function AdminDiagnosticsPage() {
 
 
           <label className="flex items-center gap-2 text-xs text-slate-600">
-            Weather source
-            <select value={weatherSource} onChange={e => setWeatherSource(e.target.value as WeatherSourceMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+            Forecast policy
+            <select value={forecastPolicy} onChange={e => setForecastPolicy(e.target.value as ForecastPolicyMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
               <option value="openmeteo">Open-Meteo only</option>
               <option value="meteoswiss">MeteoSwiss model for CH</option>
-              <option value="meteoswiss_api">MeteoSwiss OGD origin + model forecast</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs text-slate-600">
+            Origin snapshot
+            <select value={originSnapshotSource} onChange={e => setOriginSnapshotSource(e.target.value as OriginSnapshotMode)} className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white">
+              <option value="openmeteo">Open-Meteo origin</option>
+              <option value="meteoswiss_ogd">MeteoSwiss OGD origin</option>
             </select>
           </label>
 
@@ -921,7 +936,9 @@ export default function AdminDiagnosticsPage() {
             <p className="text-xs text-slate-500 mb-2">
               Origin: <strong>{originMeta?.name || 'Basel'}</strong> ({(originMeta?.lat ?? 47.5596).toFixed(2)}, {(originMeta?.lon ?? 7.5886).toFixed(2)})
               {meta.requestMs && <span> · request {meta.requestMs}ms</span>}
-              {meta.weatherSource && <span> · source {meta.weatherSource}</span>}
+              {meta.forecastPolicy && <span> · forecast {meta.forecastPolicy}</span>}
+              {meta.originSnapshotSource && <span> · origin {meta.originSnapshotSource}</span>}
+              {meta.weatherSource && <span> · legacy {meta.weatherSource}</span>}
               {meta.modelPolicy && <span> · model {meta.modelPolicy}</span>}
               {meta.resultTier && <span> · tier {meta.resultTier}</span>}
             </p>
