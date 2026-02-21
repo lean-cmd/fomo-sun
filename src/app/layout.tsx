@@ -43,17 +43,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased min-h-screen flex flex-col">
         <main className="flex-1">{children}</main>
         <footer className="border-t border-slate-200/60 bg-white/50 py-6 px-4 mt-8">
-          <div className="max-w-xl mx-auto flex flex-col items-center gap-3 text-[11px] text-slate-500 font-medium">
-            <div className="flex items-center gap-4">
-              <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
-              <span className="text-slate-200">·</span>
-              <a href="/about" className="transition-colors hover:text-amber-600">About</a>
-              <span className="text-slate-200">·</span>
-              <a href="https://github.com" className="transition-colors hover:text-amber-600">GitHub</a>
-            </div>
-            <div className="text-[10px] text-slate-400 font-normal">
-              Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel · fomosun.com &copy; {new Date().getFullYear()}
-            </div>
+          <div className="max-w-xl mx-auto flex items-center justify-center gap-x-4 gap-y-2 text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden">
+            <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
+            <span className="text-slate-200">·</span>
+            <a href="/about" className="transition-colors hover:text-amber-600">About</a>
+            <span className="text-slate-200">·</span>
+            <span>Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel</span>
+            <span className="text-slate-200">·</span>
+            <span>fomosun.com &copy; {new Date().getFullYear()}</span>
           </div>
         </footer>
       </body>

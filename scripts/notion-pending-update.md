@@ -9,6 +9,60 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V94 — commit `d52eb3d` — 2026-02-21
+
+**Theme:** UI Tweaks & Footer Polish
+
+### 1. V88 Release Changelog — append after V93 entry
+
+```
+### V94 (d52eb3d)
+Theme: UI Tweaks & Footer Polish
+
+Changes:
+- Timeline: Fixed hero card travel preview bar start position in "Today" mode (now starts at red line) (page.tsx).
+- Footer: Deduplicated attribution line; removed it from the "Debug & Settings" panel (page.tsx).
+- Footer: Sleeked global footer into a single line; removed GitHub link (layout.tsx).
+
+Files: src/app/page.tsx, src/app/layout.tsx
+Validation: npm run build passed; Verified hero timeline logic and footer layout.
+Rollback: git revert d52eb3d
+Agent: Antigravity (Google DeepMind)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V94 | 2026-02-21 | Antigravity session
+- Hero card travel bar fixed for "Today" mode
+- Footer attribution deduplicated
+- Global footer consolidated into a single sleek line
+- Commit: d52eb3d
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Morning (Antigravity session)
+
+**Deployed:** V94 (d52eb3d)
+**Status:** Shipped and deployed to Vercel
+
+**What was done:**
+- Refined the real-time timeline visualization: corrected the hero card's travel preview bar to accurately start from the current time in "Today" mode, matching the result cards.
+- Polished the site's footer: consolidated all global links and attribution into a single, sleek line. This removes clutter and ensures a premium "one-piece" feel across the entire application.
+- Removed developer-focused GitHub links from the main footer to maintain a consumer-ready aesthetic.
+
+**Next:**
+- Monitor user interaction with the refined footer
+```
+
+---
+
 ## V93 — commit `bd1c2d1` — 2026-02-21
 
 **Theme:** Footer Deduplication & Cleanup

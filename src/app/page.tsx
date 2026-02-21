@@ -1424,8 +1424,8 @@ export default function Home() {
                 destinationSunLabel={formatSunHours(resolvedTopSunMin)}
                 travelMin={topBestTravel?.min}
                 travelMode={topBestTravel?.mode}
-                travelStartHour={heroLeaveByHour ?? undefined}
-                travelUntilHour={heroSunBlockStartHour ?? undefined}
+                travelStartHour={heroDayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
+                travelUntilHour={heroDayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
                 destinationShowTicks
                 inlineSunLabels
                 showNowMarker={dayFocus === 'today'}
@@ -1924,10 +1924,6 @@ export default function Home() {
                 </div>
               </div>
             )}
-
-            <p className="text-[10px] text-slate-400 mt-2">
-              Built with love and AI in Basel · <a href="https://fomosun.com" className="hover:text-slate-600 decoration-slate-200 underline underline-offset-4">fomosun.com</a>
-            </p>
           </div>
         </div>
       </footer>
