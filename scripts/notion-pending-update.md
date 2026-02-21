@@ -9,6 +9,58 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V96 — commit `e93f7a9` — 2026-02-21
+
+**Theme:** Hero Timeline & Data Consistency
+
+### 1. V88 Release Changelog — append after V95 entry
+
+```
+### V96 (e93f7a9)
+Theme: Hero Timeline & Data Consistency
+
+Changes:
+- Hero Card: Unified heroDayFocus, sunshine metrics, and travel start logic with the global dayFocus (page.tsx).
+- Fix: Corrected hero travel preview bar to accurately follow the "now" marker in Today mode.
+
+Files: src/app/page.tsx
+Validation: npm run build passed; Verified hero card consistency in both Today and Tomorrow modes.
+Rollback: git revert e93f7a9
+Agent: Antigravity (Google DeepMind)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V96 | 2026-02-21 | Antigravity session
+- Hero card unified with global dayFocus (Today/Tomorrow)
+- Fixed hero travel preview bar positioning in Today mode
+- Commit: e93f7a9
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-21 — Afternoon (Antigravity session)
+
+**Deployed:** V96 (e93f7a9)
+**Status:** Shipped and deployed to Vercel
+
+**What was done:**
+- Fixed a subtle bug where the hero "best escape" card was hardcoded to show tomorrow's data even when currently viewing today's results.
+- Unified the hero card's data pipeline with the global "Today/Tomorrow" selector. This ensures that when you switch to Today mode, the hero card's travel bar now correctly starts from your current position in the timeline, just like the result cards.
+- Polished the sunshine hours and gain metrics to be context-aware, providing a more reliable "best" recommendation.
+
+**Next:**
+- Monitor usage of the Today/Tomorrow toggle
+```
+
+---
+
 ## V95 — commit `cd9430b` — 2026-02-21
 
 **Theme:** Caching Infrastructure (TTL + SWR)

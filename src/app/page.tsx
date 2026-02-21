@@ -1055,14 +1055,16 @@ export default function Home() {
   const fallbackNotice = data?._meta?.fallback_notice || ''
   const resultRows = data?.escapes || []
   const resultTier = data?._meta?.result_tier
-  const heroDayFocus: DayFocus = 'tomorrow'
+  const heroDayFocus: DayFocus = dayFocus
   const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
   const heroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
-  const heroOriginSunMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60) || originSunMin
+  const heroOriginSunMin = dayFocus === 'tomorrow' ? originTomorrowMin : originSunMin
 
   const topBestTravel = heroEscape ? getBestTravel(heroEscape) : null
-  const topSunMin = heroEscape ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : 0
-  const resolvedTopSunMin = topSunMin > 0 ? topSunMin : (heroEscape?.sun_score.sunshine_forecast_min ?? 0)
+  const topSunMin = heroEscape
+    ? (dayFocus === 'tomorrow' ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : heroEscape.sun_score.sunshine_forecast_min)
+    : 0
+  const resolvedTopSunMin = topSunMin
   const sunGainMin = Math.max(0, resolvedTopSunMin - heroOriginSunMin)
   const heroLeaveByHour = parseHHMMToHour(heroEscape?.optimal_departure)
   const heroSunBlockStartHour = heroLeaveByHour !== null && topBestTravel
