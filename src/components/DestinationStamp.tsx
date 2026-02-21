@@ -865,6 +865,26 @@ export function DestinationStamp({
   className = '',
 }: StampProps) {
   const safeName = (name || 'DESTINATION').toUpperCase().slice(0, 24)
+  const normalizedId = (destinationId || '').toLowerCase()
+  if (normalizedId === 'st-moritz') {
+    return (
+      <svg
+        viewBox="0 0 100 124"
+        className={className}
+        role="img"
+        aria-label={`${safeName} destination stamp`}
+      >
+        <image
+          href="/stamps/stmoritz-vintage.jpg"
+          x="0"
+          y="0"
+          width="100"
+          height="124"
+          preserveAspectRatio="xMidYMid slice"
+        />
+      </svg>
+    )
+  }
   const safeRegion = stampRegionLabel(region)
   const style = stampNameStyle(safeName)
   const cantonCode = country === 'CH' ? swissCanton(region) : ''
