@@ -561,18 +561,22 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
   const riverColor = mixHex(palette.water, '#A3BCD3', 0.1)
 
   if (features.stMoritz) {
-    const slopeTop = horizon + 19
-    const slopeMid = horizon + 29
-    const pisteBlue = mixHex(palette.snow, palette.water, 0.18)
-    const pisteShadow = mixHex(palette.snow, palette.ridgeNear, 0.14)
+    const slopeTop = horizon + 18
+    const slopeMid = horizon + 28
+    const slopeBottom = horizon + 36
+    const pisteBlue = mixHex(palette.snow, palette.water, 0.2)
+    const pisteShadow = mixHex(palette.snow, palette.ridgeNear, 0.18)
+    const skierSuit = mixHex(palette.roof, '#D92D20', 0.22)
+    const boardSuit = mixHex(palette.ridgeNear, '#0F172A', 0.24)
     return (
       <g>
         <circle cx={sunX} cy={sunY} r="11.2" fill={palette.sun} opacity="0.9" />
         <path d={farRidge} fill={palette.ridgeFar} />
         <path d={midRidge} fill={palette.ridgeMid} />
-        <path d={nearRidge} fill={mixHex(palette.ridgeNear, '#0F172A', 0.08)} />
-        <path d={`M6 ${slopeTop} C 23 ${slopeTop - 6}, 44 ${slopeTop + 6}, 94 ${slopeTop + 1} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.water, 0.09)} opacity="0.98" />
-        <path d={`M6 ${slopeMid} C 22 ${slopeMid - 2}, 45 ${slopeMid + 9}, 94 ${slopeMid + 4} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.meadow, 0.13)} opacity="0.9" />
+        <path d={nearRidge} fill={mixHex(palette.ridgeNear, '#0F172A', 0.1)} />
+        <path d={`M6 ${slopeTop} C 22 ${slopeTop - 7}, 42 ${slopeTop + 5}, 94 ${slopeTop + 1} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.water, 0.08)} opacity="0.98" />
+        <path d={`M6 ${slopeMid} C 22 ${slopeMid - 3}, 44 ${slopeMid + 8}, 94 ${slopeMid + 3} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.meadow, 0.14)} opacity="0.92" />
+        <path d={`M6 ${slopeBottom} C 24 ${slopeBottom - 1}, 48 ${slopeBottom + 6}, 94 ${slopeBottom + 4} L94 80 L6 80 Z`} fill={mixHex(palette.snow, palette.frame, 0.06)} opacity="0.9" />
         <g stroke={pisteBlue} strokeWidth="1.05" strokeLinecap="round" fill="none" opacity="0.85">
           <path d={`M10 ${slopeTop + 2} C 22 ${slopeTop + 5}, 38 ${slopeTop + 12}, 58 ${slopeTop + 21}`} />
           <path d={`M24 ${slopeTop + 1} C 35 ${slopeTop + 8}, 52 ${slopeTop + 15}, 76 ${slopeTop + 24}`} />
@@ -583,24 +587,37 @@ function renderScene(seed: number, palette: PosterPalette, features: StampFeatur
           <path d={`M31 ${slopeTop + 8} C 45 ${slopeTop + 14}, 62 ${slopeTop + 21}, 82 ${slopeTop + 30}`} />
         </g>
         <g opacity="0.98">
-          <circle cx="56.7" cy={horizon + 10.6} r="6.4" fill="#EEC9AA" />
-          <path d={`M49.9 ${horizon + 8.8} C 53.1 ${horizon + 5.7}, 60.6 ${horizon + 5.9}, 63.6 ${horizon + 9.2} L 62.8 ${horizon + 11.1} L 50.4 ${horizon + 11.1} Z`} fill={mixHex(palette.frame, '#0F172A', 0.2)} />
-          <circle cx="54.2" cy={horizon + 10.8} r="2.5" fill={mixHex(palette.water, '#0F172A', 0.35)} />
-          <circle cx="59.8" cy={horizon + 10.8} r="2.5" fill={mixHex(palette.water, '#0F172A', 0.35)} />
-          <rect x="56.1" y={horizon + 10.3} width="1.8" height="1" rx="0.45" fill={mixHex(palette.frame, '#FFFFFF', 0.3)} />
-          <circle cx="53.4" cy={horizon + 10.2} r="0.6" fill={mixHex('#FFFFFF', palette.water, 0.25)} opacity="0.82" />
-          <circle cx="59" cy={horizon + 10.2} r="0.6" fill={mixHex('#FFFFFF', palette.water, 0.25)} opacity="0.82" />
-          <path d={`M47.6 ${horizon + 22.8} C 50.7 ${horizon + 15.2}, 62.3 ${horizon + 14.6}, 67.9 ${horizon + 22.9} L 64.3 ${horizon + 32.6} L 49.5 ${horizon + 32.6} Z`} fill={mixHex(palette.roof, '#FFFFFF', 0.1)} />
-          <path d={`M51.2 ${horizon + 21.8} L58.3 ${horizon + 24.1} L54.8 ${horizon + 27.1} Z`} fill={mixHex('#D92D20', '#FFFFFF', 0.12)} opacity="0.9" />
-          <path d={`M51 ${horizon + 32.4} L47.5 ${horizon + 39.6} L52.3 ${horizon + 40} L56.2 ${horizon + 32.4} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
-          <path d={`M63 ${horizon + 32.4} L59.6 ${horizon + 40.1} L64.4 ${horizon + 40.4} L67.7 ${horizon + 32.4} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
-          <path d={`M46.7 ${horizon + 39.6} L74.5 ${horizon + 49.2}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.18)} strokeWidth="1.6" strokeLinecap="round" />
-          <path d={`M45 ${horizon + 41.5} L72.9 ${horizon + 51.3}`} stroke={mixHex(palette.frame, '#FFFFFF', 0.24)} strokeWidth="1.45" strokeLinecap="round" />
-          <path d={`M51 ${horizon + 27.1} L47.2 ${horizon + 37}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.28)} strokeWidth="1" strokeLinecap="round" />
-          <path d={`M67.2 ${horizon + 26.4} L71.2 ${horizon + 35.2}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.28)} strokeWidth="1" strokeLinecap="round" />
-          <circle cx="74.2" cy={horizon + 43.7} r="1.15" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
-          <circle cx="76.8" cy={horizon + 45.3} r="1.25" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
-          <circle cx="79.1" cy={horizon + 47.1} r="1.05" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
+          {/* Foreground skier: helmet + big ski glasses + skis */}
+          <circle cx="55.6" cy={horizon + 11.4} r="4.5" fill="#EDC7A7" />
+          <path d={`M50.6 ${horizon + 10.1} C 52.2 ${horizon + 6.7}, 58.8 ${horizon + 6.5}, 60.8 ${horizon + 10.2} L60.1 ${horizon + 12.3} L51 ${horizon + 12.3} Z`} fill={mixHex(palette.frame, '#0F172A', 0.26)} />
+          <circle cx="53.8" cy={horizon + 11.2} r="1.9" fill={mixHex(palette.water, '#0F172A', 0.4)} />
+          <circle cx="57.6" cy={horizon + 11.2} r="1.9" fill={mixHex(palette.water, '#0F172A', 0.4)} />
+          <rect x="55.1" y={horizon + 10.8} width="1.2" height="0.8" rx="0.4" fill={mixHex(palette.frame, '#FFFFFF', 0.3)} />
+          <circle cx="53.2" cy={horizon + 10.7} r="0.45" fill={mixHex('#FFFFFF', palette.water, 0.2)} opacity="0.8" />
+          <circle cx="57" cy={horizon + 10.7} r="0.45" fill={mixHex('#FFFFFF', palette.water, 0.2)} opacity="0.8" />
+          <path d={`M50.2 ${horizon + 22.3} C 52 ${horizon + 16.4}, 59.8 ${horizon + 16.4}, 63.3 ${horizon + 22.8} L60.7 ${horizon + 31.8} L51.2 ${horizon + 31.8} Z`} fill={skierSuit} />
+          <path d={`M52 ${horizon + 31.5} L49.3 ${horizon + 38.2} L52.4 ${horizon + 38.6} L55.2 ${horizon + 31.6} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M59.6 ${horizon + 31.6} L57.2 ${horizon + 38.5} L60.2 ${horizon + 38.8} L62.8 ${horizon + 31.7} Z`} fill={mixHex(palette.frame, '#F8FAFC', 0.2)} />
+          <path d={`M50.9 ${horizon + 24.8} L47.7 ${horizon + 33.8}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.26)} strokeWidth="0.95" strokeLinecap="round" />
+          <path d={`M62.2 ${horizon + 24.4} L65.4 ${horizon + 31.2}`} stroke={mixHex(palette.frame, '#F8FAFC', 0.26)} strokeWidth="0.95" strokeLinecap="round" />
+          <path d={`M47 ${horizon + 34.2} L44.6 ${horizon + 44.8}`} stroke={mixHex(palette.frame, '#D1D5DB', 0.18)} strokeWidth="0.82" strokeLinecap="round" />
+          <path d={`M65.1 ${horizon + 31.7} L67.1 ${horizon + 42.2}`} stroke={mixHex(palette.frame, '#D1D5DB', 0.18)} strokeWidth="0.82" strokeLinecap="round" />
+          <path d={`M47.2 ${horizon + 39.8} L75.4 ${horizon + 49.6}`} stroke={mixHex(palette.frame, '#E2E8F0', 0.2)} strokeWidth="1.55" strokeLinecap="round" />
+          <path d={`M45.8 ${horizon + 41.8} L74.1 ${horizon + 51.9}`} stroke={mixHex(palette.frame, '#FFFFFF', 0.24)} strokeWidth="1.45" strokeLinecap="round" />
+
+          {/* Background snowboarder: smaller with helmet + glasses + board */}
+          <g opacity="0.84">
+            <circle cx="76.5" cy={horizon + 16.7} r="2.7" fill="#E7C3A3" />
+            <path d={`M73.7 ${horizon + 15.8} C 74.6 ${horizon + 13.9}, 78.6 ${horizon + 14}, 79.4 ${horizon + 16} L79 ${horizon + 17.2} L74 ${horizon + 17.2} Z`} fill={mixHex(palette.frame, '#0F172A', 0.28)} />
+            <rect x="74.1" y={horizon + 16.4} width="4.9" height="1.2" rx="0.6" fill={mixHex(palette.water, '#0F172A', 0.34)} />
+            <path d={`M73.5 ${horizon + 25.2} C 74.5 ${horizon + 21.2}, 79.3 ${horizon + 21.1}, 81 ${horizon + 25.4} L79 ${horizon + 31.4} L74.4 ${horizon + 31.4} Z`} fill={boardSuit} />
+            <path d={`M72.7 ${horizon + 31.4} L79.3 ${horizon + 35.2} L81.6 ${horizon + 31.2} L75.1 ${horizon + 27.8} Z`} fill={mixHex(palette.frame, '#E2E8F0', 0.14)} />
+            <path d={`M70.8 ${horizon + 35.4} L84.6 ${horizon + 39.9} L85.7 ${horizon + 38.1} L71.7 ${horizon + 33.6} Z`} fill={mixHex(palette.ridgeNear, '#0F172A', 0.2)} />
+          </g>
+
+          <circle cx="73.6" cy={horizon + 42.2} r="1.1" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
+          <circle cx="76.1" cy={horizon + 43.6} r="1.25" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
+          <circle cx="78.7" cy={horizon + 45.4} r="1.05" fill={mixHex('#FFFFFF', palette.snow, 0.12)} />
         </g>
       </g>
     )
