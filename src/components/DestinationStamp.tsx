@@ -875,7 +875,7 @@ export function DestinationStamp({
         aria-label={`${safeName} destination stamp`}
       >
         <image
-          href="/stamps/basel-vintage.jpg"
+          href="/stamps/basel-vintage.png"
           x="0"
           y="0"
           width="100"
@@ -894,7 +894,7 @@ export function DestinationStamp({
         aria-label={`${safeName} destination stamp`}
       >
         <image
-          href="/stamps/stmoritz-vintage.jpg"
+          href="/stamps/stmoritz-vintage.png"
           x="0"
           y="0"
           width="100"
