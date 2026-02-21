@@ -1053,6 +1053,13 @@ export default function Home() {
   }, [])
 
   const fallbackNotice = data?._meta?.fallback_notice || ''
+  const escapeSunMinutes = useCallback((escape: EscapeCard) => {
+    if (dayFocus === 'tomorrow') {
+      const tomorrowMin = Math.round((escape.tomorrow_sun_hours ?? 0) * 60)
+      if (tomorrowMin > 0) return tomorrowMin
+    }
+    return escape.sun_score.sunshine_forecast_min
+  }, [dayFocus])
   const resultRows = data?.escapes || []
   const resultTier = data?._meta?.result_tier
   const heroDayFocus: DayFocus = dayFocus
@@ -1092,22 +1099,23 @@ export default function Home() {
     const travel = topBestTravel
       ? `${formatTravelClock(topBestTravel.min / 60)} by ${topBestTravel.mode}`
       : 'a short trip'
+    const dayLabel = heroDayFocus === 'today' ? 'today' : 'tomorrow'
     const city = compactLabel(origin.name, 12)
     const gain = sunGainMin > 0 ? formatSunHours(sunGainMin) : ''
     const destination = heroEscape.destination.name
     const templates = sunGainMin > 0
       ? [
-        `${destination} looks much brighter than ${city} tomorrow. It’s about ${travel}.`,
-        `${city} stays grey tomorrow; ${destination} is your best escape. Plan roughly ${travel}.`,
+        `${destination} looks much brighter than ${city} ${dayLabel}. It’s about ${travel}.`,
+        `${city} stays grey ${dayLabel}; ${destination} is your best escape. Plan roughly ${travel}.`,
         `${destination} gives you about ${gain} more sun than ${city}. It’s around ${travel}.`,
       ]
       : [
-        `${destination} still looks like your best shot tomorrow. It’s about ${travel}.`,
-        `${city} and nearby spots look similar tomorrow, but ${destination} remains the strongest option.`,
+        `${destination} still looks like your best shot ${dayLabel}. It’s about ${travel}.`,
+        `${city} and nearby spots look similar ${dayLabel}, but ${destination} remains the strongest option.`,
       ]
     const idx = Math.abs((heroFlowTick + heroEscape.destination.id.length) % templates.length)
     return templates[idx] || templates[0]
-  }, [heroEscape, origin.name, topBestTravel, sunGainMin, heroFlowTick])
+  }, [heroEscape, heroDayFocus, origin.name, topBestTravel, sunGainMin, heroFlowTick])
 
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
@@ -1119,14 +1127,6 @@ export default function Home() {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
-
-  const escapeSunMinutes = useCallback((escape: EscapeCard) => {
-    if (dayFocus === 'tomorrow') {
-      const tomorrowMin = Math.round((escape.tomorrow_sun_hours ?? 0) * 60)
-      if (tomorrowMin > 0) return tomorrowMin
-    }
-    return escape.sun_score.sunshine_forecast_min
-  }, [dayFocus])
 
   const filteredRows = useMemo(() => {
     const strictBetter = resultRows
@@ -1389,7 +1389,7 @@ export default function Home() {
             <div className="flex items-start justify-between gap-3 pr-[88px] sm:pr-[96px]">
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500 font-semibold">
-                  Best escape tomorrow
+                  {heroDayFocus === 'today' ? 'Best escape today' : 'Best escape tomorrow'}
                 </p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
                   <h1 className="text-[19px] leading-tight font-semibold text-slate-900 truncate" style={{ fontFamily: 'Sora, sans-serif' }}>
