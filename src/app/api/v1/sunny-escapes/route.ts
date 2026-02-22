@@ -1470,11 +1470,14 @@ export async function GET(request: NextRequest) {
   const sunshineForSurfaceMin = (row: ScoredWithTravel) => (
     tripSpan === 'plus1day' ? row.tomorrowSunMin : row.sun_score.sunshine_forecast_min
   )
+  const minTenPctGainMin = comparisonOriginMin <= 0 ? 0 : comparisonOriginMin * 1.1
+  const isTenPctBetterThanOrigin = (row: ScoredWithTravel) => (
+    comparisonOriginMin <= 0
+      ? comparisonMetric(row) > 0
+      : comparisonMetric(row) >= minTenPctGainMin
+  )
   const isStrictBetterThanOrigin = (row: ScoredWithTravel) => {
-    return sunshineForSurfaceMin(row) > comparisonOriginMin
-  }
-  const isAtLeastAsGoodAsOrigin = (row: ScoredWithTravel) => {
-    return sunshineForSurfaceMin(row) >= comparisonOriginMin
+    return isTenPctBetterThanOrigin(row)
   }
   const withTravel = scored
     .sort((a, b) => {
@@ -1486,7 +1489,8 @@ export async function GET(request: NextRequest) {
     })
     .slice(0, topLimit)
   const visibleSunRows = withTravel.filter(r => sunshineForSurfaceMin(r) > 0)
-  const eligibleRows = adminView ? withTravel : visibleSunRows
+  const visibleSunRowsWithGain = visibleSunRows.filter(r => isTenPctBetterThanOrigin(r))
+  const eligibleRows = adminView ? withTravel : visibleSunRowsWithGain
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
@@ -1553,7 +1557,7 @@ export async function GET(request: NextRequest) {
 
   const tierPredicates = {
     strict: (row: ScoredWithTravel) => isStrictBetterThanOrigin(row) && sunshineForSurfaceMin(row) >= 60,
-    relaxed: (row: ScoredWithTravel) => isAtLeastAsGoodAsOrigin(row) && sunshineForSurfaceMin(row) >= 30,
+    relaxed: (row: ScoredWithTravel) => isTenPctBetterThanOrigin(row) && sunshineForSurfaceMin(row) >= 30,
     any_sun: (row: ScoredWithTravel) => sunshineForSurfaceMin(row) > 0,
   } as const
 
@@ -1858,7 +1862,8 @@ export async function GET(request: NextRequest) {
   ): Promise<EscapeResult> => {
     const destSunMin = full.sun_score.sunshine_forecast_min
     const netSun = tripSpan === 'plus1day' ? full.tomorrowNetAfterArrivalMin : full.netSunAfterArrivalMin
-    const cmp = formatComparison(destSunMin, originSunMin)
+    const cmp = formatComparison(netSun, originSunMin)
+    const conditionLine = `${destSunMin} min sunshine (${netSun} net after travel)${cmp}`
     const tourism = await getDestinationTourism(full.destination)
 
     const liveTimeline = !demoMode && full.liveForecast ? timelineFromLive(full.liveForecast.hours, sunWindow) : null
@@ -1881,7 +1886,7 @@ export async function GET(request: NextRequest) {
       rank,
       destination: full.destination,
       sun_score: full.sun_score,
-      conditions: `${destSunMin} min sunshine${cmp}`,
+      conditions: conditionLine,
       net_sun_min: netSun,
       optimal_departure: full.optimalDeparture,
       tier_eligibility: tierEligibilityForRow(full),

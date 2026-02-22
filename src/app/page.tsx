@@ -354,6 +354,7 @@ function SunTimelineBar({
   travelMode,
   travelStartHour,
   travelUntilHour,
+  arrivalMarkerHour,
   compact = false,
   showTicks = !compact,
   label,
@@ -369,6 +370,7 @@ function SunTimelineBar({
   travelMode?: 'car' | 'train'
   travelStartHour?: number
   travelUntilHour?: number
+  arrivalMarkerHour?: number
   compact?: boolean
   showTicks?: boolean
   label?: string
@@ -403,6 +405,9 @@ function SunTimelineBar({
   })()
   const travelStartPct = clamp((effectiveTravelStartHour / 24) * 100, 0, 100)
   const travelWidthPct = clamp(((travelEndHour - effectiveTravelStartHour) / 24) * 100, 0, 100 - travelStartPct)
+  const arrivalMarkerPct = arrivalMarkerHour !== undefined && Number.isFinite(arrivalMarkerHour)
+    ? clamp((arrivalMarkerHour / 24) * 100, 0, 100)
+    : null
 
   return (
     <div className="flex items-center gap-2">
@@ -429,6 +434,7 @@ function SunTimelineBar({
           )}
 
           {showNowMarker && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
+          {arrivalMarkerPct !== null && <div className="tl-arrival" style={{ left: `${arrivalMarkerPct}%` }} />}
           {travelMin && travelWidthPct > 0 && (
             <div className="tl-travel-overlay" style={{ left: `${travelStartPct}%`, width: `${travelWidthPct}%` }}>
               {travelMode === 'train' ? (
@@ -498,6 +504,32 @@ function TimelineComparisonBlock({
   inlineSunLabels?: boolean
   showNowMarker?: boolean
 }) {
+  const win = normalizeWindow(sunWindow?.[dayFocus])
+  const now = new Date()
+  const nowHour = now.getHours() + now.getMinutes() / 60
+  const defaultTravelStartHour = dayFocus === 'tomorrow'
+    ? Math.max(7, win.start_hour)
+    : nowHour
+  const effectiveTravelStartHour = travelStartHour !== undefined && Number.isFinite(travelStartHour)
+    ? clamp(travelStartHour, 0, 24)
+    : defaultTravelStartHour
+  const effectiveTravelEndHour = (() => {
+    if (travelUntilHour !== undefined && Number.isFinite(travelUntilHour) && travelUntilHour > effectiveTravelStartHour) {
+      return clamp(travelUntilHour, effectiveTravelStartHour, 24)
+    }
+    if (travelMin && Number.isFinite(travelMin) && travelMin > 0) {
+      return clamp(effectiveTravelStartHour + travelMin / 60, effectiveTravelStartHour, 24)
+    }
+    return effectiveTravelStartHour
+  })()
+  const hasTravelWindow = Boolean(
+    travelMin
+    && Number.isFinite(travelMin)
+    && travelMin > 0
+    && effectiveTravelEndHour > effectiveTravelStartHour
+  )
+  const placeTravelOnOrigin = dayFocus === 'today'
+
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-0.5">
       <SunTimelineBar
@@ -505,6 +537,10 @@ function TimelineComparisonBlock({
         dayFocus={dayFocus}
         sunWindow={sunWindow}
         showNowMarker={showNowMarker}
+        travelMin={placeTravelOnOrigin && hasTravelWindow ? travelMin : undefined}
+        travelMode={placeTravelOnOrigin && hasTravelWindow ? travelMode : undefined}
+        travelStartHour={placeTravelOnOrigin && hasTravelWindow ? effectiveTravelStartHour : undefined}
+        travelUntilHour={placeTravelOnOrigin && hasTravelWindow ? effectiveTravelEndHour : undefined}
         label={originLabel}
         sunLabel={inlineSunLabels ? undefined : originSunLabel}
         inBarSunLabel={inlineSunLabels ? originSunLabel : undefined}
@@ -518,10 +554,11 @@ function TimelineComparisonBlock({
         label={destinationLabel}
         sunLabel={inlineSunLabels ? undefined : destinationSunLabel}
         inBarSunLabel={inlineSunLabels ? destinationSunLabel : undefined}
-        travelMin={travelMin}
-        travelMode={travelMode}
-        travelStartHour={travelStartHour}
-        travelUntilHour={travelUntilHour}
+        travelMin={!placeTravelOnOrigin && hasTravelWindow ? travelMin : undefined}
+        travelMode={!placeTravelOnOrigin && hasTravelWindow ? travelMode : undefined}
+        travelStartHour={!placeTravelOnOrigin && hasTravelWindow ? effectiveTravelStartHour : undefined}
+        travelUntilHour={!placeTravelOnOrigin && hasTravelWindow ? effectiveTravelEndHour : undefined}
+        arrivalMarkerHour={placeTravelOnOrigin && hasTravelWindow ? effectiveTravelEndHour : undefined}
         subLabel={destinationSubLabel}
         showTicks={destinationShowTicks}
         compact
@@ -1083,13 +1120,17 @@ export default function Home() {
   }, [])
 
   const fallbackNotice = data?._meta?.fallback_notice || ''
-  const escapeSunMinutes = useCallback((escape: EscapeCard) => {
+  const escapeRawSunMinutes = useCallback((escape: EscapeCard) => {
     if (dayFocus === 'tomorrow') {
       const tomorrowMin = Math.round((escape.tomorrow_sun_hours ?? 0) * 60)
       if (tomorrowMin > 0) return tomorrowMin
     }
     return escape.sun_score.sunshine_forecast_min
   }, [dayFocus])
+  const escapeNetSunMinutes = useCallback((escape: EscapeCard) => {
+    if (Number.isFinite(escape.net_sun_min)) return Math.max(0, Math.round(escape.net_sun_min))
+    return escapeRawSunMinutes(escape)
+  }, [escapeRawSunMinutes])
   const resultRows = data?.escapes || []
   const resultTier = data?._meta?.result_tier
   const isDemoModeActive = demo || data?._meta?.demo_mode || liveDataSource === 'mock'
@@ -1104,7 +1145,7 @@ export default function Home() {
   const defaultHeroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
   const isBaselOrigin = forceQuickDemoBaselHero || /\bbasel\b/i.test(origin.name)
   const hasTenPctBetterOption = resultRows.some((escape) => {
-    const candidateSunMin = escapeSunMinutes(escape)
+    const candidateSunMin = escapeNetSunMinutes(escape)
     if (heroOriginSunMin <= 0) return candidateSunMin > 0
     return candidateSunMin >= heroOriginSunMin * 1.1
   })
@@ -1280,13 +1321,16 @@ export default function Home() {
     : (isStayHomeHero ? stayHomeHero : defaultHeroEscape)
 
   const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
-  const topSunMin = heroEscape
+  const topRawSunMin = heroEscape
     ? (isStayHomeHero
       ? heroOriginSunMin
-      : (dayFocus === 'tomorrow' ? Math.round((heroEscape.tomorrow_sun_hours ?? 0) * 60) : heroEscape.sun_score.sunshine_forecast_min))
+      : escapeRawSunMinutes(heroEscape))
     : 0
-  const resolvedTopSunMin = topSunMin
-  const sunGainMin = Math.max(0, resolvedTopSunMin - heroOriginSunMin)
+  const topComparableSunMin = heroEscape
+    ? (isStayHomeHero ? heroOriginSunMin : escapeNetSunMinutes(heroEscape))
+    : 0
+  const resolvedTopRawSunMin = topRawSunMin
+  const sunGainMin = Math.max(0, topComparableSunMin - heroOriginSunMin)
   const heroLeaveByHour = parseHHMMToHour(heroEscape?.optimal_departure)
   const heroSunBlockStartHour = heroLeaveByHour !== null && topBestTravel
     ? clamp(heroLeaveByHour + topBestTravel.min / 60 - 0.08, 0, 23.99)
@@ -1355,9 +1399,14 @@ export default function Home() {
       resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
+  const isSunnyEscapeCandidate = useCallback((escape: EscapeCard) => {
+    const candidateNetSunMin = escapeNetSunMinutes(escape)
+    if (heroOriginSunMin <= 0) return candidateNetSunMin > 0
+    return candidateNetSunMin >= heroOriginSunMin * 1.1
+  }, [escapeNetSunMinutes, heroOriginSunMin])
 
   const filteredRows = useMemo(() => {
-    const strictBetter = resultRows
+    const strictBetter = resultRows.filter(isSunnyEscapeCandidate)
     if (strictBetter.length === 0) return []
     const typed = activeTypeChips.length === 0
       ? strictBetter
@@ -1369,7 +1418,7 @@ export default function Home() {
         })
       })
     return typed
-  }, [activeTypeChips, resultRows])
+  }, [activeTypeChips, isSunnyEscapeCandidate, resultRows])
 
   const displayLimit = showMoreResults ? 15 : 5
   const visibleRows = useMemo(() => filteredRows.slice(0, 15), [filteredRows])
@@ -1380,7 +1429,7 @@ export default function Home() {
     const seen = new Set<string>()
 
     const pushRow = (escape: EscapeCard | null | undefined) => {
-      if (!escape || seen.has(escape.destination.id)) return false
+      if (!escape || seen.has(escape.destination.id) || !isSunnyEscapeCandidate(escape)) return false
       rows.push({ escape, badges: [] })
       seen.add(escape.destination.id)
       return true
@@ -1414,7 +1463,7 @@ export default function Home() {
       if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
       return { ...row, badges }
     })
-  }, [displayLimit, fastestEscape, visibleRows, warmestEscape])
+  }, [displayLimit, fastestEscape, isSunnyEscapeCandidate, visibleRows, warmestEscape])
 
   useEffect(() => {
     if (filteredRows.length <= 5 && showMoreResults) {
@@ -1470,14 +1519,15 @@ export default function Home() {
     const destinationSunMin = destinationMin > 0 ? destinationMin : escape.sun_score.sunshine_forecast_min
     const destinationSun = formatSunHours(destinationSunMin)
     const originComparisonMin = isTomorrowShare ? heroOriginSunMin : originSunMin
+    const destinationNetSunMin = Math.max(0, Math.round(escape.net_sun_min))
     const originTimelinePreview = timelineEmojiPreview(data?.origin_timeline, shareDay)
     const destinationSky = timelineEmojiPreview(escape.sun_timeline, shareDay)
-    const gainMin = Math.max(0, destinationSunMin - originComparisonMin)
+    const gainMin = Math.max(0, destinationNetSunMin - originComparisonMin)
     const shareText = [
       `🌤️ FOMO Sun: Escape the fog!`,
       '',
       `📍 ${escape.destination.name} (${escape.destination.altitude_m}m, ${escape.destination.region})`,
-      `☀️ ${destinationSun} sun · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
+      `☀️ ${destinationSun} sun (${formatSunHours(destinationNetSunMin)} net) · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
       travelText,
       '',
       `${origin.name}:    ${originTimelinePreview}`,
@@ -1671,7 +1721,10 @@ export default function Home() {
                 originLabel={origin.name}
                 destinationLabel={isStayHomeHero ? 'Stay Home' : heroEscape.destination.name}
                 originSunLabel={formatSunHours(heroOriginSunMin)}
-                destinationSunLabel={formatSunHours(resolvedTopSunMin)}
+                destinationSunLabel={formatSunHours(resolvedTopRawSunMin)}
+                destinationSubLabel={!isStayHomeHero && heroDayFocus === 'today'
+                  ? `Net ${formatSunHours(Math.max(0, heroEscape.net_sun_min))} from arrival`
+                  : undefined}
                 travelMin={topBestTravel?.min}
                 travelMode={topBestTravel?.mode}
                 travelStartHour={heroDayFocus === 'tomorrow' && !isStayHomeHero ? (heroLeaveByHour ?? undefined) : undefined}
@@ -1869,7 +1922,7 @@ export default function Home() {
               const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
-              const gainMin = Math.max(0, escapeSunMinutes(escape) - originSunMin)
+              const gainMin = Math.max(0, escapeNetSunMinutes(escape) - heroOriginSunMin)
               const originTimelineSunMin = dayFocus === 'tomorrow' ? heroOriginSunMin : originSunMin
               const escapeTimelineSunMin = dayFocus === 'tomorrow'
                 ? (Math.round((escape.tomorrow_sun_hours ?? 0) * 60) || escape.sun_score.sunshine_forecast_min)
@@ -1924,7 +1977,7 @@ export default function Home() {
                               <Sun className="w-[13px] h-[13px] text-amber-500 shrink-0" strokeWidth={1.9} />
                               <div className="text-right">
                                 {(() => {
-                                  const sun = splitSunLabel(escapeSunMinutes(escape))
+                                  const sun = splitSunLabel(escapeRawSunMinutes(escape))
                                   return (
                                     <span className="inline-flex items-baseline justify-end gap-[1px] tracking-tight text-amber-600 font-semibold leading-none">
                                       <span className="text-[21px] leading-[0.95]">{sun.major}</span>
@@ -1994,6 +2047,9 @@ export default function Home() {
                             destinationLabel={escape.destination.name}
                             originSunLabel={formatSunHours(originTimelineSunMin)}
                             destinationSunLabel={formatSunHours(escapeTimelineSunMin)}
+                            destinationSubLabel={dayFocus === 'today'
+                              ? `Net ${formatSunHours(Math.max(0, escape.net_sun_min))} from arrival`
+                              : undefined}
                             travelMin={bestTravel?.min}
                             travelMode={bestTravel?.mode}
                             travelStartHour={dayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
