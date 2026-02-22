@@ -152,6 +152,17 @@ body {
   z-index: 3;
 }
 
+.tl-leave-by {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  width: 2px;
+  border-radius: 999px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+  z-index: 4;
+}
+
 .tl-arrival {
   position: absolute;
   top: -1px;

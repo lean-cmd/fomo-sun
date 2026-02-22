@@ -345,6 +345,16 @@ function parseHHMMToHour(value?: string) {
   return clamp(hh + mm / 60, 0, 23.99)
 }
 
+function buildLocalTourismUrl(city: string) {
+  const q = encodeURIComponent(city || 'Switzerland')
+  return `https://www.myswitzerland.com/en-ch/search/?q=${q}`
+}
+
+function buildLocalCalendarUrl(city: string) {
+  const q = encodeURIComponent(`${city} events calendar`)
+  return `https://www.google.com/search?q=${q}`
+}
+
 function SunTimelineBar({
   timeline,
   dayFocus,
@@ -355,6 +365,7 @@ function SunTimelineBar({
   travelStartHour,
   travelUntilHour,
   arrivalMarkerHour,
+  leaveByHour,
   compact = false,
   showTicks = !compact,
   label,
@@ -371,6 +382,7 @@ function SunTimelineBar({
   travelStartHour?: number
   travelUntilHour?: number
   arrivalMarkerHour?: number
+  leaveByHour?: number
   compact?: boolean
   showTicks?: boolean
   label?: string
@@ -408,6 +420,9 @@ function SunTimelineBar({
   const arrivalMarkerPct = arrivalMarkerHour !== undefined && Number.isFinite(arrivalMarkerHour)
     ? clamp((arrivalMarkerHour / 24) * 100, 0, 100)
     : null
+  const leaveByPct = leaveByHour !== undefined && Number.isFinite(leaveByHour)
+    ? clamp((leaveByHour / 24) * 100, 0, 100)
+    : null
 
   return (
     <div className="flex items-center gap-2">
@@ -434,6 +449,7 @@ function SunTimelineBar({
           )}
 
           {showNowMarker && <div className="tl-now" style={{ left: `${nowPct}%` }} />}
+          {leaveByPct !== null && <div className="tl-leave-by" style={{ left: `${leaveByPct}%` }} />}
           {arrivalMarkerPct !== null && <div className="tl-arrival" style={{ left: `${arrivalMarkerPct}%` }} />}
           {travelMin && travelWidthPct > 0 && (
             <div className="tl-travel-overlay" style={{ left: `${travelStartPct}%`, width: `${travelWidthPct}%` }}>
@@ -528,7 +544,7 @@ function TimelineComparisonBlock({
     && travelMin > 0
     && effectiveTravelEndHour > effectiveTravelStartHour
   )
-  const placeTravelOnOrigin = dayFocus === 'today'
+  const placeTravelOnOrigin = true
 
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2 space-y-0.5">
@@ -541,6 +557,7 @@ function TimelineComparisonBlock({
         travelMode={placeTravelOnOrigin && hasTravelWindow ? travelMode : undefined}
         travelStartHour={placeTravelOnOrigin && hasTravelWindow ? effectiveTravelStartHour : undefined}
         travelUntilHour={placeTravelOnOrigin && hasTravelWindow ? effectiveTravelEndHour : undefined}
+        leaveByHour={dayFocus === 'tomorrow' && placeTravelOnOrigin && hasTravelWindow ? effectiveTravelStartHour : undefined}
         label={originLabel}
         sunLabel={inlineSunLabels ? undefined : originSunLabel}
         inBarSunLabel={inlineSunLabels ? originSunLabel : undefined}
@@ -710,14 +727,7 @@ export default function Home() {
     return map
   }, [data?._meta?.bucket_counts])
 
-  const bucketCountsReady = bucketCountMap.size >= TRAVEL_BANDS.length
-
-  const isBandAvailable = useCallback((bandIndex: number) => {
-    if (!hasJoystickInteracted || !bucketCountsReady) return true
-    const band = TRAVEL_BANDS[bandIndex]
-    const info = bucketCountMap.get(band.id)
-    return info === undefined ? true : info.destinationCount > 0
-  }, [bucketCountMap, bucketCountsReady, hasJoystickInteracted])
+  const isBandAvailable = useCallback((_bandIndex: number) => true, [])
 
   const applyJoyPosition = useCallback((nextJoy: number, updateRange = true) => {
     const clamped = clamp(nextJoy, -1, 1)
@@ -1139,6 +1149,8 @@ export default function Home() {
   const stayHomeCityName = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.name : origin.name
   const stayHomeLat = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.lat : origin.lat
   const stayHomeLon = forceQuickDemoBaselHero ? DEMO_BASEL_HERO.lon : origin.lon
+  const stayHomeTourismUrl = buildLocalTourismUrl(stayHomeCityName)
+  const stayHomeCalendarUrl = buildLocalCalendarUrl(stayHomeCityName)
   const heroDayFocus: DayFocus = dayFocus
   const originTomorrowMin = Math.round((data?.tomorrow_sun_hours ?? 0) * 60)
   const heroOriginSunMin = dayFocus === 'tomorrow' ? originTomorrowMin : originSunMin
@@ -1149,7 +1161,7 @@ export default function Home() {
     if (heroOriginSunMin <= 0) return candidateSunMin > 0
     return candidateSunMin >= heroOriginSunMin * 1.1
   })
-  const shouldStayHomeHero = Boolean(data) && (forceQuickDemoBaselHero || resultRows.length === 0 || !hasTenPctBetterOption)
+  const shouldStayHomeHero = Boolean(data) && !loading && (forceQuickDemoBaselHero || resultRows.length === 0 || !hasTenPctBetterOption)
   const stayHomeHero = useMemo<EscapeCard | null>(() => {
     if (!shouldStayHomeHero || !data) return null
     const sunMin = heroOriginSunMin
@@ -1202,21 +1214,25 @@ export default function Home() {
         tourism: {
           ...base.tourism,
           description_short: `Stay in ${stayHomeCityName}`,
-          description_long: `No destination in range is at least 10% sunnier than ${stayHomeCityName} right now.`,
+          description_long: `${stayHomeCityName} is already at the top today. No destination in this range offers at least 10% more net sunshine after travel.`,
           highlights: [
-            `${stayHomeCityName} is already one of the sunniest options`,
-            'Save travel time and keep full daylight',
-            'Great day for a local riverside or city walk',
+            `${stayHomeCityName} is already one of the strongest sun picks today`,
+            'Skip travel and keep your full daylight window',
+            'Perfect timing for a local walk, terrace, or town event',
           ],
           tags: ['town', 'local', 'sun'],
+          official_url: stayHomeTourismUrl,
         },
         travel: {},
         plan: [
           `Stay in ${stayHomeCityName}`,
-          'Use the sunniest local window',
-          'Skip travel and keep net sun',
+          'Use the local sunny window and stay flexible',
+          'Explore what is happening in town today',
+          'Skip travel and keep your net sun minutes',
         ],
-        links: {},
+        links: {
+          google_maps: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${stayHomeCityName}, Switzerland`)}`,
+        },
         sun_timeline: data.origin_timeline,
         tomorrow_sun_hours: data.tomorrow_sun_hours,
       }
@@ -1254,25 +1270,32 @@ export default function Home() {
       },
       tourism: {
         description_short: `Stay in ${stayHomeCityName}`,
-        description_long: `No destination in range is at least 10% sunnier than ${stayHomeCityName} right now.`,
-        highlights: ['Stay local', 'Keep full daylight', 'No net-sun gain from travel'],
+        description_long: `${stayHomeCityName} is already your best sun play today. No destination in this range beats it by at least 10% net sun.`,
+        highlights: [
+          'Stay local and keep full daylight',
+          'No meaningful net-sun gain from travel today',
+          'Great chance to rediscover your own town',
+        ],
         tags: ['town', 'local', 'sun'],
         hero_image: '',
-        official_url: '',
+        official_url: stayHomeTourismUrl,
         pois_nearby: [],
         source: 'fallback',
       },
       travel: {},
       plan: [
         `Stay in ${stayHomeCityName}`,
-        'Use the sunniest local window',
-        'Skip travel and keep net sun',
+        'Enjoy the sunniest local window',
+        'Check local events and tourism ideas nearby',
+        'Skip travel and keep your net sun',
       ],
-      links: {},
+      links: {
+        google_maps: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${stayHomeCityName}, Switzerland`)}`,
+      },
       sun_timeline: data.origin_timeline,
       tomorrow_sun_hours: data.tomorrow_sun_hours,
     }
-  }, [data, defaultHeroEscape, heroOriginSunMin, isBaselOrigin, shouldStayHomeHero, stayHomeCityName, stayHomeLat, stayHomeLon])
+  }, [data, defaultHeroEscape, heroOriginSunMin, isBaselOrigin, shouldStayHomeHero, stayHomeCityName, stayHomeLat, stayHomeLon, stayHomeTourismUrl])
   const forcedDemoStMoritzHero = useMemo<EscapeCard | null>(() => {
     if (!forceLongDemoStMoritzHero || !data) return null
     const existing = resultRows.find((escape) => escape.destination.id === DEMO_ST_MORITZ.id)
@@ -1363,9 +1386,9 @@ export default function Home() {
       const dayLabel = heroDayFocus === 'today' ? 'today' : 'tomorrow'
       const city = compactLabel(stayHomeCityName, 14)
       const templates = [
-        `STAY HOME. ${city} is already one of the sunniest options ${dayLabel}.`,
-        `No destination is at least 10% sunnier than ${city} ${dayLabel}.`,
-        `${city} wins on net sun ${dayLabel}. Skip travel and keep the daylight.`,
+        `Stay close to home ${dayLabel}. ${city} is already delivering one of the best sun windows you can get.`,
+        `${city} is hard to beat ${dayLabel}: no destination in range gives at least 10% more net sun after travel.`,
+        `No need to chase the forecast ${dayLabel}. ${city} wins on net sun, so keep your daylight and enjoy your own town.`,
       ]
       const idx = Math.abs((heroFlowTick + city.length) % templates.length)
       return templates[idx] || templates[0]
@@ -1521,6 +1544,7 @@ export default function Home() {
 
   const buildWhatsAppHref = (escape: EscapeCard, shareDay: DayFocus = dayFocus) => {
     const isTomorrowShare = shareDay === 'tomorrow'
+    const isStayHomeShare = escape.destination.id === 'basel' || escape.destination.id.startsWith('stay-home-')
     const bestTravel = getBestTravel(escape)
     const travelText = bestTravel
       ? `${bestTravel.mode === 'car' ? '🚗' : '🚆'} ${formatTravelClock(bestTravel.min / 60)} from ${origin.name}`
@@ -1536,7 +1560,7 @@ export default function Home() {
     const destinationSky = timelineEmojiPreview(escape.sun_timeline, shareDay)
     const gainMin = Math.max(0, destinationNetSunMin - originComparisonMin)
     const shareText = [
-      `🌤️ FOMO Sun: Escape the fog!`,
+      isStayHomeShare ? '🌤️ FOMO Sun: Stay local today' : '🌤️ FOMO Sun: Escape the fog!',
       '',
       `📍 ${escape.destination.name} (${escape.destination.altitude_m}m, ${escape.destination.region})`,
       `☀️ ${destinationSun} sun (${formatSunHours(destinationNetSunMin)} net) · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
@@ -1547,7 +1571,9 @@ export default function Home() {
       '',
       gainMin > 0
         ? `🟢 +${formatSunHours(gainMin)} more sun than ${origin.name} ☀️`
-        : `No additional sun vs ${origin.name}`,
+        : (isStayHomeShare
+          ? `✅ Stay local: this is as good as it gets today in your range`
+          : `No additional sun vs ${origin.name}`),
       '',
       `→ fomosun.com`,
     ].filter(Boolean).join('\n')
@@ -1725,26 +1751,42 @@ export default function Home() {
             </div>
 
             <div className="mt-3">
-              <TimelineComparisonBlock
-                originTimeline={data?.origin_timeline || heroEscape.sun_timeline}
-                destinationTimeline={heroEscape.sun_timeline}
-                dayFocus={heroDayFocus}
-                sunWindow={data?.sun_window}
-                originLabel={origin.name}
-                destinationLabel={isStayHomeHero ? 'Stay Home' : heroEscape.destination.name}
-                originSunLabel={formatSunHours(heroOriginSunMin)}
-                destinationSunLabel={formatSunHours(resolvedTopRawSunMin)}
-                destinationSubLabel={!isStayHomeHero && heroDayFocus === 'today'
-                  ? `Net ${formatSunHours(Math.max(0, heroEscape.net_sun_min))} from arrival`
-                  : undefined}
-                travelMin={topBestTravel?.min}
-                travelMode={topBestTravel?.mode}
-                travelStartHour={heroDayFocus === 'tomorrow' && !isStayHomeHero ? (heroLeaveByHour ?? undefined) : undefined}
-                travelUntilHour={heroDayFocus === 'tomorrow' && !isStayHomeHero ? (heroSunBlockStartHour ?? undefined) : undefined}
-                destinationShowTicks
-                inlineSunLabels
-                showNowMarker={dayFocus === 'today'}
-              />
+              {isStayHomeHero ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-2.5 py-2">
+                  <SunTimelineBar
+                    timeline={data?.origin_timeline || heroEscape.sun_timeline}
+                    dayFocus={heroDayFocus}
+                    sunWindow={data?.sun_window}
+                    label={stayHomeCityName}
+                    inBarSunLabel={formatSunHours(heroOriginSunMin)}
+                    subLabel="As good as it gets"
+                    showTicks
+                    compact
+                    showNowMarker={dayFocus === 'today'}
+                  />
+                </div>
+              ) : (
+                <TimelineComparisonBlock
+                  originTimeline={data?.origin_timeline || heroEscape.sun_timeline}
+                  destinationTimeline={heroEscape.sun_timeline}
+                  dayFocus={heroDayFocus}
+                  sunWindow={data?.sun_window}
+                  originLabel={origin.name}
+                  destinationLabel={heroEscape.destination.name}
+                  originSunLabel={formatSunHours(heroOriginSunMin)}
+                  destinationSunLabel={formatSunHours(resolvedTopRawSunMin)}
+                  destinationSubLabel={heroDayFocus === 'today'
+                    ? `Net ${formatSunHours(Math.max(0, heroEscape.net_sun_min))} from arrival`
+                    : undefined}
+                  travelMin={topBestTravel?.min}
+                  travelMode={topBestTravel?.mode}
+                  travelStartHour={heroDayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
+                  travelUntilHour={heroDayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
+                  destinationShowTicks
+                  inlineSunLabels
+                  showNowMarker={dayFocus === 'today'}
+                />
+              )}
             </div>
 
             <div className="mt-3 inline-flex items-center gap-4">
@@ -1755,15 +1797,42 @@ export default function Home() {
               >
                 {isStayHomeHero ? 'See alternatives ↓' : 'Escape now ↓'}
               </button>
-              {!isStayHomeHero && (
+              <a
+                href={buildWhatsAppHref(heroEscape, heroDayFocus)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
+              >
+                <WhatsAppIcon className="w-3.5 h-3.5" />
+                {isStayHomeHero ? 'Share local plan ↗' : 'Share ↗'}
+              </a>
+              {isStayHomeHero ? (
+                <>
+                  <a
+                    href={stayHomeTourismUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
+                  >
+                    Explore {compactLabel(stayHomeCityName, 12)} ↗
+                  </a>
+                  <a
+                    href={stayHomeCalendarUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
+                  >
+                    Local events ↗
+                  </a>
+                </>
+              ) : (
                 <a
-                  href={buildWhatsAppHref(heroEscape, heroDayFocus)}
+                  href={heroEscape.tourism?.official_url || stayHomeTourismUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
                 >
-                  <WhatsAppIcon className="w-3.5 h-3.5" />
-                  Share ↗
+                  Explore place ↗
                 </a>
               )}
             </div>
@@ -1825,27 +1894,22 @@ export default function Home() {
           <div className="mt-2 grid grid-cols-5 gap-1.5 text-[10px]">
             {TRAVEL_BANDS.map((band, idx) => {
               const active = idx === effectiveRangeIndex
-              const available = isBandAvailable(idx)
               const info = bucketCountMap.get(band.id)
-              const destinationCount = info?.destinationCount
-              const disabled = destinationCount !== undefined && !available
+              const destinationCount = info?.destinationCount ?? 0
+              const sparse = hasJoystickInteracted && destinationCount === 0
               return (
                 <button
                   key={band.id}
                   type="button"
-                  onClick={() => {
-                    if (disabled) return
-                    setJoystickRange(idx)
-                  }}
-                  disabled={disabled}
+                  onClick={() => setJoystickRange(idx)}
                   className={`h-7 rounded-full border inline-flex items-center justify-center ${active
                     ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold'
-                    : disabled
-                      ? 'border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : sparse
+                      ? 'border-slate-200 bg-slate-100 text-slate-500'
                       : 'border-slate-200 bg-white text-slate-500'
-                    } ${disabled ? '' : 'cursor-pointer hover:border-amber-200 active:scale-[0.98]'} transition`}
+                    } cursor-pointer hover:border-amber-200 active:scale-[0.98] transition`}
                   style={{ fontFamily: 'DM Mono, monospace' }}
-                  title={disabled ? `No destinations in ${band.label}` : undefined}
+                  title={sparse ? `No sunny escapes currently in ${band.label}` : undefined}
                 >
                   {band.label}
                 </button>
@@ -1939,6 +2003,10 @@ export default function Home() {
               const escapeTimelineSunMin = dayFocus === 'tomorrow'
                 ? (Math.round((escape.tomorrow_sun_hours ?? 0) * 60) || escape.sun_score.sunshine_forecast_min)
                 : escape.sun_score.sunshine_forecast_min
+              const escapeLeaveByHour = parseHHMMToHour(escape.optimal_departure)
+              const escapeSunBlockStartHour = escapeLeaveByHour !== null && bestTravel
+                ? clamp(escapeLeaveByHour + bestTravel.min / 60 - 0.08, 0, 23.99)
+                : null
               const cardFlowAnimation = cardFlowDir === 'right'
                 ? 'cardFlowRight 320ms cubic-bezier(0.22, 1, 0.36, 1)'
                 : 'cardFlowLeft 320ms cubic-bezier(0.22, 1, 0.36, 1)'
@@ -2064,8 +2132,8 @@ export default function Home() {
                               : undefined}
                             travelMin={bestTravel?.min}
                             travelMode={bestTravel?.mode}
-                            travelStartHour={dayFocus === 'tomorrow' ? (heroLeaveByHour ?? undefined) : undefined}
-                            travelUntilHour={dayFocus === 'tomorrow' ? (heroSunBlockStartHour ?? undefined) : undefined}
+                            travelStartHour={dayFocus === 'tomorrow' ? (escapeLeaveByHour ?? undefined) : undefined}
+                            travelUntilHour={dayFocus === 'tomorrow' ? (escapeSunBlockStartHour ?? undefined) : undefined}
                             destinationShowTicks
                             inlineSunLabels
                             showNowMarker={dayFocus === 'today'}
@@ -2190,7 +2258,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="mt-4 pb-12 border-t border-slate-100">
+      <footer className="mt-4 pb-[calc(3rem+env(safe-area-inset-bottom))] border-t border-slate-100">
         <div className="max-w-xl mx-auto px-4 py-6">
           <div className="flex flex-col items-center gap-4">
             <button
@@ -2241,18 +2309,15 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
-                  <a href="/api/v1/sunny-escapes" className="hover:text-amber-600 transition-colors">API Access</a>
-                  <span className="text-slate-200">·</span>
-                  <a href="/admin" className="hover:text-amber-600 transition-colors">Admin Diagnostics</a>
-                  <span className="text-slate-200">·</span>
-                  <a href="/llms.txt" className="hover:text-amber-600 transition-colors">llms.txt</a>
-                  <span className="text-slate-200">·</span>
-                  <span className="whitespace-nowrap">
+                <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                  <a href="/admin" className="hover:text-amber-600 transition-colors text-left">Admin Diagnostics</a>
+                  <a href="/api/v1/sunny-escapes" className="hover:text-amber-600 transition-colors text-left">API Access</a>
+                  <a href="/about" className="hover:text-amber-600 transition-colors text-left">About</a>
+                  <a href="/llms.txt" className="hover:text-amber-600 transition-colors text-left">llms.txt</a>
+                  <span className="col-span-2 text-left">
                     Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-amber-600 transition-colors">MeteoSwiss</a>
                   </span>
-                  <span className="text-slate-200">·</span>
-                  <span className="whitespace-nowrap">
+                  <span className="col-span-2 text-left">
                     Routing: <a href="https://opentransportdata.swiss" className="underline hover:text-amber-600 transition-colors">OJP</a>
                   </span>
                 </div>
