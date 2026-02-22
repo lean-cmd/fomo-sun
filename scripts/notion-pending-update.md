@@ -9,6 +9,63 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V103 — commit `b39556f` — 2026-02-22
+
+**Theme:** Today Timeline Truth + 10% Net-Sun Escape Gate
+
+### 1. V88 Release Changelog — append after V102 entry
+
+```
+### V103 (b39556f)
+Theme: Today Timeline Truth + 10% Net-Sun Escape Gate
+
+Changes:
+- Timeline (today mode): moved travel overlay to the origin bar so travel is visualized where the user starts.
+- Timeline (today mode): added a green arrival marker on the destination bar at travel end.
+- Net-sun clarity: destination condition text now shows both raw sunshine and net sunshine after travel.
+- Eligibility gate: sunny escapes now require at least 10% more net sun than origin (non-admin response path).
+- UI consistency: card gain indicators and stay-home fallback checks now compare against net-sun semantics.
+
+Files: src/app/page.tsx, src/app/api/v1/sunny-escapes/route.ts, src/app/globals.css
+Validation: npm run build passed; local multi-bucket API checks confirmed all returned rows meet 10% net-sun rule.
+Rollback: git revert b39556f
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V103 | 2026-02-22 | Codex session
+- Fixed today-mode timeline semantics (travel on origin bar, green arrival marker on destination bar)
+- Switched sunny-escape qualification to 10% net-sun advantage vs origin
+- Updated API condition strings to include raw + net sunshine after travel
+- Commit: b39556f
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-22 — Night (Codex session)
+
+**Deployed:** V103 (b39556f)
+**Status:** Shipped and validated
+
+**What was done:**
+- Reworked today timeline to match user mental model: travel starts at origin and arrives at destination.
+- Added destination arrival marker so net-sun window is visually anchored.
+- Enforced 10% better-net-sun threshold for true sunny escapes to reduce trust issues.
+- Aligned hero/card gain messaging and filtering with net-sun calculation.
+
+**Next:**
+- Optional follow-up: add a compact legend (“red = now, green = arrival”) under timeline cards for first-time users.
+```
+
+---
+
 ## V102 — commit `a5aaaa8` — 2026-02-21
 
 **Theme:** Public Semver Display (1.0.1)
