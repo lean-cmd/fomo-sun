@@ -108,6 +108,13 @@ export interface SunnyEscapesResponse {
       at_least_count?: number
       raw_count?: number
     }>
+    debug_explain?: {
+      destination_id: string
+      destination_name: string
+      rank_global: number | null
+      in_bucket: boolean
+      reasons: string[]
+    }
   }
   origin_conditions: {
     description: string; sun_score: number; sunshine_min: number

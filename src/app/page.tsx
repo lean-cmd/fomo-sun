@@ -601,6 +601,7 @@ export default function Home() {
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [showResultFilters, setShowResultFilters] = useState(false)
+  const [showMoreResults, setShowMoreResults] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
 
@@ -1370,7 +1371,8 @@ export default function Home() {
     return typed
   }, [activeTypeChips, resultRows])
 
-  const visibleRows = useMemo(() => filteredRows.slice(0, 5), [filteredRows])
+  const displayLimit = showMoreResults ? 15 : 5
+  const visibleRows = useMemo(() => filteredRows.slice(0, 15), [filteredRows])
 
   const displayRows = useMemo(() => {
     type Row = { escape: EscapeCard; badges: Array<'fastest' | 'warmest'> }
@@ -1385,7 +1387,7 @@ export default function Home() {
     }
 
     for (const escape of visibleRows) {
-      if (rows.length >= 5) break
+      if (rows.length >= displayLimit) break
       pushRow(escape)
     }
 
@@ -1406,13 +1408,19 @@ export default function Home() {
 
     const fastestId = fastestEscape?.destination.id
     const warmestId = warmestEscape?.destination.id
-    return rows.slice(0, 5).map(row => {
+    return rows.slice(0, displayLimit).map(row => {
       const badges = [...row.badges]
       if (fastestId && row.escape.destination.id === fastestId && !badges.includes('fastest')) badges.push('fastest')
       if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
       return { ...row, badges }
     })
-  }, [fastestEscape, visibleRows, warmestEscape])
+  }, [displayLimit, fastestEscape, visibleRows, warmestEscape])
+
+  useEffect(() => {
+    if (filteredRows.length <= 5 && showMoreResults) {
+      setShowMoreResults(false)
+    }
+  }, [filteredRows.length, showMoreResults])
 
   useEffect(() => {
     if (!displayRows.length) {
@@ -2086,6 +2094,20 @@ export default function Home() {
               )
             })}
           </div>
+
+          {filteredRows.length > 5 && (
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setShowMoreResults(v => !v)}
+                className="text-[11px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+              >
+                {showMoreResults
+                  ? 'Show fewer'
+                  : `Show more (${Math.max(0, Math.min(filteredRows.length, 15) - 5)} more)`}
+              </button>
+            </div>
+          )}
 
           {loading && (
             <p className="mt-2 text-[11px] text-slate-500 inline-flex items-center gap-1">

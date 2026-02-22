@@ -496,6 +496,7 @@ function normalizeQueryCacheKey(input: {
   forecastPolicy: 'openmeteo' | 'meteoswiss'
   originSnapshotSource: 'openmeteo' | 'meteoswiss_ogd'
   agentPrefsKey: string
+  debugExplainId: string
 }) {
   const latKey = input.lat.toFixed(3)
   const lonKey = input.lon.toFixed(3)
@@ -522,6 +523,7 @@ function normalizeQueryCacheKey(input: {
     `forecast_policy=${input.forecastPolicy}`,
     `origin_snapshot_source=${input.originSnapshotSource}`,
     `agent=${input.agentPrefsKey || '-'}`,
+    `debug_explain_id=${input.debugExplainId || '-'}`,
   ].join('&')
 }
 
@@ -983,6 +985,7 @@ export async function GET(request: NextRequest) {
       : 'default'
   const mapsOriginName = originKind === 'manual' ? originNameParam : ''
   const sbbOriginName = originNameParam || 'Basel'
+  const debugExplainId = (sp.get('debug_explain_id') || '').trim().toLowerCase().slice(0, 96)
 
   const requestedDemo = sp.get('demo') === 'true'
   let liveDebugPath = requestedDemo ? 'demo-requested' : 'live-requested'
@@ -1019,7 +1022,24 @@ export async function GET(request: NextRequest) {
   }
 
   const cacheKey = normalizeQueryCacheKey({
-    lat, lon, maxTravelH, travelWindowH, travelMinH, travelMaxH, mode, hasGA, types, limit, requestedDemo, tripSpan, originName: originNameParam, originKind, forecastPolicy, originSnapshotSource, agentPrefsKey,
+    lat,
+    lon,
+    maxTravelH,
+    travelWindowH,
+    travelMinH,
+    travelMaxH,
+    mode,
+    hasGA,
+    types,
+    limit,
+    requestedDemo,
+    tripSpan,
+    originName: originNameParam,
+    originKind,
+    forecastPolicy,
+    originSnapshotSource,
+    agentPrefsKey,
+    debugExplainId,
   })
   if (!forceRefresh) {
     const cached = queryResponseCache.get(cacheKey)
@@ -1681,6 +1701,71 @@ export async function GET(request: NextRequest) {
     dedupedPicked.push(row)
   }
   pickedRanked = dedupedPicked
+  let debugExplain: SunnyEscapesResponse['_meta']['debug_explain']
+  if (debugExplainId) {
+    const normalizedDebugId = debugExplainId.toLowerCase()
+    const debugRow = withTravel.find(row => row.destination.id.toLowerCase() === normalizedDebugId)
+    const debugDestination = debugRow?.destination
+      ?? destinations.find(dest => dest.id.toLowerCase() === normalizedDebugId)
+    const rankInPicked = pickedRanked.findIndex(row => row.destination.id.toLowerCase() === normalizedDebugId)
+    const rankGlobal = rankInPicked >= 0 ? rankInPicked + 1 : null
+    const hasFiniteTravel = Number.isFinite(debugRow?.bestTravelMin ?? NaN)
+    const inBucket = Boolean(
+      debugRow
+      && hasFiniteTravel
+      && debugRow.bestTravelMin >= strictWindowMin
+      && debugRow.bestTravelMin <= strictWindowMax
+    )
+    const requiredModeMissing = !debugRow
+      ? false
+      : mode === 'train'
+        ? !debugRow.trainTravel
+        : mode === 'car'
+          ? !debugRow.carTravel
+          : false
+    const tierGateApplies = !adminAll && (
+      resultTier === 'strict'
+      || resultTier === 'relaxed'
+      || resultTier === 'any_sun'
+    )
+    const passesTierGate = !debugRow
+      ? false
+      : resultTier === 'strict'
+        ? tierPredicates.strict(debugRow)
+        : resultTier === 'relaxed'
+          ? tierPredicates.relaxed(debugRow)
+          : resultTier === 'any_sun'
+            ? tierPredicates.any_sun(debugRow)
+            : true
+    const inRankedPool = rankedByNet.some(row => row.destination.id.toLowerCase() === normalizedDebugId)
+    const inPickedPool = pickedRanked.some(row => row.destination.id.toLowerCase() === normalizedDebugId)
+    const removedByDiversityLimiter = !adminAll && inRankedPool && !inPickedPool
+    const removedByTopFiveCap = (
+      rankGlobal !== null
+      && rankGlobal > 5
+      && inBucket
+      && !requiredModeMissing
+      && (!tierGateApplies || passesTierGate)
+      && !removedByDiversityLimiter
+    )
+
+    const reasons: string[] = []
+    if ((debugRow && hasFiniteTravel && !inBucket) || (!debugRow && debugDestination)) {
+      reasons.push('not in travel window')
+    }
+    if (debugRow && inBucket && tierGateApplies && !passesTierGate) reasons.push(`removed by tier gate (${resultTier})`)
+    if (removedByDiversityLimiter) reasons.push('removed by diversity limiter')
+    if (removedByTopFiveCap) reasons.push('removed by top 5 only display cap')
+    if (requiredModeMissing) reasons.push(`missing required travel mode time (${mode})`)
+
+    debugExplain = {
+      destination_id: debugDestination?.id || debugExplainId,
+      destination_name: debugDestination?.name || debugExplainId,
+      rank_global: rankGlobal,
+      in_bucket: inBucket,
+      reasons,
+    }
+  }
 
   // Compute optimal travel radius: maximize net sun (sunshine - round trip travel)
   let bestOptH = 2
@@ -1918,6 +2003,7 @@ export async function GET(request: NextRequest) {
       result_tier: resultTier,
       fallback_notice: fallbackNotice || undefined,
       bucket_counts: bucketCounts,
+      ...(debugExplain ? { debug_explain: debugExplain } : {}),
     },
     origin_conditions: {
       description: originDescription,

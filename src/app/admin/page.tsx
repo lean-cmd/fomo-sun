@@ -30,6 +30,7 @@ type BucketHealthRow = {
   valid_count: number
   warn: boolean
 }
+type DebugExplain = NonNullable<SunnyEscapesResponse['_meta']['debug_explain']>
 
 const ADMIN_ORIGIN_CITIES = [
   { name: 'Basel', lat: 47.5596, lon: 7.5886 },
@@ -218,6 +219,11 @@ export default function AdminDiagnosticsPage() {
   const [dataCheckRows, setDataCheckRows] = useState<DataCheckSampleRow[]>([])
   const [bucketHealthChecks, setBucketHealthChecks] = useState<BucketHealthRow[]>([])
   const [dataCheckWarnings, setDataCheckWarnings] = useState<string[]>([])
+  const [inspectorQuery, setInspectorQuery] = useState('')
+  const [inspectorBucketId, setInspectorBucketId] = useState<(typeof ADMIN_TRAVEL_BUCKETS)[number]['id']>('quick')
+  const [inspectorResult, setInspectorResult] = useState<DebugExplain | null>(null)
+  const [inspectorLoading, setInspectorLoading] = useState(false)
+  const [inspectorError, setInspectorError] = useState('')
 
   const handleSortChange = (next: SortMode) => {
     if (sortMode === next) {
@@ -229,31 +235,54 @@ export default function AdminDiagnosticsPage() {
   }
   const sortArrow = (mode: SortMode) => (sortMode === mode ? (sortDesc ? '↓' : '↑') : '')
 
-  const buildAdminQuery = (day: ForecastDay) => {
+  const buildAdminQuery = (
+    day: ForecastDay,
+    options?: {
+      adminAll?: boolean
+      bucketId?: (typeof ADMIN_TRAVEL_BUCKETS)[number]['id']
+      debugExplainId?: string
+    }
+  ) => {
     const selectedOrigin = ADMIN_ORIGIN_CITIES.find(city => city.name === adminOrigin) || ADMIN_ORIGIN_CITIES[0]
+    const selectedBucket = options?.bucketId
+      ? (ADMIN_TRAVEL_BUCKETS.find((bucket) => bucket.id === options.bucketId) || null)
+      : null
+    const useAdminAll = options?.adminAll ?? true
     const p = new URLSearchParams({
       lat: String(selectedOrigin.lat),
       lon: String(selectedOrigin.lon),
       origin_name: selectedOrigin.name,
       origin_kind: 'manual',
       max_travel_h: '6.5',
-      travel_min_h: '0',
-      travel_max_h: '6.5',
+      travel_min_h: String(selectedBucket?.min_h ?? 0),
+      travel_max_h: String(selectedBucket?.max_h ?? 6.5),
       mode: adminMode,
       ga: 'false',
-      limit: '5000',
+      limit: useAdminAll ? '5000' : '15',
       demo: 'false',
-      admin: 'true',
-      admin_all: 'true',
       trip_span: day === 'tomorrow' ? 'plus1day' : 'daytrip',
       forecast_policy: forecastPolicy,
       origin_snapshot_source: originSnapshotSource,
     })
+    if (useAdminAll) {
+      p.set('admin', 'true')
+      p.set('admin_all', 'true')
+    }
+    if (options?.debugExplainId) {
+      p.set('debug_explain_id', options.debugExplainId)
+    }
     return p.toString()
   }
 
-  const fetchAdminPayload = async (day: ForecastDay) => {
-    const query = buildAdminQuery(day)
+  const fetchAdminPayload = async (
+    day: ForecastDay,
+    options?: {
+      adminAll?: boolean
+      bucketId?: (typeof ADMIN_TRAVEL_BUCKETS)[number]['id']
+      debugExplainId?: string
+    }
+  ) => {
+    const query = buildAdminQuery(day, options)
     const res = await fetch(`/api/v1/sunny-escapes?${query}`, { cache: 'no-store' })
     if (!res.ok) throw new Error(`API ${res.status}`)
     const payload: SunnyEscapesResponse = await res.json()
@@ -462,6 +491,11 @@ export default function AdminDiagnosticsPage() {
     fetchData()
   }, [forecastPolicy, originSnapshotSource, forecastDay, adminOrigin, adminMode])
 
+  useEffect(() => {
+    setInspectorResult(null)
+    setInspectorError('')
+  }, [forecastDay, adminOrigin, adminMode, inspectorBucketId])
+
   const byCountryCount = useMemo(() => {
     const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
     for (const r of rows) out[r.destination.country] = (out[r.destination.country] || 0) + 1
@@ -608,6 +642,23 @@ export default function AdminDiagnosticsPage() {
     () => filteredSorted.filter(r => selectedCompare.includes(r.destination.id)).slice(0, 3),
     [filteredSorted, selectedCompare]
   )
+  const inspectorMatches = useMemo(() => {
+    const q = inspectorQuery.trim().toLowerCase()
+    if (!q) return []
+    const matched = new Map<string, { id: string; name: string; region: string }>()
+    for (const row of rows) {
+      const id = row.destination.id
+      const name = row.destination.name
+      if (
+        id.toLowerCase().includes(q)
+        || name.toLowerCase().includes(q)
+      ) {
+        matched.set(id, { id, name, region: row.destination.region })
+      }
+      if (matched.size >= 8) break
+    }
+    return Array.from(matched.values())
+  }, [inspectorQuery, rows])
 
   const toggleCountry = (country: string) => setActiveCountries(prev => ({ ...prev, [country]: !prev[country] }))
   const toggleTypeChip = (chip: AdminTypeChip) => {
@@ -621,6 +672,38 @@ export default function AdminDiagnosticsPage() {
       if (prev.length >= 3) return [...prev.slice(1), id]
       return [...prev, id]
     })
+  }
+  const runInspector = async (override?: string) => {
+    const typed = (override ?? inspectorQuery).trim()
+    if (!typed) {
+      setInspectorResult(null)
+      setInspectorError('Enter destination name or id.')
+      return
+    }
+    const normalized = typed.toLowerCase()
+    const exactId = rows.find((row) => row.destination.id.toLowerCase() === normalized)?.destination.id
+    const exactName = rows.find((row) => row.destination.name.toLowerCase() === normalized)?.destination.id
+    const fuzzyName = rows.find((row) => row.destination.name.toLowerCase().includes(normalized))?.destination.id
+    const debugExplainId = exactId || exactName || fuzzyName || normalized
+
+    setInspectorLoading(true)
+    setInspectorError('')
+    try {
+      const { payload } = await fetchAdminPayload(forecastDay, {
+        adminAll: false,
+        bucketId: inspectorBucketId,
+        debugExplainId,
+      })
+      const explain = payload._meta?.debug_explain
+      if (!explain) throw new Error('No debug explain payload returned')
+      setInspectorResult(explain)
+      setInspectorQuery(explain.destination_name || debugExplainId)
+    } catch (err) {
+      setInspectorResult(null)
+      setInspectorError(String((err as Error)?.message || err))
+    } finally {
+      setInspectorLoading(false)
+    }
   }
 
   const exportCsv = () => {
@@ -901,6 +984,98 @@ export default function AdminDiagnosticsPage() {
             <button onClick={() => setForecastDay('tomorrow')} className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${forecastDay === 'tomorrow' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Tomorrow</button>
           </div>
         </div>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-3 mb-3">
+          <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500 font-semibold">Destination Inspector</p>
+              <p className="text-[11px] text-slate-500">Explain why a destination is not visible for the current origin/day/mode and selected bucket.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-2">
+            <input
+              type="search"
+              value={inspectorQuery}
+              onChange={(e) => setInspectorQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  runInspector()
+                }
+              }}
+              placeholder="Search by destination name or id"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+            />
+            <label className="inline-flex items-center gap-2 text-xs text-slate-600 rounded-lg border border-slate-200 px-2.5 py-1.5 bg-slate-50">
+              Bucket
+              <select
+                value={inspectorBucketId}
+                onChange={(e) => setInspectorBucketId(e.target.value as (typeof ADMIN_TRAVEL_BUCKETS)[number]['id'])}
+                className="border border-slate-200 rounded-md px-2 py-1 text-xs bg-white"
+              >
+                {ADMIN_TRAVEL_BUCKETS.map((bucket) => (
+                  <option key={bucket.id} value={bucket.id}>{bucket.label}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={() => runInspector()}
+              disabled={inspectorLoading}
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {inspectorLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Activity className="w-3.5 h-3.5" />}
+              Inspect
+            </button>
+          </div>
+
+          {inspectorMatches.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {inspectorMatches.map((match) => (
+                <button
+                  key={match.id}
+                  type="button"
+                  onClick={() => {
+                    setInspectorQuery(match.name)
+                    runInspector(match.id)
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] text-slate-700 hover:bg-slate-100"
+                >
+                  <span>{match.name}</span>
+                  <span className="text-slate-400">{match.id}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {inspectorError && (
+            <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-[11px] text-red-700">
+              {inspectorError}
+            </div>
+          )}
+
+          {inspectorResult && (
+            <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2 text-[11px] text-slate-700">
+              <p className="font-semibold text-slate-800">
+                {inspectorResult.destination_name} <span className="text-slate-500 font-normal">({inspectorResult.destination_id})</span>
+              </p>
+              <p className="mt-0.5 text-slate-600">
+                rank_global: <span className="font-semibold text-slate-800">{inspectorResult.rank_global ?? '-'}</span>
+                {' '}· in_bucket: <span className="font-semibold text-slate-800">{inspectorResult.in_bucket ? 'yes' : 'no'}</span>
+              </p>
+              {inspectorResult.reasons.length > 0 ? (
+                <ul className="mt-1 space-y-0.5 text-slate-600">
+                  {inspectorResult.reasons.map((reason) => (
+                    <li key={reason}>• {reason}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1 text-emerald-700">No exclusion reason found for this destination in the current context.</p>
+              )}
+            </div>
+          )}
+        </section>
 
         <div className="rounded-xl border border-slate-200 bg-white p-3 mb-3 space-y-3">
           <div className="bg-slate-50/50 p-3 rounded-xl">
