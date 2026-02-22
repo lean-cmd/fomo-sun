@@ -1348,9 +1348,14 @@ export default function Home() {
   }, [data?._meta?.demo_mode, demo, liveDataSource, originDataSource])
   const tierMessage = useMemo(() => {
     if (resultTier === 'any_sun') return 'Slim pickings today. These are your best bets.'
-    if (resultTier === 'best_available') return "Overcast everywhere. Here's where sun is least absent."
+    if (resultTier === 'best_available') {
+      if (dayFocus === 'today' && activeBand.id === 'long') {
+        return 'Driving this far is not worth it today. Plan for tomorrow.'
+      }
+      return 'Few places beat your origin after travel time right now.'
+    }
     return ''
-  }, [resultTier])
+  }, [activeBand.id, dayFocus, resultTier])
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
@@ -1478,6 +1483,13 @@ export default function Home() {
     }
     setOpenCardId(displayRows[0]?.escape.destination.id ?? null)
   }, [displayRows])
+
+  const noResultsLead = dayFocus === 'today' && activeBand.id === 'long'
+    ? 'Driving this far is not worth it today.'
+    : 'No destinations in this travel range right now.'
+  const noResultsHint = dayFocus === 'today' && activeBand.id === 'long'
+    ? 'Plan for tomorrow or choose a shorter travel bucket.'
+    : 'Try a wider travel bucket or switch to tomorrow.'
 
   useEffect(() => {
     const triggerMidnightRefresh = () => {
@@ -1911,8 +1923,8 @@ export default function Home() {
 
           {displayRows.length === 0 && !loading && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
-              <p className="text-[14px] text-slate-700">No destinations in this travel range right now.</p>
-              <p className="text-[12px] text-slate-500 mt-1">Try a wider travel bucket or switch to tomorrow.</p>
+              <p className="text-[14px] text-slate-700">{noResultsLead}</p>
+              <p className="text-[12px] text-slate-500 mt-1">{noResultsHint}</p>
             </div>
           )}
 

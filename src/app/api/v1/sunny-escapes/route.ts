@@ -1494,6 +1494,7 @@ export async function GET(request: NextRequest) {
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
+  const hasExplicitWindow = travelMinH !== null || travelMaxH !== null
   let appliedWindowMin = strictWindowMin
   let appliedWindowMax = strictWindowMax
   const targetResultCount = adminView ? Math.min(5, limit) : Math.min(5, limit)
@@ -1583,7 +1584,7 @@ export async function GET(request: NextRequest) {
     windowMax: number,
     target: number
   ): { tier: ResultTier; rows: ScoredWithTravel[]; appliedMin: number; appliedMax: number } => {
-    const widenSteps = [0, 30, 60]
+    const widenSteps = hasExplicitWindow ? [0] : [0, 30, 60]
     let fallback: { tier: ResultTier; rows: ScoredWithTravel[]; appliedMin: number; appliedMax: number } = {
       tier: 'best_available',
       rows: [],
@@ -1609,7 +1610,7 @@ export async function GET(request: NextRequest) {
       if (rows.length >= 3) return selected
     }
 
-    if (eligibleRows.length > 0) {
+    if (!hasExplicitWindow && eligibleRows.length > 0) {
       return {
         tier: 'best_available',
         rows: eligibleRows,
@@ -1663,14 +1664,16 @@ export async function GET(request: NextRequest) {
           ? atLeastCount
           : selected.tier === 'any_sun'
             ? anySunCount
-            : Math.max(rawCount, Math.min(targetResultCount, eligibleRows.length))
+            : rawCount
     )
     const nearRows = rowsInBucket.length > 0
       ? rowsInBucket
       : rowsForWindow(Math.max(0, minMin - 60), maxMin + 60)
-    const destinationCount = nearRows.length > 0
-      ? nearRows.length
-      : (eligibleRows.length > 0 ? 1 : 0)
+    const destinationCount = hasExplicitWindow
+      ? rowsInBucket.length
+      : nearRows.length > 0
+        ? nearRows.length
+        : (eligibleRows.length > 0 ? 1 : 0)
     return {
       ...bucket,
       count,
