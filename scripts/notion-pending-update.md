@@ -9,6 +9,60 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V104 — commit `57e1fe2` — 2026-02-22
+
+**Theme:** Bucket Integrity + Helpful Long-Drive Warning
+
+### 1. V88 Release Changelog — append after V103 entry
+
+```
+### V104 (57e1fe2)
+Theme: Bucket Integrity + Helpful Long-Drive Warning
+
+Changes:
+- Fixed bucket integrity for explicit travel windows (`travel_min_h`/`travel_max_h`): API no longer falls back to out-of-window rows for ranking.
+- Bucket diagnostics metadata now reports correct zero values when a bucket has no matching destinations.
+- Updated UI messaging for long-range today case: instead of generic overcast wording, users now get actionable guidance ("Driving this far is not worth it today. Plan for tomorrow.").
+
+Files: src/app/api/v1/sunny-escapes/route.ts, src/app/page.tsx
+Validation: npm run build passed; local bucket data checks confirmed long bucket returns 0 rows with count/destination_count=0 when no matches.
+Rollback: git revert 57e1fe2
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V104 | 2026-02-22 | Codex session
+- Removed out-of-window fallback for explicit travel buckets in API selection
+- Fixed bucket meta counts for empty explicit buckets
+- Replaced misleading long-range warning with actionable "plan for tomorrow" copy
+- Commit: 57e1fe2
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-22 — Late Night (Codex session)
+
+**Deployed:** V104 (57e1fe2)
+**Status:** Shipped and validated
+
+**What was done:**
+- Ran bucket-by-bucket diagnostics and identified that explicit buckets could inherit fallback rows from other ranges.
+- Enforced strict explicit bucket behavior so each bucket reflects real travel-time matches.
+- Updated long-bucket UX copy to explain that far travel is not worth it today and suggest tomorrow.
+
+**Next:**
+- Optional: add per-bucket "matched destinations in range" badge in UI for transparency.
+```
+
+---
+
 ## V103 — commit `b39556f` — 2026-02-22
 
 **Theme:** Today Timeline Truth + 10% Net-Sun Escape Gate
