@@ -952,8 +952,6 @@ export default function Home() {
     return () => document.removeEventListener('keydown', onDocKeyDown)
   }, [stepJoystickRange])
 
-  const rangeLabel = activeBand.label
-
   useEffect(() => {
     requestCtrlRef.current?.abort()
     const ctrl = new AbortController()
@@ -1633,8 +1631,7 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
         <div className="max-w-xl mx-auto px-3 h-[62px] grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="min-w-0">
-            <div className="relative inline-flex items-center gap-1 min-w-0 max-w-[132px] text-slate-600">
-              <MapPinned className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" strokeWidth={1.8} />
+            <div className="relative inline-flex items-center min-w-0 max-w-[120px] text-slate-500">
               <select
                 ref={originSelectRef}
                 value={selectedCity}
@@ -1642,26 +1639,21 @@ export default function Home() {
                   setSelectedCity(e.target.value)
                   setOriginMode('manual')
                 }}
-                className="h-8 pl-8 pr-8 bg-white border border-slate-200 rounded-full text-[11px] font-medium text-slate-600 appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all shadow-sm cursor-pointer"
+                className="h-7 pl-1 pr-5 bg-transparent text-[11px] font-medium text-right text-slate-500 appearance-none focus:outline-none focus:text-slate-700 cursor-pointer"
               >
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
               </select>
-              <div className="absolute inset-y-0 right-2 flex items-center pointer-events-none">
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <div className="absolute inset-y-0 right-0 flex items-center pointer-events-none">
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.8} />
               </div>
             </div>
-            {originMode === 'manual' && (
-              <p className="mt-1.5 px-1 text-[10px] text-slate-400 font-medium whitespace-nowrap overflow-hidden text-ellipsis">
-                Missing city? Open a PR
-              </p>
-            )}
           </div>
 
           <div className="relative justify-self-center flex items-center h-full">
             <FomoWordmark className="w-[94px] h-[24px]" />
-            <p className="absolute left-1/2 -translate-x-1/2 top-[39px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
+            <p className="absolute left-1/2 -translate-x-1/2 top-[42px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
               {HEADER_TAGLINES[taglineIndex]}
             </p>
           </div>
@@ -1839,17 +1831,12 @@ export default function Home() {
           </section>
         )}
 
-        <section className="fomo-card p-3.5 sm:p-4 mb-3">
-          <div className="text-center mb-2">
+        <section className="mb-3 px-1.5">
+          <div className="text-center mb-1.5">
             <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick™</p>
-            <p className="text-[15px] font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
-              Max travel {activeBand.maxLabel}
-            </p>
-            <p className="text-[11px] text-slate-500 sm:hidden">Range {rangeLabel} · flick left or right</p>
-            <p className="hidden sm:block text-[11px] text-slate-500">Range {rangeLabel} · click ← → to switch</p>
+            <p className="text-[11px] text-slate-500">Flick left or right</p>
           </div>
-
-          <div className="flex justify-center items-center gap-2 mt-2">
+          <div className="flex justify-center items-center gap-2">
             <button
               type="button"
               onClick={() => stepJoystickRange('left')}
@@ -1876,9 +1863,10 @@ export default function Home() {
             >
               <div className="fomo-joystick-base" />
               <div className="fomo-joystick-track" />
-              <div className="fomo-joystick-stick" style={{ transform: `translateX(${joyX * JOYSTICK_MAX_PX}px)` }}>
-                <div className={`fomo-joystick-knob ${joystickNudge ? 'joystick-knob-nudge' : ''}`} />
-              </div>
+              <div
+                className={`fomo-joystick-knob ${joystickNudge ? 'joystick-knob-nudge' : ''}`}
+                style={{ transform: `translateX(${joyX * JOYSTICK_MAX_PX}px)` }}
+              />
             </div>
             <button
               type="button"
@@ -1890,39 +1878,17 @@ export default function Home() {
               →
             </button>
           </div>
+          <p className="mt-1.5 text-[10px] text-slate-500 text-center" style={{ fontFamily: 'DM Mono, monospace' }}>
+            Max travel {activeBand.maxLabel}
+          </p>
 
-          <div className="mt-2 grid grid-cols-5 gap-1.5 text-[10px]">
-            {TRAVEL_BANDS.map((band, idx) => {
-              const active = idx === effectiveRangeIndex
-              const info = bucketCountMap.get(band.id)
-              const destinationCount = info?.destinationCount ?? 0
-              const sparse = hasJoystickInteracted && destinationCount === 0
-              return (
-                <button
-                  key={band.id}
-                  type="button"
-                  onClick={() => setJoystickRange(idx)}
-                  className={`h-7 rounded-full border inline-flex items-center justify-center ${active
-                    ? 'border-amber-300 bg-amber-100 text-amber-800 font-semibold'
-                    : sparse
-                      ? 'border-slate-200 bg-slate-100 text-slate-500'
-                      : 'border-slate-200 bg-white text-slate-500'
-                    } cursor-pointer hover:border-amber-200 active:scale-[0.98] transition`}
-                  style={{ fontFamily: 'DM Mono, monospace' }}
-                  title={sparse ? `No sunny escapes currently in ${band.label}` : undefined}
-                >
-                  {band.label}
-                </button>
-              )
-            })}
-          </div>
           {joystickNotice && (
             <p className="mt-2 text-[11px] text-slate-500 text-center">{joystickNotice}</p>
           )}
         </section>
 
         <section ref={resultsRef}>
-          <div className="flex items-baseline justify-between mb-2.5">
+          <div className="flex items-baseline justify-between mb-2">
             <h2 className="text-[16px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
               Sunny escapes
             </h2>
@@ -1956,8 +1922,36 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="grid grid-cols-5 gap-1 items-end -mx-px px-px -mb-px">
+            {TRAVEL_BANDS.map((band, idx) => {
+              const active = idx === effectiveRangeIndex
+              const info = bucketCountMap.get(band.id)
+              const destinationCount = info?.destinationCount ?? 0
+              const sparse = hasJoystickInteracted && destinationCount === 0
+              return (
+                <button
+                  key={band.id}
+                  type="button"
+                  onClick={() => setJoystickRange(idx)}
+                  className={`h-9 px-1.5 rounded-t-lg rounded-b-none border inline-flex items-center justify-center text-[11px] whitespace-nowrap transition-colors ${active
+                    ? '-mb-px border-amber-300 border-b-white bg-white text-amber-800 font-semibold shadow-[inset_0_2px_0_0_#f59e0b]'
+                    : sparse
+                      ? 'border-slate-200 bg-slate-100 text-slate-500'
+                      : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
+                    }`}
+                  style={{ fontFamily: 'DM Mono, monospace' }}
+                  title={sparse ? `No sunny escapes currently in ${band.label}` : undefined}
+                >
+                  {band.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="rounded-b-2xl rounded-t-none border border-slate-200 bg-white px-2.5 py-3 sm:px-3 sm:py-3.5">
+
           {showResultFilters && (
-            <section id="result-filter-chips" className="mb-2.5 -mx-3 px-3 overflow-x-auto no-scrollbar">
+            <section id="result-filter-chips" className="mb-2.5 overflow-x-auto no-scrollbar">
               <div className="flex items-center gap-2 min-w-max">
                 {TYPE_FILTER_CHIPS.map(chip => {
                   const active = activeTypeChips.includes(chip.id)
@@ -2255,37 +2249,46 @@ export default function Home() {
             <span className={`h-1.5 w-1.5 rounded-full ${dataUpdatedText === 'just now' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
             Data: {dataSourceLabel}
           </p>
+          </div>
         </section>
       </main>
 
       <footer className="mt-4 pb-[calc(3rem+env(safe-area-inset-bottom))] border-t border-slate-100">
-        <div className="max-w-xl mx-auto px-4 py-6">
-          <div className="flex flex-col items-center gap-4">
+        <div className="max-w-xl mx-auto px-4 py-5">
+          <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5 flex items-center justify-between gap-2">
+            <a
+              href="/admin"
+              className="inline-flex h-8 items-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-semibold text-amber-800 hover:bg-amber-100 transition-colors"
+            >
+              Open Admin Panel
+            </a>
             <button
               onClick={() => setShowDebug(v => !v)}
-              className="inline-flex items-center gap-1.5 text-[9px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-[0.15em] transition-colors"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-500 hover:text-slate-700 hover:border-slate-300 transition-colors"
             >
-              <SlidersHorizontal className="w-2.5 h-2.5" />
-              {showDebug ? 'Hide Debug' : 'Debug & Settings'}
+              <SlidersHorizontal className="w-3 h-3" />
+              {showDebug ? 'Hide Debug' : 'Debug'}
             </button>
+          </div>
 
-            {showDebug && (
-              <div className="w-full space-y-5 py-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                <div className="rounded-xl bg-slate-50 p-3 space-y-3 border border-slate-100">
-                  <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">System Status</p>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] text-slate-500">
-                    <div className="space-y-1">
-                      <p>Source: <span className="text-slate-700">{dataSourceLabel}</span></p>
-                      <p>Updated: <span className="text-slate-700">{dataUpdatedText}</span></p>
-                    </div>
-                    <div className="space-y-1">
-                      <p>ID: <span className="text-slate-700 font-mono">{data?._meta?.request_id?.slice(0, 8) || 'none'}</span></p>
-                      <p>Tier: <span className="text-slate-700">{resultTier || 'none'}</span></p>
-                    </div>
+          {showDebug && (
+            <div className="w-full mt-3 space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2.5">
+                <p className="text-[9px] uppercase tracking-widest text-slate-400 font-bold">System Status</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[10px] text-slate-500">
+                  <div className="space-y-1">
+                    <p>Source: <span className="text-slate-700">{dataSourceLabel}</span></p>
+                    <p>Updated: <span className="text-slate-700">{dataUpdatedText}</span></p>
+                  </div>
+                  <div className="space-y-1">
+                    <p>ID: <span className="text-slate-700 font-mono">{data?._meta?.request_id?.slice(0, 8) || 'none'}</span></p>
+                    <p>Tier: <span className="text-slate-700">{resultTier || 'none'}</span></p>
                   </div>
                 </div>
+              </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[10px] text-slate-500 font-medium pt-1">
+              <div className="rounded-xl border border-slate-200 bg-white p-3">
+                <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[10px] text-slate-500 font-medium">
                   <button onClick={detectLocation} disabled={locating} className="hover:text-amber-600 transition-colors inline-flex items-center gap-1.5">
                     <LocateFixed className="w-3.5 h-3.5" strokeWidth={1.8} />
                     {locating ? 'Locating...' : 'Use my location'}
@@ -2309,10 +2312,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-400">
-                  <a href="/admin" className="hover:text-amber-600 transition-colors text-left">Admin Diagnostics</a>
+                <div className="mt-3 pt-2 border-t border-slate-100 grid grid-cols-2 gap-x-3 gap-y-1 text-[10px] text-slate-400">
                   <a href="/api/v1/sunny-escapes" className="hover:text-amber-600 transition-colors text-left">API Access</a>
-                  <a href="/about" className="hover:text-amber-600 transition-colors text-left">About</a>
                   <a href="/llms.txt" className="hover:text-amber-600 transition-colors text-left">llms.txt</a>
                   <span className="col-span-2 text-left">
                     Weather: <a href="https://www.meteoswiss.admin.ch" className="underline hover:text-amber-600 transition-colors">MeteoSwiss</a>
@@ -2322,8 +2323,8 @@ export default function Home() {
                   </span>
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </footer>
     </div>

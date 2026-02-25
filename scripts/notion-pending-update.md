@@ -9,6 +9,66 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## UI Tweaks Build — commit `ui-tweaks` — 2026-02-25
+
+**Theme:** Tabs/Joystick/Header/Footer UI Polish (local-reviewed production draft)
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### UI Tweaks Build (ui-tweaks)
+Theme: Tabs/Joystick/Header/Footer UI Polish (local-reviewed production draft)
+
+Changes:
+- Refined Sunny Escapes tabs into a folder-style control connected to the results container; fixed 1px tab/body seam alignment.
+- Removed top radius from results box for cleaner tab integration.
+- Updated joystick presentation: restored heading/hint, moved max-travel label under control, and removed vertical stick visual.
+- Simplified origin city selector (lighter select with chevron) and removed "Missing city? Open a PR" helper text.
+- Footer cleanup: line 1 now shows `fomosun.com © 2026 · 1.0.4` on the left with `Blog` + `About` on the right; attribution moved to line 2.
+- Debug panel cleanup: removed duplicate About link, made Admin panel entry prominent, and improved control grouping/visual hierarchy.
+- Header logo tagline spacing increased by a few pixels for better readability.
+
+Files: src/app/page.tsx, src/app/layout.tsx, src/app/globals.css
+Validation: npm run build passed; local production preview validated at :4022
+Rollback: git revert ui-tweaks
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+UI Tweaks Build | 2026-02-25 | Codex session
+- Folder-style travel tabs integrated with results container; seam alignment corrected
+- Joystick and city selector visual simplification
+- Footer and debug panel cleanup with stronger Admin access
+- Header tagline spacing refinement
+- Commit: ui-tweaks
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-25 — UI Polish Sprint (Codex session)
+
+**Deployed:** UI Tweaks Build (ui-tweaks)
+**Status:** Shipped after local production review
+
+**What was done:**
+- Tightened tabs-to-results visual connection so the travel buckets read like real folder tabs.
+- Simplified key control surfaces (origin select, joystick visuals, debug panel).
+- Restructured footer information hierarchy for better legibility and cleaner navigation.
+- Promoted Admin access while reducing debug clutter.
+
+**Next:**
+- Optional: align filter chips styling to the same folder-tab language for full visual consistency.
+```
+
+---
+
 ## V104 — commit `57e1fe2` — 2026-02-22
 
 **Theme:** Bucket Integrity + Helpful Long-Drive Warning
