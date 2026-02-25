@@ -9,14 +9,14 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
-## UI Tweaks Build — commit `ui-tweaks` — 2026-02-25
+## UI Tweaks Build — commit `cf3755d` — 2026-02-25
 
 **Theme:** Tabs/Joystick/Header/Footer UI Polish (local-reviewed production draft)
 
 ### 1. V88 Release Changelog — append after latest entry
 
 ```
-### UI Tweaks Build (ui-tweaks)
+### UI Tweaks Build (cf3755d)
 Theme: Tabs/Joystick/Header/Footer UI Polish (local-reviewed production draft)
 
 Changes:
@@ -30,7 +30,7 @@ Changes:
 
 Files: src/app/page.tsx, src/app/layout.tsx, src/app/globals.css
 Validation: npm run build passed; local production preview validated at :4022
-Rollback: git revert ui-tweaks
+Rollback: git revert cf3755d
 Agent: Codex (GPT-5)
 ```
 
@@ -44,7 +44,7 @@ UI Tweaks Build | 2026-02-25 | Codex session
 - Joystick and city selector visual simplification
 - Footer and debug panel cleanup with stronger Admin access
 - Header tagline spacing refinement
-- Commit: ui-tweaks
+- Commit: cf3755d
 ```
 
 ---
@@ -54,7 +54,7 @@ UI Tweaks Build | 2026-02-25 | Codex session
 ```
 ## 2026-02-25 — UI Polish Sprint (Codex session)
 
-**Deployed:** UI Tweaks Build (ui-tweaks)
+**Deployed:** UI Tweaks Build (cf3755d)
 **Status:** Shipped after local production review
 
 **What was done:**
