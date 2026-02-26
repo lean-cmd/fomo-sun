@@ -1634,13 +1634,18 @@ export default function Home() {
             <div className="relative inline-flex items-center min-w-0 max-w-[120px] text-slate-500">
               <select
                 ref={originSelectRef}
-                value={selectedCity}
+                value={originMode === 'gps' && gpsOrigin ? `gps:${gpsOrigin.name}` : selectedCity}
                 onChange={(e) => {
-                  setSelectedCity(e.target.value)
+                  const next = e.target.value
+                  if (next.startsWith('gps:')) return
+                  setSelectedCity(next)
                   setOriginMode('manual')
                 }}
                 className="h-7 pl-1 pr-5 bg-transparent text-[11px] font-medium text-right text-slate-500 appearance-none focus:outline-none focus:text-slate-700 cursor-pointer"
               >
+                {originMode === 'gps' && gpsOrigin && (
+                  <option value={`gps:${gpsOrigin.name}`}>{gpsOrigin.name}</option>
+                )}
                 {MANUAL_ORIGIN_CITIES.map(city => (
                   <option key={city.name} value={city.name}>{city.name}</option>
                 ))}
@@ -2294,7 +2299,7 @@ export default function Home() {
                     {locating ? 'Locating...' : 'Use my location'}
                   </button>
                   {originMode === 'gps' && (
-                    <button onClick={() => setOriginMode('manual')} className="px-2 py-1 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors">
+                    <button onClick={() => { setSelectedCity('Basel'); setOriginMode('manual') }} className="px-2 py-1 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors">
                       Reset to Basel
                     </button>
                   )}
