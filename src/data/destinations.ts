@@ -3424,6 +3424,23 @@ const destinationCatalog: Destination[] = [
   },
 
   {
+    id: 'loetschental',
+    name: 'Lötschental',
+    region: 'Lötschental, VS',
+    country: 'CH',
+    lat: 46.4170,
+    lon: 7.8330,
+    altitude_m: 1419,
+    types: ['mountain', 'nature', 'family'],
+    quality: 'curated',
+    plan_template: 'Train to Goppenstein + PostAuto into the valley | Easy valley walk (Fafleralp) | Terrace stop with big alpine views',
+    maps_name: 'Lötschental, Switzerland',
+    sbb_name: 'Wiler (Lötschen)',
+    maps_url: 'https://maps.google.com/?q=46.41700,7.83300',
+    sbb_url: 'https://www.sbb.ch/en/timetable.html',
+  },
+
+  {
     id: 'martigny-city',
     name: 'Martigny',
     region: 'Valais',
