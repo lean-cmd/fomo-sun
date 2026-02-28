@@ -40,6 +40,8 @@ export interface SunScore {
 export interface TravelResult {
   mode: 'car' | 'train'; duration_min: number
   distance_km?: number; changes?: number; ga_included?: boolean; departure_time?: string
+  source?: 'transport.opendata.ch' | 'heuristic_fallback' | 'heuristic_runtime' | 'destination_manual'
+  is_estimated?: boolean
 }
 
 export interface TimelineSegment { condition: SkyCondition; pct: number }
@@ -114,6 +116,17 @@ export interface SunnyEscapesResponse {
       rank_global: number | null
       in_bucket: boolean
       reasons: string[]
+    }
+    train_time_quality?: {
+      dataset_service_date?: string
+      dataset_generated_at?: string
+      dataset_rows_total?: number
+      dataset_rows_api?: number
+      dataset_rows_fallback?: number
+      response_rows_with_train?: number
+      response_train_api?: number
+      response_train_estimated?: number
+      response_guardrail_applied?: number
     }
   }
   origin_conditions: {

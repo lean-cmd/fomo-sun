@@ -1,6 +1,6 @@
 {
   "name": "fomo-sun",
-  "version": "0.1.0",
+  "version": "1.0.8",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,6 +10,9 @@
     "audit:routing": "node scripts/audit-routing.mjs --demo true",
     "audit:routing:prod": "node scripts/audit-routing.mjs --base-url https://www.fomosun.com --demo true",
     "audit:routing:ch-geocode": "node scripts/audit-routing.mjs --demo true --geocode-ch true",
+    "train:times:batch": "node scripts/generate-train-times.mjs",
+    "train:times:finalize": "node scripts/generate-train-times.mjs --finalize true",
+    "audit:train-diff": "node scripts/audit-train-diff.mjs",
     "poi:prepare": "node scripts/prepare-poi-import.mjs",
     "smoke:test": "node scripts/smoke-test.mjs",
     "umami:setup": "node scripts/setup-umami-env.mjs",

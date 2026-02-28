@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { destinations, DEFAULT_ORIGIN } from '@/data/destinations'
+import { TRAIN_TIME_DATASET_META, TRAIN_TIME_MIN_BY_ORIGIN, TRAIN_TIME_SOURCE_BY_ORIGIN } from '@/data/train-times'
 import { computeSunScore, detectInversion, haversineDistance, preFilterByDistance } from '@/lib/scoring'
 import { getMockWeather, getMockOriginWeather, getMockTravelTime, getMockSunTimeline, getMockMaxSunHours, getMockSunset, getMockTomorrowSunHours, getMockOriginTimeline, getMockTomorrowSunHoursForDest, getMockDaylightWindow } from '@/lib/mock-weather'
 import { batchGetWeather, getCurrentWeather, getHourlyForecast, getSunTimes, WeatherSourcePolicy } from '@/lib/open-meteo'
@@ -7,6 +8,7 @@ import { getSwissMeteoOriginSnapshot } from '@/lib/swissmeteo'
 import { DaylightWindow, EscapeResult, SunnyEscapesResponse, SunTimeline, TourismInfo, TravelMode } from '@/lib/types'
 import { addRequestLog } from '@/lib/request-log'
 import { enrichDestination } from '@/lib/tourism/enrichDestination'
+import { APP_RELEASE_VERSION } from '@/lib/release'
 
 type LiveForecastBundle = {
   hours: Awaited<ReturnType<typeof getHourlyForecast>>['hours']
@@ -20,6 +22,12 @@ type LiveForecastBundle = {
   daylight_window_tomorrow?: DaylightWindow
 }
 type TripSpan = 'daytrip' | 'plus1day'
+type TrainTimeSource = 'transport.opendata.ch' | 'heuristic_fallback' | 'heuristic_runtime' | 'destination_manual'
+type TrainTravelWithMeta = ReturnType<typeof getMockTravelTime> & {
+  ga_included?: boolean
+  source?: TrainTimeSource
+  guardrail_applied?: boolean
+}
 
 type ScoredWithTravel = {
   destination: typeof destinations[number]
@@ -32,7 +40,7 @@ type ScoredWithTravel = {
   tomorrowNetAfterArrivalMin: number
   optimalDeparture?: string
   carTravel?: ReturnType<typeof getMockTravelTime>
-  trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
+  trainTravel?: TrainTravelWithMeta
   bestTravelMin: number
   liveForecast?: LiveForecastBundle
 }
@@ -205,6 +213,34 @@ function normalizeSbbOrigin(originName: string) {
   if (key === 'bern') return 'Bern'
   if (key === 'luzern' || key === 'lucerne') return 'Luzern'
   return raw
+}
+
+function applyHeuristicTrainGuardrail(input: {
+  currentTrainMin: number
+  carMin: number | null
+  destination: typeof destinations[number]
+}) {
+  const base = Math.max(0, Math.round(input.currentTrainMin))
+  const altitude = Number.isFinite(input.destination.altitude_m) ? input.destination.altitude_m : 0
+  const isCrossBorder = input.destination.country !== 'CH'
+  const hasMountainAccess = input.destination.types.includes('mountain') || input.destination.types.includes('viewpoint')
+
+  let guarded = base + 8
+  if (hasMountainAccess) guarded += 16
+  if (altitude >= 1200) guarded += 12
+  if (altitude >= 1700) guarded += 14
+  if (isCrossBorder) guarded += 10
+
+  if (Number.isFinite(input.carMin ?? NaN) && (input.carMin ?? 0) > 0) {
+    const carMin = Number(input.carMin)
+    let lowerFromCar = carMin * 0.9 + 6
+    if (hasMountainAccess || altitude >= 1200) lowerFromCar = carMin * 1.08 + 18
+    if (altitude >= 1700) lowerFromCar = carMin * 1.2 + 28
+    if (isCrossBorder) lowerFromCar = Math.max(lowerFromCar, carMin * 1.15 + 24)
+    guarded = Math.max(guarded, Math.round(lowerFromCar))
+  }
+
+  return Math.max(base, Math.round(guarded))
 }
 
 function buildSbbDateTime(tripSpan: TripSpan) {
@@ -531,7 +567,7 @@ function selectLiveWeatherPool(candidates: Array<{
   destination: typeof destinations[number]
   bestTravelMin: number
   carTravel?: ReturnType<typeof getMockTravelTime>
-  trainTravel?: ReturnType<typeof getMockTravelTime> & { ga_included?: boolean }
+  trainTravel?: TrainTravelWithMeta
 }>, maxTravelMin: number, windowMinMin?: number | null, windowMaxMin?: number | null) {
   if (candidates.length <= LIVE_WEATHER_POOL_TARGET) return candidates
 
@@ -985,6 +1021,7 @@ export async function GET(request: NextRequest) {
       : 'default'
   const mapsOriginName = originKind === 'manual' ? originNameParam : ''
   const sbbOriginName = originNameParam || 'Basel'
+  const normalizedSbbOriginKey = normalizeSbbOrigin(sbbOriginName)
   const debugExplainId = (sp.get('debug_explain_id') || '').trim().toLowerCase().slice(0, 96)
 
   const requestedDemo = sp.get('demo') === 'true'
@@ -1125,9 +1162,14 @@ export async function GET(request: NextRequest) {
     const car = (mode === 'car' || mode === 'both')
       ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'car', travelProfile)
       : undefined
-    let train = (mode === 'train' || mode === 'both')
+    let train: TrainTravelWithMeta | undefined = (mode === 'train' || mode === 'both')
       ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'train', travelProfile)
       : undefined
+    const precomputedTrainRaw = TRAIN_TIME_MIN_BY_ORIGIN[normalizedSbbOriginKey]?.[dest.id]
+    const precomputedTrainMin = Number.isFinite(Number(precomputedTrainRaw))
+      ? Math.max(0, Math.round(Number(precomputedTrainRaw)))
+      : null
+    const precomputedTrainSource = TRAIN_TIME_SOURCE_BY_ORIGIN[normalizedSbbOriginKey]?.[dest.id]
 
     if (demoMode && car && train) {
       if (DEMO_TRAIN_FAST_IDS.has(dest.id)) {
@@ -1149,9 +1191,34 @@ export async function GET(request: NextRequest) {
       if (car && typeof dest.travel_car_min === 'number') {
         car.duration_min = dest.travel_car_min
       }
-      if (train && typeof dest.travel_train_min === 'number') {
-        train.duration_min = dest.travel_train_min
-      }
+    }
+    if (train && precomputedTrainMin !== null && precomputedTrainSource === 'transport.opendata.ch') {
+      train.duration_min = precomputedTrainMin
+      train.source = 'transport.opendata.ch'
+      train.guardrail_applied = false
+    } else if (train && precomputedTrainMin !== null) {
+      const guardedTrainMin = applyHeuristicTrainGuardrail({
+        currentTrainMin: precomputedTrainMin,
+        carMin: car?.duration_min ?? null,
+        destination: dest,
+      })
+      train.duration_min = guardedTrainMin
+      train.source = 'heuristic_fallback'
+      train.guardrail_applied = guardedTrainMin !== precomputedTrainMin
+    } else if (baselLikeOrigin && train && typeof dest.travel_train_min === 'number') {
+      train.duration_min = dest.travel_train_min
+      train.source = 'destination_manual'
+      train.guardrail_applied = false
+    } else if (train) {
+      const rawTrainMin = train.duration_min
+      const guardedTrainMin = applyHeuristicTrainGuardrail({
+        currentTrainMin: rawTrainMin,
+        carMin: car?.duration_min ?? null,
+        destination: dest,
+      })
+      train.duration_min = guardedTrainMin
+      train.source = 'heuristic_runtime'
+      train.guardrail_applied = guardedTrainMin !== rawTrainMin
     }
 
     const bestTravelMin = Math.min(car?.duration_min ?? Infinity, train?.duration_min ?? Infinity)
@@ -1903,7 +1970,14 @@ export async function GET(request: NextRequest) {
       tourism,
       travel: {
         car: full.carTravel ? { mode: 'car' as const, duration_min: full.carTravel.duration_min, distance_km: full.carTravel.distance_km } : undefined,
-        train: full.trainTravel ? { mode: 'train' as const, duration_min: full.trainTravel.duration_min, changes: full.trainTravel.changes, ga_included: hasGA } : undefined,
+        train: full.trainTravel ? {
+          mode: 'train' as const,
+          duration_min: full.trainTravel.duration_min,
+          changes: full.trainTravel.changes,
+          ga_included: hasGA,
+          source: full.trainTravel.source,
+          is_estimated: full.trainTravel.source === 'heuristic_fallback' || full.trainTravel.source === 'heuristic_runtime',
+        } : undefined,
       },
       plan: buildTripPlan(full.destination),
       links: {
@@ -1995,6 +2069,12 @@ export async function GET(request: NextRequest) {
   if (tourismSourceSet.has('discover.swiss')) tourismAttribution.push('Tourism: discover.swiss API')
   if (tourismSourceSet.has('geo.admin.ch')) tourismAttribution.push('Tourism context: geo.admin.ch Search API')
   if (tourismSourceSet.has('fallback')) tourismAttribution.push('Tourism fallback: FOMO curated destination catalog')
+  const responseRowsWithTrain = withTravel.filter(row => Boolean(row.trainTravel)).length
+  const responseTrainApi = withTravel.filter(row => row.trainTravel?.source === 'transport.opendata.ch').length
+  const responseTrainEstimated = withTravel.filter(
+    row => row.trainTravel?.source === 'heuristic_fallback' || row.trainTravel?.source === 'heuristic_runtime'
+  ).length
+  const responseGuardrailApplied = withTravel.filter(row => row.trainTravel?.guardrail_applied).length
 
   const response: SunnyEscapesResponse = {
     _meta: {
@@ -2013,6 +2093,17 @@ export async function GET(request: NextRequest) {
       result_tier: resultTier,
       fallback_notice: fallbackNotice || undefined,
       bucket_counts: bucketCounts,
+      train_time_quality: {
+        dataset_service_date: TRAIN_TIME_DATASET_META.service_date,
+        dataset_generated_at: TRAIN_TIME_DATASET_META.generated_at,
+        dataset_rows_total: TRAIN_TIME_DATASET_META.rows_total,
+        dataset_rows_api: TRAIN_TIME_DATASET_META.rows_api,
+        dataset_rows_fallback: TRAIN_TIME_DATASET_META.rows_fallback,
+        response_rows_with_train: responseRowsWithTrain,
+        response_train_api: responseTrainApi,
+        response_train_estimated: responseTrainEstimated,
+        response_guardrail_applied: responseGuardrailApplied,
+      },
       ...(debugExplain ? { debug_explain: debugExplain } : {}),
     },
     origin_conditions: {
@@ -2041,7 +2132,7 @@ export async function GET(request: NextRequest) {
       : 'meteoswiss'
   const headers: Record<string, string> = {
     'Cache-Control': cacheControl,
-    'X-FOMO-Sun-Version': '0.6.2',
+    'X-FOMO-Sun-Version': APP_RELEASE_VERSION,
     'X-FOMO-Live-Source': demoMode ? 'mock' : 'open-meteo',
     'X-FOMO-Trip-Span': tripSpan,
     'X-FOMO-Response-Cache': 'MISS',
@@ -2064,6 +2155,11 @@ export async function GET(request: NextRequest) {
     'X-FOMO-Result-Tier': resultTier,
     'X-FOMO-Travel-Window-Min': String(appliedWindowMin),
     'X-FOMO-Travel-Window-Max': String(appliedWindowMax),
+    'X-FOMO-Train-Data-Service-Date': TRAIN_TIME_DATASET_META.service_date,
+    'X-FOMO-Train-Data-API-Rows': String(TRAIN_TIME_DATASET_META.rows_api),
+    'X-FOMO-Train-Data-Fallback-Rows': String(TRAIN_TIME_DATASET_META.rows_fallback),
+    'X-FOMO-Train-Estimate-Used': String(responseTrainEstimated),
+    'X-FOMO-Train-Guardrail-Applied': String(responseGuardrailApplied),
     'X-FOMO-Agent-Prefs-Applied': Object.keys(agentPrefs).length > 0 ? '1' : '0',
     'X-FOMO-Force-Refresh': forceRefresh ? '1' : '0',
     'X-FOMO-Tourism-Sources': Array.from(tourismSourceSet).sort().join(',') || 'fallback',

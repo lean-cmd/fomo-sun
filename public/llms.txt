@@ -1,10 +1,10 @@
 # FOMO Sun - Find Sun Fast
 
-> FOMO Sun helps people escape fog and find sunny destinations within 0-4.5 hours of their location. Focused on Switzerland and nearby Germany/France/Italy.
+> FOMO Sun helps people escape fog and find sunny destinations within 0-6.5 hours of their location. Focused on Switzerland and nearby Germany/France/Italy.
 
 ## What This Service Does
 
-FOMO Sun is an AI-powered sun escape recommender. Given a user's location and travel preferences, it returns 3-5 ranked destinations that are currently (or forecasted to be) sunny, along with travel times and simple trip plans.
+FOMO Sun is an AI-powered sun escape recommender. Given a user's location and travel preferences, it returns ranked destinations that are currently (or forecasted to be) sunny, along with travel times and simple trip plans.
 
 ## API
 
@@ -16,7 +16,7 @@ GET /api/v1/sunny-escapes?lat={lat}&lon={lon}&max_travel_h={hours}&mode={car|tra
 
 ### Parameters
 - `lat`, `lon`: Origin coordinates (default: Basel, Switzerland)
-- `max_travel_h`: Maximum travel time in hours (0.5-4.5)
+- `max_travel_h`: Maximum travel time in hours (0.5-6.5)
 - `mode`: Travel mode - car, train, or both (default: both)
 - `ga`: Whether user has a Swiss GA rail pass (true/false)
 - `types`: Comma-separated filter - nature, viewpoint, town, lake, family, food, mountain, thermal
@@ -57,7 +57,8 @@ X-FOMO-Agent-Preferences: {"travel_mode":"train","max_travel_h":3,"destination_t
 ## Data Sources
 - MeteoSwiss Open Data (CC BY 4.0) for Swiss weather
 - Open-Meteo for cross-border weather
-- Open Journey Planner for Swiss routing
+- transport.opendata.ch Connections API for routing (`/v1/connections`)
+- Precomputed train-time matrix (`src/data/train-times.ts`) from transport.opendata.ch, with conservative heuristic guardrails when no API-derived row is available
 
 ## Contact
 Built by the FOMO Sun team. Feedback welcome.

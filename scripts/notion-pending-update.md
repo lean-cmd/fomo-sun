@@ -9,6 +9,54 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V1.0.8 — Train-Time Source Quality + Guardrails + API Audit Docs — 2026-02-28
+
+**Theme:** Improve routing trust by separating API-derived train durations from heuristics and hardening fallback behavior.
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### V1.0.8 — Train-Time Source Quality + Guardrails + API Audit Docs
+Theme: Improve routing trust by separating API-derived train durations from heuristics and hardening fallback behavior.
+
+Changes:
+- Added source-aware train-time dataset generation:
+  - `src/data/train-times.ts` now exports:
+    - `TRAIN_TIME_MIN_BY_ORIGIN`
+    - `TRAIN_TIME_SOURCE_BY_ORIGIN` (`transport.opendata.ch` vs `heuristic_fallback`)
+    - `TRAIN_TIME_DATASET_META` (service date + row counts).
+- Updated `src/app/api/v1/sunny-escapes/route.ts`:
+  - consumes train-time source metadata
+  - applies conservative guardrails when train durations are fallback/heuristic
+  - includes train-time quality telemetry in `_meta.train_time_quality`
+  - adds train quality response headers (`X-FOMO-Train-*`).
+- Extended travel payload typing to expose train source + estimated flag (`src/lib/types.ts`).
+- Improved train delta audit (`scripts/audit-train-diff.mjs`) to rank deltas only for API-backed rows.
+- Added Open API audit documentation at `docs/open-apis.md`.
+- Synced API version header to release constant and bumped release to `1.0.8`.
+
+Files:
+- src/app/api/v1/sunny-escapes/route.ts
+- src/data/train-times.ts
+- scripts/generate-train-times.mjs
+- scripts/audit-train-diff.mjs
+- src/lib/types.ts
+- docs/open-apis.md
+- src/lib/release.ts
+- package.json
+- public/llms.txt
+
+Validation:
+- npm run build passed
+- node scripts/audit-routing.mjs --demo true --concurrency 4 passed (0 failures)
+
+Rollback:
+- git revert <v1.0.8-commit-sha>
+Agent: Codex (GPT-5)
+```
+
+---
+
 ## V1.0.7 — Routing Audit + Explicit Bucket Guard + Mock Distance Cleanup — 2026-02-28
 
 **Theme:** Routing correctness audit tooling and explicit window hardening
