@@ -5,6 +5,7 @@ import {
   CircleMarker,
   MapContainer,
   Popup,
+  Rectangle,
   TileLayer,
   WMSTileLayer,
   ZoomControl,
@@ -13,6 +14,8 @@ import {
 import { ChevronDown, ExternalLink, Loader2, Sun, Zap } from 'lucide-react'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
+
+type MapDay = 'today' | 'tomorrow'
 
 type OriginSeed = {
   name: string
@@ -31,7 +34,8 @@ type ApiEscapeRow = {
     country: 'CH' | 'DE' | 'FR' | 'IT'
     sbb_name?: string | null
   }
-  sun_score?: { score?: number }
+  sun_score?: { score?: number; sunshine_forecast_min?: number }
+  tomorrow_sun_hours?: number
   travel?: {
     car?: { duration_min?: number }
     train?: { duration_min?: number }
@@ -53,10 +57,20 @@ type MapRow = {
   lat: number
   lon: number
   sunScore: number
+  markerScore: number
+  activeSunHours: number
+  todaySunHours: number
+  tomorrowSunHours: number
   carMin: number | null
   trainMin: number | null
   bestTravelMin: number | null
   sbbHref?: string
+}
+
+type HeatCell = {
+  id: string
+  bounds: [[number, number], [number, number]]
+  hours: number
 }
 
 const MAP_ORIGIN_CITIES: OriginSeed[] = [
@@ -78,6 +92,21 @@ const MAP_ORIGIN_CITIES: OriginSeed[] = [
   { name: 'Zurich', lat: 47.3769, lon: 8.5417, kind: 'manual' },
 ]
 
+const SWISS_HEAT_BOUNDS = {
+  latMin: 45.72,
+  latMax: 47.98,
+  lonMin: 5.8,
+  lonMax: 10.72,
+}
+
+const HEAT_GRID_LAT_STEP = 0.2
+const HEAT_GRID_LON_STEP = 0.22
+const DEFAULT_OVERLAY_MAX_HOURS = 10
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
+}
+
 function toFinite(value: unknown): number | null {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : null
@@ -87,6 +116,13 @@ function scoreColor(score: number) {
   if (score > 0.6) return '#22c55e'
   if (score >= 0.3) return '#facc15'
   return '#94a3b8'
+}
+
+function sunHoursColor(hours: number, maxHours: number) {
+  const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
+  const hue = 214 - normalized * 170
+  const lightness = 35 + normalized * 25
+  return `hsl(${hue.toFixed(1)} 86% ${lightness.toFixed(1)}%)`
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -99,6 +135,11 @@ function formatTravelLabel(row: MapRow) {
   return `${rounded} min best (${modes})`
 }
 
+function formatHourValue(hours: number) {
+  if (!Number.isFinite(hours)) return '—'
+  return `${Math.round(hours * 10) / 10}h`
+}
+
 function fallbackSbbUrl(originName: string, destinationSbbName?: string | null) {
   if (!destinationSbbName) return undefined
   const params = new URLSearchParams({
@@ -107,6 +148,55 @@ function fallbackSbbUrl(originName: string, destinationSbbName?: string | null) 
     moment: 'DEPARTURE',
   })
   return `https://www.sbb.ch/en?${params.toString()}`
+}
+
+function quickDistanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const avgLatRad = ((aLat + bLat) / 2) * (Math.PI / 180)
+  const kmPerDegLat = 110.574
+  const kmPerDegLon = 111.32 * Math.cos(avgLatRad)
+  const dLat = (bLat - aLat) * kmPerDegLat
+  const dLon = (bLon - aLon) * kmPerDegLon
+  return Math.sqrt(dLat * dLat + dLon * dLon)
+}
+
+function buildHeatCells(rows: MapRow[], maxHours: number): HeatCell[] {
+  const points = rows
+    .filter(row => Number.isFinite(row.activeSunHours))
+    .map(row => ({ lat: row.lat, lon: row.lon, value: row.activeSunHours }))
+
+  if (points.length < 5) return []
+
+  const cells: HeatCell[] = []
+  const { latMin, latMax, lonMin, lonMax } = SWISS_HEAT_BOUNDS
+
+  for (let lat = latMin; lat < latMax; lat += HEAT_GRID_LAT_STEP) {
+    for (let lon = lonMin; lon < lonMax; lon += HEAT_GRID_LON_STEP) {
+      const centerLat = lat + HEAT_GRID_LAT_STEP / 2
+      const centerLon = lon + HEAT_GRID_LON_STEP / 2
+
+      let weightedValueSum = 0
+      let weightSum = 0
+
+      for (const point of points) {
+        const distKm = Math.max(4, quickDistanceKm(centerLat, centerLon, point.lat, point.lon))
+        if (distKm > 240) continue
+        const weight = 1 / (distKm * distKm)
+        weightedValueSum += point.value * weight
+        weightSum += weight
+      }
+
+      if (weightSum <= 0) continue
+
+      const hours = clamp(weightedValueSum / weightSum, 0, maxHours)
+      cells.push({
+        id: `${lat.toFixed(2)}:${lon.toFixed(2)}`,
+        bounds: [[lat, lon], [lat + HEAT_GRID_LAT_STEP, lon + HEAT_GRID_LON_STEP]],
+        hours,
+      })
+    }
+  }
+
+  return cells
 }
 
 function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
@@ -119,9 +209,11 @@ function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
   return null
 }
 
-export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed }) {
+export default function SunMap({ initialOrigin, initialDay = 'today' }: { initialOrigin: OriginSeed; initialDay?: MapDay }) {
   const [origin, setOrigin] = useState<OriginSeed>(initialOrigin)
-  const [showSunshine, setShowSunshine] = useState(true)
+  const [mapDay, setMapDay] = useState<MapDay>(initialDay)
+  const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
+  const [showSunshine, setShowSunshine] = useState(false)
   const [showRadiation, setShowRadiation] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [loading, setLoading] = useState(false)
@@ -131,6 +223,10 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
   useEffect(() => {
     setOrigin(initialOrigin)
   }, [initialOrigin])
+
+  useEffect(() => {
+    setMapDay(initialDay)
+  }, [initialDay])
 
   const originChoices = useMemo(() => {
     const byName = new Map<string, OriginSeed>(MAP_ORIGIN_CITIES.map(item => [item.name, item]))
@@ -142,6 +238,8 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
     setLoading(true)
     setError(null)
 
+    const tripSpan = mapDay === 'tomorrow' ? 'plus1day' : 'daytrip'
+
     const buildUrl = (demo: boolean) => {
       const params = new URLSearchParams({
         lat: String(origin.lat),
@@ -149,7 +247,7 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
         origin_name: origin.name,
         origin_kind: origin.kind,
         mode: 'both',
-        trip_span: 'daytrip',
+        trip_span: tripSpan,
         max_travel_h: '6.5',
         limit: '500',
         admin: 'true',
@@ -178,7 +276,7 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
     } finally {
       if (!signal.aborted) setLoading(false)
     }
-  }, [origin.kind, origin.lat, origin.lon, origin.name])
+  }, [mapDay, origin.kind, origin.lat, origin.lon, origin.name])
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -195,7 +293,14 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
         Number.isFinite(carMin ?? NaN) ? Number(carMin) : Infinity,
         Number.isFinite(trainMin ?? NaN) ? Number(trainMin) : Infinity
       )
-      const score = toFinite(api?.sun_score?.score) ?? 0
+      const todaySunHours = clamp((toFinite(api?.sun_score?.sunshine_forecast_min) ?? 0) / 60, 0, 12)
+      const tomorrowSunHours = clamp(toFinite(api?.tomorrow_sun_hours) ?? Math.max(todaySunHours - 0.3, 0), 0, 12)
+      const activeSunHours = mapDay === 'tomorrow' ? tomorrowSunHours : todaySunHours
+      const todayScore = clamp(toFinite(api?.sun_score?.score) ?? (todaySunHours / DEFAULT_OVERLAY_MAX_HOURS), 0, 1)
+      const markerScore = mapDay === 'today'
+        ? todayScore
+        : clamp(activeSunHours / DEFAULT_OVERLAY_MAX_HOURS, 0, 1)
+
       return {
         id: dest.id,
         name: dest.name,
@@ -203,14 +308,39 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
         country: dest.country,
         lat: dest.lat,
         lon: dest.lon,
-        sunScore: Math.max(0, Math.min(1, score)),
+        sunScore: todayScore,
+        markerScore,
+        activeSunHours,
+        todaySunHours,
+        tomorrowSunHours,
         carMin,
         trainMin,
         bestTravelMin: Number.isFinite(bestTravelMin) ? bestTravelMin : null,
         sbbHref: api?.links?.sbb || fallbackSbbUrl(origin.name, dest.sbb_name),
       }
     })
-  }, [origin.name, rowsById])
+  }, [mapDay, origin.name, rowsById])
+
+  const activeSunValues = useMemo(
+    () => markerRows.map(row => row.activeSunHours).filter(value => Number.isFinite(value) && value > 0),
+    [markerRows]
+  )
+
+  const overlayMinHours = useMemo(
+    () => (activeSunValues.length === 0 ? 0 : Math.floor(Math.min(...activeSunValues) * 2) / 2),
+    [activeSunValues]
+  )
+
+  const overlayMaxHours = useMemo(() => {
+    if (activeSunValues.length === 0) return DEFAULT_OVERLAY_MAX_HOURS
+    const maxValue = Math.max(...activeSunValues)
+    return clamp(Math.ceil(maxValue * 2) / 2, 6, 12)
+  }, [activeSunValues])
+
+  const heatCells = useMemo(
+    () => buildHeatCells(markerRows, overlayMaxHours),
+    [markerRows, overlayMaxHours]
+  )
 
   const selectedRow = useMemo(
     () => markerRows.find(row => row.id === selectedId) || null,
@@ -218,12 +348,14 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
   )
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#102648]">
+    <div className="relative h-full w-full overflow-hidden bg-[#f3efe4]">
       <MapContainer
         center={[46.8, 8.2]}
         zoom={8}
         minZoom={6}
         maxZoom={16}
+        maxBounds={[[45.5, 5.2], [48.2, 11.25]]}
+        maxBoundsViscosity={0.68}
         zoomControl={false}
         className="h-full w-full"
       >
@@ -232,6 +364,19 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
           url="https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg"
           attribution="&copy; swisstopo"
         />
+        {showSunHoursOverlay && heatCells.map(cell => (
+          <Rectangle
+            key={cell.id}
+            bounds={cell.bounds}
+            interactive={false}
+            pathOptions={{
+              color: sunHoursColor(cell.hours, overlayMaxHours),
+              fillColor: sunHoursColor(cell.hours, overlayMaxHours),
+              fillOpacity: 0.28,
+              weight: 0,
+            }}
+          />
+        ))}
         {showSunshine && (
           <WMSTileLayer
             url="https://wms.geo.admin.ch/"
@@ -254,7 +399,7 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
 
         <CircleMarker
           center={[origin.lat, origin.lon]}
-          radius={8}
+          radius={8.2}
           pathOptions={{
             color: '#1d4ed8',
             fillColor: '#3b82f6',
@@ -274,22 +419,25 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
           <CircleMarker
             key={row.id}
             center={[row.lat, row.lon]}
-            radius={5.6}
+            radius={5.8}
             pathOptions={{
               color: '#f8fafc',
-              fillColor: scoreColor(row.sunScore),
-              fillOpacity: 0.92,
-              weight: 1.2,
+              fillColor: scoreColor(row.markerScore),
+              fillOpacity: 0.95,
+              weight: 1.1,
             }}
             eventHandlers={{
               click: () => setSelectedId(row.id),
             }}
           >
             <Popup>
-              <div className="min-w-[170px] space-y-1 text-[12px]">
+              <div className="min-w-[190px] space-y-1 text-[12px]">
                 <p className="text-[13px] font-semibold text-slate-900">{row.name}</p>
                 <p className="text-slate-600">{row.region} · {row.country}</p>
                 <p className="text-slate-700">Sun score: {Math.round(row.sunScore * 100)}%</p>
+                <p className="text-slate-700">
+                  {mapDay === 'tomorrow' ? 'Tomorrow sun' : 'Today sun'}: {formatHourValue(row.activeSunHours)}
+                </p>
                 <p className="text-slate-700">From {origin.name}: {formatTravelLabel(row)}</p>
                 {row.sbbHref ? (
                   <a
@@ -311,22 +459,68 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
       </MapContainer>
 
       <div className="pointer-events-none absolute inset-0 z-[500]">
-        <div className="pointer-events-auto absolute left-3 top-3 flex max-w-[78vw] flex-wrap items-center gap-1.5 rounded-xl border border-white/20 bg-slate-900/75 p-1.5 backdrop-blur">
+        <div className="pointer-events-auto absolute left-3 top-3 flex max-w-[92vw] flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/92 p-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setMapDay('today')
+                setShowSunHoursOverlay(true)
+              }}
+              className={`h-6 rounded-md px-2.5 text-[11px] font-semibold transition ${
+                mapDay === 'today' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMapDay('tomorrow')
+                setShowSunHoursOverlay(true)
+              }}
+              className={`h-6 rounded-md px-2.5 text-[11px] font-semibold transition ${
+                mapDay === 'tomorrow' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+              }`}
+            >
+              Tomorrow
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowSunHoursOverlay(prev => !prev)}
+            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
+              showSunHoursOverlay
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-slate-200 bg-white text-slate-600'
+            }`}
+            title="Interpolated sun hours overlay"
+          >
+            <Sun className="h-3.5 w-3.5" />
+            Sun hours
+          </button>
+
           <button
             type="button"
             onClick={() => setShowSunshine(prev => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-              showSunshine ? 'bg-amber-400 text-slate-900' : 'bg-slate-100/10 text-slate-100'
+            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
+              showSunshine
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-slate-200 bg-white text-slate-600'
             }`}
           >
             <Sun className="h-3.5 w-3.5" />
-            Sunshine
+            MeteoSwiss sun
           </button>
+
           <button
             type="button"
             onClick={() => setShowRadiation(prev => !prev)}
-            className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
-              showRadiation ? 'bg-amber-300 text-slate-900' : 'bg-slate-100/10 text-slate-100'
+            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
+              showRadiation
+                ? 'border-amber-300 bg-amber-50 text-amber-800'
+                : 'border-slate-200 bg-white text-slate-600'
             }`}
           >
             <Zap className="h-3.5 w-3.5" />
@@ -335,7 +529,7 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
         </div>
 
         <div className="pointer-events-auto absolute right-3 top-3">
-          <div className="relative inline-flex items-center rounded-xl border border-white/20 bg-slate-900/75 pr-2.5 backdrop-blur">
+          <div className="relative inline-flex items-center rounded-xl border border-slate-200 bg-white/92 pr-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
             <select
               value={origin.name}
               onChange={(event) => {
@@ -343,7 +537,7 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
                 if (!selected) return
                 setOrigin(selected)
               }}
-              className="h-8 rounded-xl bg-transparent pl-2.5 pr-6 text-[11px] font-semibold text-slate-100 focus:outline-none"
+              className="h-8 rounded-xl bg-transparent pl-2.5 pr-6 text-[11px] font-semibold text-slate-800 focus:outline-none"
             >
               {originChoices.map(city => (
                 <option key={city.name} value={city.name} className="text-slate-900">
@@ -351,13 +545,19 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-300" />
+            <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-500" />
           </div>
         </div>
 
-        <MapLegend className="absolute bottom-3 left-3 hidden md:block" />
+        <MapLegend
+          className="absolute bottom-3 left-3 hidden md:block"
+          day={mapDay}
+          overlayVisible={showSunHoursOverlay}
+          minHours={overlayMinHours}
+          maxHours={overlayMaxHours}
+        />
 
-        <div className="pointer-events-auto absolute bottom-3 right-3 rounded-lg border border-white/20 bg-slate-900/70 px-2.5 py-1.5 text-[11px] text-slate-100 backdrop-blur">
+        <div className="pointer-events-auto absolute bottom-3 right-3 rounded-lg border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
           {loading ? (
             <span className="inline-flex items-center gap-1.5">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -371,35 +571,36 @@ export default function SunMap({ initialOrigin }: { initialOrigin: OriginSeed })
         </div>
 
         {selectedRow && (
-          <div className="pointer-events-auto md:hidden absolute inset-x-3 bottom-3 rounded-2xl border border-slate-200/20 bg-[#0e1c34]/92 p-3 text-slate-100 shadow-xl backdrop-blur">
+          <div className="pointer-events-auto absolute inset-x-3 bottom-3 rounded-2xl border border-slate-200 bg-white/96 p-3 text-slate-800 shadow-xl backdrop-blur md:hidden">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-[15px] font-semibold">{selectedRow.name}</p>
-                <p className="text-[11px] text-slate-300">{selectedRow.region} · {selectedRow.country}</p>
+                <p className="text-[11px] text-slate-500">{selectedRow.region} · {selectedRow.country}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedId(null)}
-                className="rounded-md border border-slate-500/50 px-2 py-0.5 text-[11px] text-slate-200"
+                className="rounded-md border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600"
               >
                 Close
               </button>
             </div>
             <div className="mt-2 space-y-1 text-[12px]">
-              <p>Sun score: <span className="font-semibold text-amber-300">{Math.round(selectedRow.sunScore * 100)}%</span></p>
+              <p>Today sun: <span className="font-semibold text-slate-800">{formatHourValue(selectedRow.todaySunHours)}</span></p>
+              <p>Tomorrow sun: <span className="font-semibold text-slate-800">{formatHourValue(selectedRow.tomorrowSunHours)}</span></p>
               <p>Travel from {origin.name}: {formatTravelLabel(selectedRow)}</p>
               {selectedRow.sbbHref ? (
                 <a
                   href={selectedRow.sbbHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-200"
+                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700"
                 >
                   Open SBB
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               ) : (
-                <p className="text-[11px] text-slate-400">No SBB timetable link for this destination.</p>
+                <p className="text-[11px] text-slate-500">No SBB timetable link for this destination.</p>
               )}
             </div>
           </div>

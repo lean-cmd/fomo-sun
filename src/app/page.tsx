@@ -1678,12 +1678,6 @@ export default function Home() {
               >
                 Tomorrow
               </button>
-              <a
-                href={`/map?origin=${encodeURIComponent(origin.name)}&lat=${origin.lat.toFixed(5)}&lon=${origin.lon.toFixed(5)}&origin_kind=${originMode}`}
-                className="ml-1 rounded-md border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:border-amber-300 hover:text-slate-800"
-              >
-                Map
-              </a>
             </div>
           </div>
         </div >
@@ -1904,6 +1898,14 @@ export default function Home() {
               Sunny escapes
             </h2>
             <div className="inline-flex items-center gap-1.5">
+              <a
+                href={`/map?origin=${encodeURIComponent(origin.name)}&lat=${origin.lat.toFixed(5)}&lon=${origin.lon.toFixed(5)}&origin_kind=${originMode}&day=${dayFocus}`}
+                className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] font-medium inline-flex items-center gap-1.5 text-slate-600 transition hover:border-amber-300 hover:text-slate-800"
+                title="Open sunshine map"
+              >
+                <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
+                Map
+              </a>
               <button
                 type="button"
                 onClick={() => setShowResultFilters(v => !v)}
