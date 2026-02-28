@@ -1939,7 +1939,7 @@ export default function Home() {
                   type="button"
                   onClick={() => setJoystickRange(idx)}
                   className={`h-9 px-1.5 rounded-t-lg rounded-b-none border inline-flex items-center justify-center text-[11px] whitespace-nowrap transition-colors ${active
-                    ? '-mb-px border-amber-300 border-b-white bg-white text-amber-800 font-semibold shadow-[inset_0_2px_0_0_#f59e0b]'
+                    ? 'relative z-[1] border-amber-300 border-b-white bg-white text-amber-800 font-semibold shadow-[inset_0_2px_0_0_#f59e0b]'
                     : sparse
                       ? 'border-slate-200 bg-slate-100 text-slate-500'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'

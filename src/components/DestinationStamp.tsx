@@ -850,6 +850,13 @@ function renderFlag(country: CountryCode) {
 
 export type { StampProps, StampType }
 
+const RASTER_STAMPS: Record<string, string> = {
+  basel: '/stamps/basel-vintage.png',
+  'st-moritz': '/stamps/stmoritz-vintage.png',
+  zurich: '/stamps/zurich-vintage.png',
+  loetschental: '/stamps/loetschental-vintage.png',
+}
+
 export function DestinationStamp({
   name,
   destinationId,
@@ -866,7 +873,9 @@ export function DestinationStamp({
 }: StampProps) {
   const safeName = (name || 'DESTINATION').toUpperCase().slice(0, 24)
   const normalizedId = (destinationId || '').toLowerCase()
-  if (normalizedId === 'basel') {
+  const rasterPath = normalizedId ? RASTER_STAMPS[normalizedId] : undefined
+
+  if (rasterPath) {
     return (
       <svg
         viewBox="0 0 100 124"
@@ -875,26 +884,7 @@ export function DestinationStamp({
         aria-label={`${safeName} destination stamp`}
       >
         <image
-          href="/stamps/basel-vintage.png"
-          x="0"
-          y="0"
-          width="100"
-          height="124"
-          preserveAspectRatio="xMidYMid slice"
-        />
-      </svg>
-    )
-  }
-  if (normalizedId === 'st-moritz') {
-    return (
-      <svg
-        viewBox="0 0 100 124"
-        className={className}
-        role="img"
-        aria-label={`${safeName} destination stamp`}
-      >
-        <image
-          href="/stamps/stmoritz-vintage.png"
+          href={rasterPath}
           x="0"
           y="0"
           width="100"

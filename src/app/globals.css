@@ -23,6 +23,11 @@
   text-rendering: optimizeLegibility;
 }
 
+html {
+  /* Prevent layout jitter when content height changes cause scrollbars to appear/disappear. */
+  scrollbar-gutter: stable;
+}
+
 body {
   font-family: 'DM Sans', system-ui, sans-serif;
   background: linear-gradient(180deg, #fff9ef 0%, #f8fafc 38%, #f8fafc 100%);
