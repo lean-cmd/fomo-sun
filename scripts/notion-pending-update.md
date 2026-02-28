@@ -9,6 +9,66 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V1.0.9 — Live Sunshine Map (/map) with Swiss WMS Overlays — 2026-02-28
+
+**Theme:** Visual map experience for live sunshine context + destination exploration.
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### V1.0.9 — Live Sunshine Map (/map) with Swiss WMS Overlays
+Theme: Visual map experience for live sunshine context + destination exploration.
+
+Changes:
+- Added new route: `/map` (`src/app/map/page.tsx`).
+- Added Leaflet map component (`src/components/SunMap.tsx`) with:
+  - swisstopo WMTS base tiles (`ch.swisstopo.pixelkarte-farbe`, EPSG:3857)
+  - toggleable WMS overlay: `ch.meteoschweiz.messwerte-sonnenscheindauer-10min`
+  - toggleable WMS overlay: `ch.meteoschweiz.messwerte-globalstrahlung-10min`
+  - all FOMO destinations plotted as circle markers
+  - color buckets by sun score:
+    - green > 0.6
+    - yellow 0.3–0.6
+    - gray < 0.3
+  - blue marker for selected origin city.
+- Added destination popups with:
+  - destination name
+  - current sun score
+  - travel-time summary from current origin
+  - SBB deep link.
+- Added mobile bottom-sheet details for selected marker.
+- Added `MapLegend` overlay component (`src/components/MapLegend.tsx`).
+- Added `/map` navigation links in:
+  - main header on home page (`src/app/page.tsx`)
+  - global footer nav (`src/app/layout.tsx`).
+- Imported Leaflet stylesheet at app root and added small map styling tweaks in `src/app/globals.css`.
+- Installed map dependencies:
+  - `leaflet`
+  - `react-leaflet@4.2.1` (React 18 compatible)
+  - `@types/leaflet`.
+- Bumped release/version to `1.0.9`.
+
+Files:
+- src/app/map/page.tsx
+- src/components/SunMap.tsx
+- src/components/MapLegend.tsx
+- src/app/layout.tsx
+- src/app/page.tsx
+- src/app/globals.css
+- src/lib/release.ts
+- package.json
+- package-lock.json
+
+Validation:
+- npm run build passed
+
+Rollback:
+- git revert <v1.0.9-commit-sha>
+Agent: Codex (GPT-5)
+```
+
+---
+
 ## V1.0.8 — Train-Time Source Quality + Guardrails + API Audit Docs — 2026-02-28
 
 **Theme:** Improve routing trust by separating API-derived train durations from heuristics and hardening fallback behavior.

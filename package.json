@@ -1,6 +1,6 @@
 {
   "name": "fomo-sun",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -20,11 +20,14 @@
   },
   "dependencies": {
     "@notionhq/client": "^5.9.0",
+    "@types/leaflet": "^1.9.21",
     "@vercel/analytics": "^1.6.1",
+    "leaflet": "^1.9.4",
     "lucide-react": "^0.564.0",
     "next": "^14.2.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "react-leaflet": "^4.2.1"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

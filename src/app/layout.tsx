@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/react'
+import 'leaflet/dist/leaflet.css'
 import './globals.css'
 import { APP_RELEASE_VERSION } from '@/lib/release'
 
@@ -66,6 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <div className="flex items-center justify-between gap-2">
               <span>fomosun.com &copy; {new Date().getFullYear()} · {APP_RELEASE_VERSION}</span>
               <div className="inline-flex items-center gap-2.5">
+                <a href="/map" className="transition-colors hover:text-amber-600">Map</a>
                 <a href="/blog" className="transition-colors hover:text-amber-600">Blog</a>
                 <a href="/about" className="transition-colors hover:text-amber-600">About</a>
               </div>

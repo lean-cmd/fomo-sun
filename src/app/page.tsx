@@ -1678,6 +1678,12 @@ export default function Home() {
               >
                 Tomorrow
               </button>
+              <a
+                href={`/map?origin=${encodeURIComponent(origin.name)}&lat=${origin.lat.toFixed(5)}&lon=${origin.lon.toFixed(5)}&origin_kind=${originMode}`}
+                className="ml-1 rounded-md border border-slate-300 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:border-amber-300 hover:text-slate-800"
+              >
+                Map
+              </a>
             </div>
           </div>
         </div >
