@@ -9,6 +9,86 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V1.0.6 + OJP Auth + Vercel Analytics — commits `22c6bd8`, `c8125f3`, `16426d6` — 2026-02-28
+
+**Theme:** Stamp rollout + transit API auth hardening + analytics instrumentation
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### V1.0.6 + OJP Auth + Vercel Analytics (22c6bd8 / c8125f3 / 16426d6)
+Theme: Stamp rollout + transit API auth hardening + analytics instrumentation
+
+Changes:
+- Shipped v1.0.6 UI/stamp package:
+  - Added curated raster stamps for Lötschental and Zürich.
+  - Updated stamp rendering overrides and related UI polish.
+  - Removed obsolete `scripts/stamp-prompts.txt` artifact.
+- Added bearer-token support for transit API requests in `src/lib/sbb-connections.ts`:
+  - Reads `OJP_API_TOKEN` (fallback `OPENTRANSPORTDATA_API_TOKEN`).
+  - Sends `Authorization: Bearer <token>` on transport API calls.
+  - Keeps existing endpoint behavior as fallback when token is not set.
+- Added Vercel Analytics:
+  - Installed `@vercel/analytics`.
+  - Mounted `<Analytics />` in root layout.
+
+Files:
+- public/stamps/loetschental-vintage.png
+- public/stamps/zurich-vintage.png
+- src/components/DestinationStamp.tsx
+- src/app/page.tsx
+- src/app/globals.css
+- src/lib/release.ts
+- src/lib/sbb-connections.ts
+- src/app/layout.tsx
+- package.json
+- package-lock.json
+
+Validation:
+- npm run build passed
+- main branch pushed; Vercel auto-deploy triggered
+
+Rollback:
+- git revert 22c6bd8 c8125f3 16426d6
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V1.0.6 + OJP Auth + Vercel Analytics | 2026-02-28 | Codex session
+- Added curated Lötschental and Zürich stamps; shipped v1.0.6 UI/stamp updates
+- Removed obsolete scripts/stamp-prompts.txt artifact
+- Added bearer-token transit auth (OJP_API_TOKEN / OPENTRANSPORTDATA_API_TOKEN) in sbb-connections
+- Integrated @vercel/analytics in root layout
+- Commits: 22c6bd8, c8125f3, 16426d6
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-28 — Release + Transit Auth (Codex session)
+
+**Deployed:** V1.0.6 + OJP Auth + Vercel Analytics
+**Status:** Shipped to main and deployed via Vercel auto-deploy
+
+**What was done:**
+- Finalized and shipped latest stamp/UI package (including Zürich and Lötschental assets).
+- Hardened transit integration with bearer-token authentication support for the transport API.
+- Added Vercel Analytics instrumentation at app root for production traffic insights.
+
+**OJP integration note:**
+- Current app transit path remains `transport.opendata.ch/v1/connections`.
+- Auth is now token-capable via environment variable for higher quota and lower 429 failure risk.
+- Next optional step: migrate from current connection endpoint to native OJP 2.0 XML trip requests for richer routing semantics.
+```
+
+---
+
 ## UI Tweaks Build — commit `cf3755d` — 2026-02-25
 
 **Theme:** Tabs/Joystick/Header/Footer UI Polish (local-reviewed production draft)
