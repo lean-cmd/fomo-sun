@@ -16,6 +16,11 @@ export type SbbConnection = {
 const CACHE_TTL_MS = 5 * 60 * 1000
 const API_TIMEOUT_MS = 7_000
 const BASE = 'https://transport.opendata.ch/v1/connections'
+const OJP_BEARER_TOKEN = String(
+  process.env.OJP_API_TOKEN
+  || process.env.OPENTRANSPORTDATA_API_TOKEN
+  || ''
+).trim()
 
 const cache = new Map<string, { expires_at: number; rows: SbbConnection[] }>()
 
@@ -144,6 +149,14 @@ export async function getNextConnections(
     }
     const res = await fetch(`${BASE}?${p.toString()}`, {
       signal: controller.signal,
+      headers: OJP_BEARER_TOKEN
+        ? {
+          accept: 'application/json',
+          Authorization: `Bearer ${OJP_BEARER_TOKEN}`,
+        }
+        : {
+          accept: 'application/json',
+        },
       next: { revalidate: 300 },
     })
     if (!res.ok) throw new Error(`sbb-http-${res.status}`)
