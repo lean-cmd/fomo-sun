@@ -9,6 +9,82 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V1.0.7 — Routing Audit + Explicit Bucket Guard + Mock Distance Cleanup — 2026-02-28
+
+**Theme:** Routing correctness audit tooling and explicit window hardening
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### V1.0.7 — Routing Audit + Explicit Bucket Guard + Mock Distance Cleanup
+Theme: Routing correctness audit tooling and explicit window hardening
+
+Changes:
+- Added `scripts/audit-routing.mjs` to batch-audit routing integrity across origins × trip spans × modes × buckets.
+- Added npm scripts:
+  - `audit:routing`
+  - `audit:routing:prod`
+  - `audit:routing:ch-geocode`
+- Fixed explicit bucket leakage in `src/app/api/v1/sunny-escapes/route.ts`:
+  - when `travel_min_h`/`travel_max_h` is explicit and no in-window rows exist, API no longer falls back to global eligible rows.
+- Improved mock travel data quality in `src/lib/mock-weather.ts`:
+  - near-identical routes now return 0 min travel for same-place hops
+  - suppress unreliable sub-2km `distance_km` reporting to avoid misleading 0km/8min outputs.
+- Updated public footer/version constant to `1.0.7`.
+
+Audit result:
+- Full demo audit run: 160/160 permutations
+- Hard failures: 0
+- Warnings: 0
+
+Files:
+- scripts/audit-routing.mjs
+- package.json
+- src/app/api/v1/sunny-escapes/route.ts
+- src/lib/mock-weather.ts
+- src/lib/release.ts
+- .gitignore
+
+Validation:
+- npm run build passed
+- audit routing passed (0 failures / 0 warnings)
+
+Rollback:
+- git revert <v1.0.7-commit-sha>
+Agent: Codex (GPT-5)
+```
+
+---
+
+### 2. V1 Build Log — append new entry to the bottom
+
+```
+V1.0.7 | 2026-02-28 | Codex session
+- Added batchable routing audit script with CSV + markdown reporting
+- Added explicit-window guard to prevent out-of-bucket fallback rows
+- Cleaned mock short-hop distance/travel behavior to remove misleading demo outputs
+- Updated app release footer to 1.0.7
+```
+
+---
+
+### 3. PM Journal — append new entry
+
+```
+## 2026-02-28 — Routing Audit Hardening (Codex session)
+
+**Deployed:** V1.0.7
+**Status:** Shipped after audit clean run
+
+**What was done:**
+- Built a reusable routing audit harness (`scripts/audit-routing.mjs`) with deterministic batching and report artifacts.
+- Reproduced and fixed explicit bucket leakage where explicit travel windows could return out-of-window rows.
+- Re-ran the full audit and confirmed clean output (0 hard failures, 0 warnings).
+- Tightened mock travel-distance behavior for very short hops to avoid misleading diagnostics.
+```
+
+---
+
 ## V1.0.6 + OJP Auth + Vercel Analytics — commits `22c6bd8`, `c8125f3`, `16426d6` — 2026-02-28
 
 **Theme:** Stamp rollout + transit API auth hardening + analytics instrumentation

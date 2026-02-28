@@ -1637,8 +1637,10 @@ export async function GET(request: NextRequest) {
     appliedWindowMin = selectedPool.appliedMin
     appliedWindowMax = selectedPool.appliedMax
     if (rankingPool.length === 0 && eligibleRows.length > 0) {
-      rankingPool = eligibleRows
-      resultTier = 'best_available'
+      if (!hasExplicitWindow) {
+        rankingPool = eligibleRows
+        resultTier = 'best_available'
+      }
     }
   }
 

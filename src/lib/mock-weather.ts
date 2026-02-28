@@ -273,14 +273,21 @@ export function getMockTravelTime(
     + (altitude > 1200 ? 0.04 : 0)
     + (altitude > 1700 ? 0.04 : 0)
   const roadKm = airKm * roadFactor
+  const isLocalHop = roadKm < 2
+  const isSamePlace = roadKm < 0.5
 
   const carSpeedKmh = roadKm < 35 ? 45 : roadKm < 95 ? 56 : roadKm < 230 ? 66 : 72
   const carPenaltyMin = (isCrossBorder ? 8 : 0) + (altitude > 1400 ? 10 : 0) + (altitude > 1800 ? 8 : 0)
-  const carMin = Math.max(8, Math.round((roadKm / carSpeedKmh) * 60 + carPenaltyMin))
+  const carMin = isSamePlace ? 0 : Math.max(8, Math.round((roadKm / carSpeedKmh) * 60 + carPenaltyMin))
+  const roundedRoadKm = Math.round(roadKm * 10) / 10
 
-  if (mode === 'car') return { duration_min: carMin, distance_km: Math.round(roadKm) }
+  if (mode === 'car') {
+    // For sub-2km hops the estimate is too noisy to expose as user-facing distance.
+    return { duration_min: carMin, distance_km: isLocalHop ? undefined : roundedRoadKm }
+  }
 
   const hasSbb = Boolean(profile?.has_sbb)
+  if (isSamePlace) return { duration_min: 0, changes: 0 }
   const trainBase = hasSbb
     ? (isCrossBorder ? carMin * 1.22 : carMin * 1.02)
     : carMin * 1.46
