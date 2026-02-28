@@ -22,6 +22,12 @@ const CACHE_PREFIX = 'tourism:v1:'
 const CACHE_MAX_ITEMS = 2500
 const REMOTE_TIMEOUT_MS = 2600
 const FALLBACK_SITE_ORIGIN = process.env.NEXT_PUBLIC_SITE_URL || 'https://fomosun.com'
+const GENERIC_PLACEHOLDER_PLAN = 'Cable car or short hike | Panorama viewpoint stop | Mountain hut lunch'
+const GENERIC_PLACEHOLDER_SEGMENTS = new Set([
+  'cable car or short hike',
+  'panorama viewpoint stop',
+  'mountain hut lunch',
+])
 
 const memoryCache = new Map<string, { expires_at: number; data: TourismInfo }>()
 
@@ -140,8 +146,43 @@ function fallbackDescriptionLong(input: DestinationEnrichmentInput) {
 }
 
 function fallbackHighlights(input: DestinationEnrichmentInput) {
+  const template = normalizeText(input.plan_template || '')
+  const isGenericPlaceholder = template === GENERIC_PLACEHOLDER_PLAN
+  const typeHints = Array.isArray(input.types) ? input.types : []
+  if (isGenericPlaceholder) {
+    if (typeHints.includes('town')) {
+      return uniqueNonEmpty([
+        'Old town stroll',
+        'Sunny terrace stop',
+        'Easy scenic loop',
+      ]).slice(0, 4)
+    }
+    if (typeHints.includes('lake')) {
+      return uniqueNonEmpty([
+        'Lakeside walk',
+        'Terrace coffee',
+        'Short scenic loop',
+      ]).slice(0, 4)
+    }
+    if (typeHints.includes('thermal')) {
+      return uniqueNonEmpty([
+        'Thermal soak',
+        'Sauna/rest',
+        'Easy sunset walk',
+      ]).slice(0, 4)
+    }
+    return uniqueNonEmpty([
+      'Short ridge/viewpoint loop (30–60 min)',
+      'Panorama stop above fog',
+      'Hut/terrace break (check opening hours)',
+    ]).slice(0, 4)
+  }
+
   const base = input.plan_template
-    ? input.plan_template.split('|').map(part => normalizeText(part))
+    ? input.plan_template
+      .split('|')
+      .map(part => normalizeText(part))
+      .filter(part => !GENERIC_PLACEHOLDER_SEGMENTS.has(part.toLowerCase()))
     : []
   const defaults = [
     `${input.region} microclimate`,
@@ -467,10 +508,18 @@ async function fetchGeoAdminPatch(input: DestinationEnrichmentInput): Promise<To
 }
 
 function finalizeTourism(data: TourismInfo): TourismInfo {
+  const sanitizedHighlights = uniqueNonEmpty(data.highlights)
+    .filter(item => !GENERIC_PLACEHOLDER_SEGMENTS.has(normalizeText(item).toLowerCase()))
+    .slice(0, 6)
   return {
     description_short: normalizeText(data.description_short || 'Sunny destination insight'),
     description_long: normalizeText(data.description_long || data.description_short),
-    highlights: uniqueNonEmpty(data.highlights).slice(0, 6),
+    highlights: sanitizedHighlights.length > 0
+      ? sanitizedHighlights
+      : [
+        'Sunny-escape destination',
+        'Short daytrip potential',
+      ],
     tags: uniqueNonEmpty(data.tags).slice(0, 8),
     hero_image: normalizeText(data.hero_image || `${FALLBACK_SITE_ORIGIN}/api/og/default`),
     official_url: normalizeText(data.official_url || 'https://www.myswitzerland.com/en-ch/'),

@@ -9,6 +9,53 @@ After every successful `git push`, update the three "(current)" pages in the
 
 ---
 
+## V1.0.10 — Tourism-Enriched Plans + Placeholder Retirement — 2026-02-28
+
+**Theme:** Replace generic placeholder trip wording with tourism-aware guidance across destinations.
+
+### 1. V88 Release Changelog — append after latest entry
+
+```
+### V1.0.10 — Tourism-Enriched Plans + Placeholder Retirement
+Theme: Replace generic placeholder trip wording with tourism-aware guidance across destinations.
+
+Changes:
+- Folded Burgruine Neu Falkenstein into existing `balsthal-town` destination data:
+  - added `viewpoint` type
+  - updated plan template to ruin-focused outing
+  - updated `maps_name` to route Google Maps to the ruin
+  - added destination description.
+- Upgraded trip plan generation (`buildTripPlan`) in `src/app/api/v1/sunny-escapes/route.ts`:
+  - exact legacy placeholder string now treated specially
+  - if tourism source is `discover.swiss` or `geo.admin.ch`, plan steps prefer tourism highlights
+  - otherwise fallback to type-based non-cable-car generic plan text.
+- Updated tourism fallback highlights in API route to use generated plan output, keeping plan/highlight language aligned.
+- Hardened tourism enrichment fallback in `src/lib/tourism/enrichDestination.ts`:
+  - legacy placeholder segments are no longer propagated into fallback highlights
+  - fallback highlights now use destination-type-aware defaults
+  - final highlight sanitation removes placeholder fragments globally.
+- Bumped release to `1.0.10`.
+
+Files:
+- src/data/destinations.ts
+- src/app/api/v1/sunny-escapes/route.ts
+- src/lib/tourism/enrichDestination.ts
+- src/lib/release.ts
+- package.json
+
+Validation:
+- npm run build passed
+- Basel API checks (demo=true) confirmed:
+  - Balsthal plan/highlights reference Burgruine Neu Falkenstein
+  - exact placeholder cable-car phrase removed from generated plans and tourism highlights
+
+Rollback:
+- git revert <v1.0.10-commit-sha>
+Agent: Codex (GPT-5)
+```
+
+---
+
 ## V1.0.9 — Live Sunshine Map (/map) with Swiss WMS Overlays — 2026-02-28
 
 **Theme:** Visual map experience for live sunshine context + destination exploration.

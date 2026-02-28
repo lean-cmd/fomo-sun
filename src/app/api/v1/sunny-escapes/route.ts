@@ -820,7 +820,43 @@ function resolveDaylightWindow(
   return fallback
 }
 
-function buildTripPlan(destination: typeof destinations[number]) {
+const TOURISM_PLAN_STEP_HINTS = [
+  'walk',
+  'stroll',
+  'hike',
+  'loop',
+  'trail',
+  'terrace',
+  'coffee',
+  'lunch',
+  'dinner',
+  'visit',
+  'promenade',
+  'soak',
+  'sauna',
+  'summit',
+  'view',
+  'panorama',
+  'museum',
+  'old town',
+  'gondola',
+  'funicular',
+  'train',
+  'rail',
+]
+
+function tourismHighlightLooksLikePlanStep(value: string) {
+  const text = String(value || '').trim()
+  if (!text) return false
+  const lower = text.toLowerCase()
+  if (lower.includes('swisstopo')) return false
+  if (/\b\d{4}\b/.test(lower)) return false
+  if (/^(local name|toponym|viewpoint|other transport|ski lift)\b/.test(lower)) return false
+  return TOURISM_PLAN_STEP_HINTS.some(hint => lower.includes(hint))
+}
+
+function buildTripPlan(destination: typeof destinations[number], tourism?: TourismInfo | null) {
+  const GENERIC_PLACEHOLDER = 'Cable car or short hike | Panorama viewpoint stop | Mountain hut lunch'
   if (destination.trip_plan) {
     const steps = [
       `📍 ${destination.trip_plan.arrival}`,
@@ -829,6 +865,42 @@ function buildTripPlan(destination: typeof destinations[number]) {
     ]
     if (destination.trip_plan.pro_tip) steps.push(`💡 ${destination.trip_plan.pro_tip}`)
     return steps
+  }
+  if (String(destination.plan_template || '').trim() === GENERIC_PLACEHOLDER) {
+    const tourismHighlights = Array.isArray(tourism?.highlights)
+      ? tourism!.highlights
+        .map(item => String(item || '').trim())
+        .filter(item => tourismHighlightLooksLikePlanStep(item))
+      : []
+    if ((tourism?.source === 'discover.swiss' || tourism?.source === 'geo.admin.ch') && tourismHighlights.length >= 2) {
+      return tourismHighlights.slice(0, 3)
+    }
+    if (destination.types.includes('town')) {
+      return [
+        'Old town stroll',
+        'Sunny terrace stop',
+        'Easy scenic loop',
+      ]
+    }
+    if (destination.types.includes('lake')) {
+      return [
+        'Lakeside walk',
+        'Terrace coffee',
+        'Short scenic loop',
+      ]
+    }
+    if (destination.types.includes('thermal')) {
+      return [
+        'Thermal soak',
+        'Sauna/rest',
+        'Easy sunset walk',
+      ]
+    }
+    return [
+      'Short ridge/viewpoint loop (30–60 min)',
+      'Panorama stop above fog',
+      'Hut/terrace break (check opening hours)',
+    ]
   }
   return String(destination.plan_template || '')
     .split(' | ')
@@ -1896,7 +1968,7 @@ export async function GET(request: NextRequest) {
     const fallback: TourismInfo = {
       description_short: `${destination.name} · ${destination.region}`,
       description_long: destination.description || `${destination.name} is a curated sunny destination in ${destination.region}.`,
-      highlights: destination.plan_template.split(' | ').slice(0, 3),
+      highlights: buildTripPlan(destination, null).slice(0, 3),
       tags: destination.types || [],
       hero_image: `https://fomosun.com/api/og/${encodeURIComponent(destination.id)}`,
       official_url: `https://www.myswitzerland.com/en-ch/search/?q=${encodeURIComponent(destination.name)}`,
@@ -1979,7 +2051,7 @@ export async function GET(request: NextRequest) {
           is_estimated: full.trainTravel.source === 'heuristic_fallback' || full.trainTravel.source === 'heuristic_runtime',
         } : undefined,
       },
-      plan: buildTripPlan(full.destination),
+      plan: buildTripPlan(full.destination, tourism),
       links: {
         google_maps: buildGoogleMapsDirectionsUrl(
           full.destination.maps_name,
