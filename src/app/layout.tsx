@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
+import { Analytics } from '@vercel/analytics/react'
 import './globals.css'
 import { APP_RELEASE_VERSION } from '@/lib/release'
 
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <p>Built with <span className="text-amber-500 animate-pulse">&#9829;</span> and AI in Basel</p>
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   )
