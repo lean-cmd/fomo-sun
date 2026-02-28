@@ -289,9 +289,19 @@ export function getMockTravelTime(
   const hasSbb = Boolean(profile?.has_sbb)
   if (isSamePlace) return { duration_min: 0, changes: 0 }
   const trainBase = hasSbb
-    ? (isCrossBorder ? carMin * 1.22 : carMin * 1.02)
+    ? (
+      isCrossBorder
+        ? (roadKm < 80 ? carMin * 1.05 : carMin * 1.14)
+        : (roadKm < 45 ? carMin * 1.0 : roadKm < 130 ? carMin * 0.98 : carMin * 1.05)
+    )
     : carMin * 1.46
-  const trainPenalty = hasSbb ? (isCrossBorder ? 18 : 8) : 26
+  const trainPenalty = hasSbb
+    ? (
+      isCrossBorder
+        ? (roadKm < 80 ? 8 : 16)
+        : (roadKm < 45 ? 6 : 10)
+    )
+    : 26
   const trainMin = Math.max(12, Math.round(trainBase + trainPenalty))
   seed = Math.round(dLat * 1000 + dLon * 100)
   const changes = hasSbb ? 1 + Math.round(srand() * 2) : 2 + Math.round(srand() * 2)

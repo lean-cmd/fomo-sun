@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Script from 'next/script'
 import { Analytics } from '@vercel/analytics/react'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 import 'leaflet/dist/leaflet.css'
 import './globals.css'
 import { APP_RELEASE_VERSION } from '@/lib/release'
@@ -76,6 +77,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </footer>
         <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   )

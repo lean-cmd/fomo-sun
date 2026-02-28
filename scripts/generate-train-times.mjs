@@ -2,17 +2,27 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 const ROOT = process.cwd()
 const DESTINATIONS_PATH = path.resolve(ROOT, 'src/data/destinations.ts')
 const PAGE_PATH = path.resolve(ROOT, 'src/app/page.tsx')
 const OUTPUT_PATH = path.resolve(ROOT, 'src/data/train-times.ts')
 const DEFAULT_PROGRESS_PATH = path.resolve(ROOT, 'artifacts/train-times-progress.json')
-const BASE_URL = 'https://transport.opendata.ch/v1/connections'
+const DEFAULT_CONNECTIONS_BASE_URL = 'https://transport.opendata.ch/v1/connections'
+const FOMOSUN_PROXY_PATH = '/api/v1/sbb-connections'
+const execFileAsync = promisify(execFile)
 
 const API_TOKEN = String(process.env.OJP_API_TOKEN || process.env.OPENTRANSPORTDATA_API_TOKEN || '').trim()
 const DESTINATION_QUERY_ALIASES = {
   'stresa-town': ['Stresa, Bahnhof'],
+}
+const COUNTRY_LABEL_BY_CODE = {
+  CH: 'Switzerland',
+  DE: 'Germany',
+  FR: 'France',
+  IT: 'Italy',
 }
 
 function parseArgs(argv) {
@@ -48,6 +58,14 @@ function parseIntSafe(value, fallback) {
 function parseList(value) {
   if (!value) return []
   return String(value).split(',').map(v => v.trim()).filter(Boolean)
+}
+
+function parseTimeList(value, fallback) {
+  const values = parseList(value)
+  const source = values.length > 0 ? values : fallback
+  const valid = source.filter(v => /^\d{2}:\d{2}$/.test(v))
+  if (valid.length === 0) throw new Error('No valid sample times provided. Expected HH:MM comma list.')
+  return valid
 }
 
 function parseBatch(value) {
@@ -175,6 +193,10 @@ function todayPlusOneISO() {
 }
 
 function durationToMin(connection) {
+  if (Number.isFinite(Number(connection?.duration_min))) {
+    return Math.max(0, Math.round(Number(connection.duration_min)))
+  }
+
   const raw = String(connection?.duration || '')
   const match = raw.match(/^(?:(\d{1,2})d)?(\d{1,2}):(\d{2}):(\d{2})$/)
   if (match) {
@@ -184,8 +206,14 @@ function durationToMin(connection) {
     return dd * 24 * 60 + hh * 60 + mm
   }
 
-  const depIso = connection?.from?.departure || connection?.from?.prognosis?.departure
-  const arrIso = connection?.to?.arrival || connection?.to?.prognosis?.arrival
+  const depIso = connection?.from?.departure
+    || connection?.from?.prognosis?.departure
+    || connection?.departure_time
+    || connection?.departure
+  const arrIso = connection?.to?.arrival
+    || connection?.to?.prognosis?.arrival
+    || connection?.arrival_time
+    || connection?.arrival
   if (!depIso || !arrIso) return null
   const depMs = new Date(depIso).getTime()
   const arrMs = new Date(arrIso).getTime()
@@ -195,6 +223,59 @@ function durationToMin(connection) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function extractHeaderValue(headerBlock, name) {
+  const lines = String(headerBlock || '').split(/\r?\n/)
+  const needle = `${String(name || '').toLowerCase()}:`
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.toLowerCase().startsWith(needle)) {
+      return trimmed.slice(needle.length).trim()
+    }
+  }
+  return null
+}
+
+function splitCurlHeadersAndBody(raw) {
+  const trimmed = String(raw || '')
+  const marker = '\n__FOMO_STATUS__:'
+  const statusIdx = trimmed.lastIndexOf(marker)
+  if (statusIdx < 0) throw new Error('curl missing status marker')
+
+  const payloadChunk = trimmed.slice(0, statusIdx)
+  const statusRaw = trimmed.slice(statusIdx + marker.length).trim().split(/\s+/)[0]
+  const status = Number.parseInt(statusRaw, 10)
+  if (!Number.isFinite(status)) throw new Error(`curl invalid status marker: ${statusRaw}`)
+
+  const sep = payloadChunk.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n'
+  const sections = payloadChunk.split(sep)
+  const hasHeaders = sections.length > 1 && sections[0].startsWith('HTTP/')
+  if (!hasHeaders) {
+    return { status, body: payloadChunk, retryAfter: null }
+  }
+
+  const body = sections[sections.length - 1]
+  const headerBlocks = sections.slice(0, -1).filter(block => block.startsWith('HTTP/'))
+  const finalHeaderBlock = headerBlocks[headerBlocks.length - 1] || ''
+  const retryAfter = extractHeaderValue(finalHeaderBlock, 'retry-after')
+  return { status, body, retryAfter }
+}
+
+async function requestJsonViaCurl(url, headers) {
+  const args = ['-sS', '-L', '--max-time', '25', '-D', '-']
+  for (const [key, value] of Object.entries(headers || {})) {
+    args.push('-H', `${key}: ${value}`)
+  }
+  args.push('-w', '\n__FOMO_STATUS__:%{http_code}\n', url)
+  const { stdout, stderr } = await execFileAsync('curl', args, { maxBuffer: 8 * 1024 * 1024 })
+  if (stderr && stderr.trim()) {
+    const lowered = stderr.toLowerCase()
+    if (lowered.includes('timed out')) {
+      throw new Error('curl-timeout')
+    }
+  }
+  return splitCurlHeadersAndBody(stdout)
 }
 
 function ensureDir(filePath) {
@@ -233,12 +314,14 @@ function normalizeTrainSource(source) {
   return source === 'transport.opendata.ch' ? 'transport.opendata.ch' : 'heuristic_fallback'
 }
 
-function buildTrainTimesFromRecords(records) {
+function buildTrainTimesFromRecords(records, options = {}) {
+  const includeFallback = parseBool(options.includeFallback, false)
   const durations = {}
   const sources = {}
-  let rowsTotal = 0
+  let rowsStored = 0
   let rowsApi = 0
   let rowsFallback = 0
+  let rowsSkippedNonApi = 0
   for (const row of Object.values(records)) {
     if (!row || typeof row !== 'object') continue
     const originKey = String(row.origin_key || '')
@@ -246,11 +329,15 @@ function buildTrainTimesFromRecords(records) {
     const duration = Number(row.duration_min)
     if (!originKey || !destId || !Number.isFinite(duration)) continue
     const source = normalizeTrainSource(row.source)
+    if (!includeFallback && source !== 'transport.opendata.ch') {
+      rowsSkippedNonApi += 1
+      continue
+    }
     if (!durations[originKey]) durations[originKey] = {}
     if (!sources[originKey]) sources[originKey] = {}
     durations[originKey][destId] = Math.max(0, Math.round(duration))
     sources[originKey][destId] = source
-    rowsTotal += 1
+    rowsStored += 1
     if (source === 'transport.opendata.ch') rowsApi += 1
     else rowsFallback += 1
   }
@@ -258,9 +345,11 @@ function buildTrainTimesFromRecords(records) {
     durations,
     sources,
     stats: {
-      rows_total: rowsTotal,
+      rows_total: rowsStored,
+      rows_stored: rowsStored,
       rows_api: rowsApi,
       rows_fallback: rowsFallback,
+      rows_skipped_non_api: rowsSkippedNonApi,
     },
   }
 }
@@ -305,8 +394,10 @@ function writeTrainTimesFile(filePath, payload, meta) {
   lines.push(`  service_date: ${q(meta.serviceDate)},`)
   lines.push(`  generated_at: ${q(meta.generatedAt)},`)
   lines.push(`  rows_total: ${Math.round(payload.stats?.rows_total || 0)},`)
+  lines.push(`  rows_stored: ${Math.round(payload.stats?.rows_stored || 0)},`)
   lines.push(`  rows_api: ${Math.round(payload.stats?.rows_api || 0)},`)
   lines.push(`  rows_fallback: ${Math.round(payload.stats?.rows_fallback || 0)},`)
+  lines.push(`  rows_skipped_non_api: ${Math.round(payload.stats?.rows_skipped_non_api || 0)},`)
   lines.push('} as const')
   lines.push('')
 
@@ -360,6 +451,9 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const progressPath = path.resolve(ROOT, String(args.progress || DEFAULT_PROGRESS_PATH))
   const finalizeOnly = parseBool(args.finalize, false)
+  const includeFallbackFinalize = parseBool(args['include-fallback'], false)
+  const connectionsBaseUrl = String(args['connections-base-url'] || DEFAULT_CONNECTIONS_BASE_URL).trim()
+  const isFomosunProxy = connectionsBaseUrl.includes(FOMOSUN_PROXY_PATH)
 
   const progress = loadProgress(progressPath)
   if (finalizeOnly) {
@@ -368,9 +462,9 @@ async function main() {
     if (!run || typeof run !== 'object') {
       throw new Error(`No progress run found for service date ${date} in ${progressPath}`)
     }
-    const payload = buildTrainTimesFromRecords(run.records || {})
+    const payload = buildTrainTimesFromRecords(run.records || {}, { includeFallback: includeFallbackFinalize })
     writeTrainTimesFile(OUTPUT_PATH, payload, { serviceDate: date, generatedAt: new Date().toISOString() })
-    console.log(`[train-times] finalized ${Object.keys(payload.durations).length} origins into ${path.relative(ROOT, OUTPUT_PATH)} (api rows ${payload.stats.rows_api}, fallback rows ${payload.stats.rows_fallback})`)
+    console.log(`[train-times] finalized ${Object.keys(payload.durations).length} origins into ${path.relative(ROOT, OUTPUT_PATH)} (stored ${payload.stats.rows_stored}, api rows ${payload.stats.rows_api}, fallback rows ${payload.stats.rows_fallback}, skipped non-api ${payload.stats.rows_skipped_non_api})`)
     return
   }
 
@@ -378,10 +472,12 @@ async function main() {
   const concurrency = Math.max(1, parseIntSafe(args.concurrency, 2))
   const delayMs = Math.max(0, parseIntSafe(args['delay-ms'], 150))
   const serviceDate = String(args.date || todayPlusOneISO())
+  const sampleTimes = parseTimeList(args['sample-times'], ['06:00', '09:00', '14:00'])
   const selectedOriginNames = parseList(args.origins).map(v => v.toLowerCase())
   const selectedDestinationIds = parseList(args.destinations).map(v => v.toLowerCase())
   const force = parseBool(args.force, false)
-  const heuristicFallback = parseBool(args['fallback-heuristic'], true)
+  const heuristicFallback = parseBool(args['fallback-heuristic'], false)
+  const resetRun = parseBool(args['reset-run'], false)
 
   const manualOrigins = loadManualOrigins()
   const originRowsRaw = selectedOriginNames.length
@@ -426,7 +522,7 @@ async function main() {
   }
   const selectedPairs = allPairs.filter(pair => (fnv1a32(pair.key) % batch.total) === (batch.index - 1))
 
-  if (!progress.runs[serviceDate]) {
+  if (resetRun || !progress.runs[serviceDate]) {
     progress.runs[serviceDate] = {
       created_at: new Date().toISOString(),
       records: {},
@@ -446,19 +542,25 @@ async function main() {
     pair_count_total: allPairs.length,
     pair_count_selected: selectedPairs.length,
     service_date: serviceDate,
+    sample_times: sampleTimes,
+    connections_base_url: connectionsBaseUrl,
+    uses_fomosun_proxy: isFomosunProxy,
     updated_at: new Date().toISOString(),
   }
 
   const pendingPairs = selectedPairs.filter(pair => {
     if (force) return true
     const row = run.records[pair.key]
-    return !(row && Number.isFinite(Number(row.duration_min)))
+    if (!(row && Number.isFinite(Number(row.duration_min)))) return true
+    return normalizeTrainSource(row.source) !== 'transport.opendata.ch'
   })
 
   console.log(`[train-times] service date ${serviceDate}`)
   console.log(`[train-times] origins ${uniqueOrigins.length}, destinations ${destinations.length}`)
   console.log(`[train-times] selected pairs ${selectedPairs.length}/${allPairs.length} (batch ${batch.index}/${batch.total})`)
   console.log(`[train-times] pending pairs ${pendingPairs.length}`)
+  console.log(`[train-times] sample times ${sampleTimes.join(', ')}`)
+  console.log(`[train-times] source ${connectionsBaseUrl}${isFomosunProxy ? ' (fomosun proxy)' : ''}`)
 
   if (pendingPairs.length === 0) {
     console.log('[train-times] nothing to fetch in this batch')
@@ -466,6 +568,7 @@ async function main() {
 
   let throttleLock = Promise.resolve()
   let lastDispatchAt = 0
+  let globalCooldownUntil = 0
   async function throttle() {
     let release
     const current = new Promise(resolve => { release = resolve })
@@ -473,24 +576,40 @@ async function main() {
     throttleLock = current
     await previous
     const now = Date.now()
-    const waitMs = Math.max(0, delayMs - (now - lastDispatchAt))
+    const cooldownWait = Math.max(0, globalCooldownUntil - now)
+    if (cooldownWait > 0) await sleep(cooldownWait)
+    const nowAfterCooldown = Date.now()
+    const waitMs = Math.max(0, delayMs - (nowAfterCooldown - lastDispatchAt))
     if (waitMs > 0) await sleep(waitMs)
     lastDispatchAt = Date.now()
     release()
   }
 
   async function fetchTypicalMinutes(pair) {
+    const countryLabel = COUNTRY_LABEL_BY_CODE[pair.destination_country] || ''
     const queryCandidates = [
       pair.destination_sbb_name,
+      pair.destination_name,
+      countryLabel ? `${pair.destination_name}, ${countryLabel}` : pair.destination_name,
       ...((DESTINATION_QUERY_ALIASES[pair.destination_id] || [])),
     ].map(v => String(v || '').trim()).filter(Boolean)
+    const dedupedQueryCandidates = [...new Set(queryCandidates)]
 
     let lastError = null
-    for (const toQuery of queryCandidates) {
+    for (const toQuery of dedupedQueryCandidates) {
       try {
-        const minutes = await fetchTypicalMinutesForQuery(pair, toQuery, 0)
-        if (Number.isFinite(minutes) && minutes > 0) return minutes
+        const minuteCandidates = []
+        for (const sampleTime of sampleTimes) {
+          const minutes = await fetchTypicalMinutesForQuery(pair, toQuery, sampleTime, 0)
+          if (Number.isFinite(minutes) && minutes > 0) minuteCandidates.push(minutes)
+          if (minutes !== null && minutes <= 45) break
+        }
+        if (minuteCandidates.length > 0) {
+          return Math.min(...minuteCandidates)
+        }
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.includes('RATE_LIMITED')) throw error
         lastError = error
       }
     }
@@ -499,39 +618,69 @@ async function main() {
     throw new Error('No parseable connection duration')
   }
 
-  async function fetchTypicalMinutesForQuery(pair, toQuery, attempt = 0) {
+  async function fetchTypicalMinutesForQuery(pair, toQuery, sampleTime, attempt = 0) {
     await throttle()
-    const url = new URL(BASE_URL)
+    const url = new URL(connectionsBaseUrl)
     url.searchParams.set('from', pair.origin_key)
     url.searchParams.set('to', toQuery)
     url.searchParams.set('limit', '3')
-    url.searchParams.set('date', serviceDate)
-    url.searchParams.set('time', '08:00')
+    if (isFomosunProxy) {
+      url.searchParams.set('departure_at', `${serviceDate}T${sampleTime}`)
+    } else {
+      url.searchParams.set('date', serviceDate)
+      url.searchParams.set('time', sampleTime)
+    }
 
-    const res = await fetch(url.toString(), {
-      headers: API_TOKEN
-        ? {
-          accept: 'application/json',
-          Authorization: `Bearer ${API_TOKEN}`,
-        }
-        : {
-          accept: 'application/json',
-        },
-    })
+    const requestHeaders = (!isFomosunProxy && API_TOKEN)
+      ? {
+        accept: 'application/json',
+        Authorization: `Bearer ${API_TOKEN}`,
+      }
+      : {
+        accept: 'application/json',
+      }
 
-    if (res.status === 429 && attempt < 1) {
-      const retryAfter = Number.parseInt(String(res.headers.get('retry-after') || ''), 10)
-      const backoffMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 2200
+    let status = 0
+    let rawBody = ''
+    let retryAfterHeader = ''
+    try {
+      const res = await fetch(url.toString(), { headers: requestHeaders })
+      status = res.status
+      rawBody = await res.text()
+      retryAfterHeader = String(res.headers.get('retry-after') || '')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.toLowerCase().includes('fetch failed')) throw error
+      const curlRes = await requestJsonViaCurl(url.toString(), requestHeaders)
+      status = curlRes.status
+      rawBody = curlRes.body
+      retryAfterHeader = String(curlRes.retryAfter || '')
+    }
+
+    const looksRateLimited = status === 429
+      || (status === 502 && /sbb-http-429/i.test(rawBody))
+      || /rate\s*limit/i.test(rawBody)
+    if (looksRateLimited && attempt < 1) {
+      const retryAfter = Number.parseInt(retryAfterHeader, 10)
+      const backoffMs = Number.isFinite(retryAfter) ? retryAfter * 1000 : 65000
+      globalCooldownUntil = Math.max(globalCooldownUntil, Date.now() + Math.max(backoffMs, 1200))
       await sleep(Math.max(backoffMs, 1200))
-      return fetchTypicalMinutesForQuery(pair, toQuery, attempt + 1)
+      return fetchTypicalMinutesForQuery(pair, toQuery, sampleTime, attempt + 1)
+    }
+    if (looksRateLimited) {
+      throw new Error(`RATE_LIMITED: HTTP ${status}: ${rawBody.slice(0, 240)}`)
     }
 
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`HTTP ${res.status}: ${body.slice(0, 240)}`)
+    if (status < 200 || status >= 300) {
+      throw new Error(`HTTP ${status}: ${rawBody.slice(0, 240)}`)
     }
 
-    const payload = await res.json()
+    let payload
+    try {
+      payload = JSON.parse(rawBody)
+    } catch {
+      throw new Error(`Invalid JSON response (${status}): ${rawBody.slice(0, 120)}`)
+    }
     const rows = Array.isArray(payload?.connections) ? payload.connections : []
     const minutes = rows
       .map(durationToMin)
@@ -627,9 +776,9 @@ async function main() {
   console.log(`[train-times] progress saved to ${path.relative(ROOT, progressPath)}`)
 
   if (missingTotal === 0) {
-    const payload = buildTrainTimesFromRecords(run.records || {})
+    const payload = buildTrainTimesFromRecords(run.records || {}, { includeFallback: includeFallbackFinalize })
     writeTrainTimesFile(OUTPUT_PATH, payload, { serviceDate, generatedAt: new Date().toISOString() })
-    console.log(`[train-times] wrote final file ${path.relative(ROOT, OUTPUT_PATH)} (api rows ${payload.stats.rows_api}, fallback rows ${payload.stats.rows_fallback})`)
+    console.log(`[train-times] wrote final file ${path.relative(ROOT, OUTPUT_PATH)} (stored ${payload.stats.rows_stored}, api rows ${payload.stats.rows_api}, fallback rows ${payload.stats.rows_fallback}, skipped non-api ${payload.stats.rows_skipped_non_api})`)
   } else {
     console.log('[train-times] run not complete yet; continue remaining batches or use --finalize after coverage is complete')
   }

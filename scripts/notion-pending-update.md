@@ -1224,6 +1224,63 @@ V90 | 2026-02-20 | Antigravity session
 
 ---
 
+## V1.0.11 — commit TBD — 2026-02-28
+
+**Theme:** Train-mode bucket accuracy + wider train coverage + Speed Insights
+
+### 1. Release Changelog entry to append
+
+```
+### v1.0.11 (TBD)
+Theme: Train-mode bucket accuracy + wider train coverage + Speed Insights
+
+Changes:
+- Improved train-time generator (`scripts/generate-train-times.mjs`) with multi-timeslot sampling (`06:00,09:00,14:00`) to avoid single-slot bias.
+- Refreshed `src/data/train-times.ts` with updated API-backed durations (including Basel/Zurich cross-border routes such as Mulhouse).
+- Tightened train selection logic in `/api/v1/sunny-escapes`:
+  - API-backed train times are preferred when present.
+  - Guardrail no longer over-penalizes destinations that already have SBB mappings.
+  - Urban/low-altitude SBB routes now cap stale snapshot spikes against heuristic baseline.
+- Adjusted train heuristic factors in `src/lib/mock-weather.ts` to improve train/both-mode option coverage.
+- Added Vercel Speed Insights to production layout (`@vercel/speed-insights` + `<SpeedInsights />` in `layout.tsx`).
+- Kept explicit travel-window behavior intact for bucket correctness.
+
+Validation:
+- `npm run build` passed.
+- Routing audit (demo + live Basel/Zurich train/both) completed with 0 hard failures in latest run.
+```
+
+### 2. Build log entry to append
+
+```
+v1.0.11 | 2026-02-28 | Antigravity session
+- Fixed underrepresentation of train options in tomorrow/train/both modes.
+- Corrected systemic train-duration sourcing (not route-specific hotfixes).
+- Added Vercel Speed Insights integration.
+- Re-ran routing audits and verified no hard bucket-window failures.
+```
+
+### 3. PM journal entry to append
+
+```
+## 2026-02-28 — Late evening
+
+Deployed: v1.0.11
+Status: Shipped
+
+What changed:
+- Reworked train-duration pipeline to improve bucket eligibility for train and both modes.
+- Removed over-strict guardrail behavior for destinations that already have SBB station mappings.
+- Added Speed Insights for frontend performance visibility.
+- Confirmed build and post-fix routing audits.
+
+Follow-up:
+- Continue batch generation to increase API-backed train-time coverage for all origins.
+- Review remaining heuristic-only destinations for manual curation targets.
+```
+
+---
+
 ## How to use this file (instructions for Codex)
 
 1. Read this file at the start of any Notion update session.

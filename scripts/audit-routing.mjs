@@ -2,6 +2,8 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 
 const ROOT = process.cwd()
 const DEFAULT_BASE_URL = 'http://localhost:4011'
@@ -13,6 +15,7 @@ const COUNTRY_KEYWORDS = {
   FR: 'france',
   IT: 'italy',
 }
+const execFileAsync = promisify(execFile)
 
 function parseArgs(argv) {
   const out = {}
@@ -255,20 +258,57 @@ function writeCsv(filePath, columns, rows) {
   fs.writeFileSync(filePath, `${lines.join('\n')}\n`, 'utf8')
 }
 
+function splitCurlHeadersAndBody(raw) {
+  const text = String(raw || '')
+  const marker = '\n__FOMO_STATUS__:'
+  const markerIdx = text.lastIndexOf(marker)
+  if (markerIdx < 0) throw new Error('curl missing status marker')
+  const payloadChunk = text.slice(0, markerIdx)
+  const statusRaw = text.slice(markerIdx + marker.length).trim().split(/\s+/)[0]
+  const status = Number.parseInt(statusRaw, 10)
+  if (!Number.isFinite(status)) throw new Error(`curl invalid status marker: ${statusRaw}`)
+
+  const sep = payloadChunk.includes('\r\n\r\n') ? '\r\n\r\n' : '\n\n'
+  const sections = payloadChunk.split(sep)
+  const hasHeaders = sections.length > 1 && sections[0].startsWith('HTTP/')
+  if (!hasHeaders) return { status, body: payloadChunk }
+  return { status, body: sections[sections.length - 1] }
+}
+
+async function fetchJsonViaCurl(url, timeoutMs) {
+  const args = ['-sS', '-L', '--max-time', String(Math.max(5, Math.ceil(timeoutMs / 1000))), '-D', '-', '-w', '\n__FOMO_STATUS__:%{http_code}\n', url]
+  const { stdout } = await execFileAsync('curl', args, { maxBuffer: 16 * 1024 * 1024 })
+  const { status, body } = splitCurlHeadersAndBody(stdout)
+  let data
+  try {
+    data = JSON.parse(body)
+  } catch {
+    throw new Error(`Expected JSON (${status}) but got: ${String(body).slice(0, 200)}`)
+  }
+  if (status < 200 || status >= 300) throw new Error(`HTTP ${status}: ${JSON.stringify(data).slice(0, 280)}`)
+  return data
+}
+
 async function fetchJson(url, timeoutMs = 30000) {
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), timeoutMs)
   try {
-    const res = await fetch(url, { signal: ctrl.signal })
-    const txt = await res.text()
-    let data
     try {
-      data = JSON.parse(txt)
-    } catch {
-      throw new Error(`Expected JSON (${res.status}) but got: ${txt.slice(0, 200)}`)
+      const res = await fetch(url, { signal: ctrl.signal })
+      const txt = await res.text()
+      let data
+      try {
+        data = JSON.parse(txt)
+      } catch {
+        throw new Error(`Expected JSON (${res.status}) but got: ${txt.slice(0, 200)}`)
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data).slice(0, 280)}`)
+      return data
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!message.toLowerCase().includes('fetch failed')) throw error
+      return await fetchJsonViaCurl(url, timeoutMs)
     }
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${JSON.stringify(data).slice(0, 280)}`)
-    return data
   } finally {
     clearTimeout(timer)
   }
@@ -897,4 +937,3 @@ main().catch(err => {
   console.error(`[audit-routing] ${err instanceof Error ? err.stack || err.message : String(err)}`)
   process.exit(1)
 })
-

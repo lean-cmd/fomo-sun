@@ -1237,11 +1237,15 @@ export async function GET(request: NextRequest) {
     let train: TrainTravelWithMeta | undefined = (mode === 'train' || mode === 'both')
       ? getMockTravelTime(lat, lon, dest.lat, dest.lon, 'train', travelProfile)
       : undefined
+    const baselineHeuristicTrainMin = Number.isFinite(Number(train?.duration_min))
+      ? Math.max(0, Math.round(Number(train?.duration_min)))
+      : null
     const precomputedTrainRaw = TRAIN_TIME_MIN_BY_ORIGIN[normalizedSbbOriginKey]?.[dest.id]
     const precomputedTrainMin = Number.isFinite(Number(precomputedTrainRaw))
       ? Math.max(0, Math.round(Number(precomputedTrainRaw)))
       : null
     const precomputedTrainSource = TRAIN_TIME_SOURCE_BY_ORIGIN[normalizedSbbOriginKey]?.[dest.id]
+    const hasSbbTrainMapping = Boolean(dest.sbb_name)
 
     if (demoMode && car && train) {
       if (DEMO_TRAIN_FAST_IDS.has(dest.id)) {
@@ -1265,32 +1269,50 @@ export async function GET(request: NextRequest) {
       }
     }
     if (train && precomputedTrainMin !== null && precomputedTrainSource === 'transport.opendata.ch') {
-      train.duration_min = precomputedTrainMin
+      const isUrbanTrainProfile = (
+        !dest.types.includes('mountain')
+        && !dest.types.includes('viewpoint')
+        && Number(dest.altitude_m || 0) < 900
+      )
+      const cappedSnapshotMin = (
+        hasSbbTrainMapping
+        && isUrbanTrainProfile
+        && baselineHeuristicTrainMin !== null
+      )
+        ? Math.min(precomputedTrainMin, baselineHeuristicTrainMin + 8)
+        : precomputedTrainMin
+      train.duration_min = cappedSnapshotMin
       train.source = 'transport.opendata.ch'
       train.guardrail_applied = false
     } else if (train && precomputedTrainMin !== null) {
-      const guardedTrainMin = applyHeuristicTrainGuardrail({
-        currentTrainMin: precomputedTrainMin,
-        carMin: car?.duration_min ?? null,
-        destination: dest,
-      })
-      train.duration_min = guardedTrainMin
+      const shouldApplyGuardrail = !hasSbbTrainMapping
+      const fallbackTrainMin = shouldApplyGuardrail
+        ? applyHeuristicTrainGuardrail({
+          currentTrainMin: precomputedTrainMin,
+          carMin: car?.duration_min ?? null,
+          destination: dest,
+        })
+        : precomputedTrainMin
+      train.duration_min = fallbackTrainMin
       train.source = 'heuristic_fallback'
-      train.guardrail_applied = guardedTrainMin !== precomputedTrainMin
+      train.guardrail_applied = shouldApplyGuardrail && fallbackTrainMin !== precomputedTrainMin
     } else if (baselLikeOrigin && train && typeof dest.travel_train_min === 'number') {
       train.duration_min = dest.travel_train_min
       train.source = 'destination_manual'
       train.guardrail_applied = false
     } else if (train) {
       const rawTrainMin = train.duration_min
-      const guardedTrainMin = applyHeuristicTrainGuardrail({
-        currentTrainMin: rawTrainMin,
-        carMin: car?.duration_min ?? null,
-        destination: dest,
-      })
-      train.duration_min = guardedTrainMin
+      const shouldApplyGuardrail = !hasSbbTrainMapping
+      const runtimeTrainMin = shouldApplyGuardrail
+        ? applyHeuristicTrainGuardrail({
+          currentTrainMin: rawTrainMin,
+          carMin: car?.duration_min ?? null,
+          destination: dest,
+        })
+        : rawTrainMin
+      train.duration_min = runtimeTrainMin
       train.source = 'heuristic_runtime'
-      train.guardrail_applied = guardedTrainMin !== rawTrainMin
+      train.guardrail_applied = shouldApplyGuardrail && runtimeTrainMin !== rawTrainMin
     }
 
     const bestTravelMin = Math.min(car?.duration_min ?? Infinity, train?.duration_min ?? Infinity)
