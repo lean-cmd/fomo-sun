@@ -676,7 +676,6 @@ export default function Home() {
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [showResultFilters, setShowResultFilters] = useState(false)
-  const [showTypeFilters, setShowTypeFilters] = useState(false)
   const [showMoreResults, setShowMoreResults] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
@@ -1466,6 +1465,14 @@ export default function Home() {
     && resultRows.length > 0
     && !hasTenPctBetterOption
   )
+  const resultsNotice = useMemo(() => {
+    const messages: string[] = []
+    if (showingAlternatives) {
+      messages.push('Home is already the strongest play. These are the best nearby options anyway.')
+    }
+    if (tierMessage) messages.push(tierMessage)
+    return messages.join(' ')
+  }, [showingAlternatives, tierMessage])
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
@@ -1507,10 +1514,6 @@ export default function Home() {
   const toggleTypeChip = (chip: EscapeFilterChip) => {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
-
-  useEffect(() => {
-    if (activeTypeChips.length > 0) setShowTypeFilters(true)
-  }, [activeTypeChips.length])
 
   const jumpToBestDetails = () => {
     if (heroEscape && !isStayHomeHero) setOpenCardId(heroEscape.destination.id)
@@ -2018,7 +2021,7 @@ export default function Home() {
         </section>
 
         <section ref={resultsRef}>
-          <div className="flex items-center justify-between mb-2">
+          <div className={`flex items-center justify-between ${showResultFilters ? 'mb-0' : 'mb-2'}`}>
             <h2 className="fomo-font-display text-[16px] font-semibold text-slate-900">
               {showingAlternatives ? 'Sunny alternatives' : 'Sunny escapes'}
             </h2>
@@ -2034,8 +2037,10 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setShowResultFilters(v => !v)}
-                className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showResultFilters || activeTypeChips.length > 0
-                  ? 'bg-amber-100 border-amber-300 text-amber-800'
+                className={`h-8 px-2.5 border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showResultFilters
+                  ? 'rounded-t-2xl rounded-b-none border-slate-200 border-b-white bg-white text-slate-700'
+                  : activeTypeChips.length > 0
+                    ? 'rounded-full bg-amber-100 border-amber-300 text-amber-800'
                   : 'bg-white border-slate-200 text-slate-600'
                   }`}
                 aria-expanded={showResultFilters}
@@ -2058,50 +2063,28 @@ export default function Home() {
               </Select>
             </div>
           </div>
-          {showingAlternatives && (
-            <p className="mb-2 text-[11px] text-slate-500">
-              Home is already the strongest play. These are the best nearby options anyway.
-            </p>
-          )}
           {showResultFilters && (
-            <section id="result-filter-chips" className="mb-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 sm:px-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTypeFilters(v => !v)}
-                  className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showTypeFilters || activeTypeChips.length > 0
-                    ? 'bg-amber-100 border-amber-300 text-amber-800'
-                    : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  aria-expanded={showTypeFilters}
-                  aria-controls="result-type-chip-list"
-                >
-                  Types
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTypeFilters ? 'rotate-180' : ''}`} strokeWidth={1.8} />
-                </button>
-              </div>
-              {showTypeFilters && (
-                <div id="result-type-chip-list" className="overflow-x-auto no-scrollbar mt-2">
-                  <div className="flex items-center gap-2 min-w-max">
-                    {TYPE_FILTER_CHIPS.map(chip => {
-                      const active = activeTypeChips.includes(chip.id)
-                      return (
-                        <button
-                          key={chip.id}
-                          type="button"
-                          onClick={() => toggleTypeChip(chip.id)}
-                          className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
-                            ? 'bg-amber-100 border-amber-300 text-amber-800'
-                            : 'bg-white border-slate-200 text-slate-600'
-                            }`}
-                        >
-                          {chip.label}
-                        </button>
-                      )
-                    })}
-                  </div>
+            <section id="result-filter-chips" className="mb-2.5 -mt-px rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 sm:px-3">
+              <div className="overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-2 min-w-max">
+                  {TYPE_FILTER_CHIPS.map(chip => {
+                    const active = activeTypeChips.includes(chip.id)
+                    return (
+                      <button
+                        key={chip.id}
+                        type="button"
+                        onClick={() => toggleTypeChip(chip.id)}
+                        className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
+                          ? 'bg-amber-100 border-amber-300 text-amber-800'
+                          : 'bg-white border-slate-200 text-slate-600'
+                          }`}
+                      >
+                        {chip.label}
+                      </button>
+                    )
+                  })}
                 </div>
-              )}
+              </div>
             </section>
           )}
 
@@ -2132,9 +2115,12 @@ export default function Home() {
 
           <div className="rounded-b-2xl rounded-t-none border border-slate-200 bg-white px-2.5 py-3 sm:px-3 sm:py-3.5">
 
-          {tierMessage && displayRows.length > 0 && (
-            <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-              {tierMessage}
+          {resultsNotice && displayRows.length > 0 && (
+            <div className="mb-2.5 rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50 to-yellow-50 px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.25)]">
+              <div className="inline-flex items-start gap-2">
+                <Sun className="w-3.5 h-3.5 text-amber-700 mt-[1px] shrink-0" strokeWidth={1.9} />
+                <p className="text-[12px] leading-snug font-medium text-amber-900">{resultsNotice}</p>
+              </div>
             </div>
           )}
 
