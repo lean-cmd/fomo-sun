@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { listBlogPosts, isNotionConfigured } from '@/lib/notion-cms'
+import { Card, Pill } from '@/components/ui'
 
 export const revalidate = 300
 
@@ -17,11 +18,11 @@ export default async function BlogIndexPage() {
   const posts = configured ? await listBlogPosts() : []
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6">
+    <main className="min-h-screen fomo-warm-bg fomo-grid-bg px-4 py-10 sm:px-6">
       <div className="max-w-3xl mx-auto">
         <header className="mb-8">
-          <p className="text-[11px] uppercase tracking-[1.4px] text-slate-500 font-semibold">FOMO Sun</p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2" style={{ fontFamily: 'Sora' }}>
+          <p className="text-[12px] uppercase tracking-[1.4px] text-slate-500 font-semibold">FOMO Sun</p>
+          <h1 className="fomo-font-display text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2">
             Build in public
           </h1>
           <p className="text-slate-600 mt-3 text-[16px] leading-7">
@@ -30,26 +31,26 @@ export default async function BlogIndexPage() {
         </header>
 
         {!configured && (
-          <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 text-sm">
+          <Card tone="warning" className="mb-6 px-4 py-3 text-amber-900 text-sm">
             Notion CMS is not configured. Add `NOTION_TOKEN` in your secure environment to load blog content.
-          </div>
+          </Card>
         )}
 
         {configured && posts.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-6 text-slate-600 text-sm">
+          <Card className="px-4 py-6 text-slate-600 text-sm">
             No blog posts are currently published (`Show on Site = true`).
-          </div>
+          </Card>
         )}
 
         <div className="space-y-3">
           {posts.map(post => (
-            <article key={post.id} className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 hover:border-slate-300 transition-colors">
-              <p className="text-[11px] text-slate-500 font-medium">
+            <Card key={post.id} className="p-4 sm:p-5 hover:border-slate-300 transition-colors">
+              <p className="text-[11px] text-slate-500 font-medium fomo-font-mono">
                 {formatDate(post.publishDate)}
                 {post.wordCount ? ` · ${post.wordCount} words` : ''}
                 {post.status ? ` · ${post.status}` : ''}
               </p>
-              <h2 className="mt-2 text-xl font-bold text-slate-900" style={{ fontFamily: 'Sora' }}>
+              <h2 className="fomo-font-display mt-2 text-xl font-bold text-slate-900">
                 <Link href={`/blog/${post.slug}`} className="hover:text-amber-600 transition-colors">
                   {post.title}
                 </Link>
@@ -58,13 +59,13 @@ export default async function BlogIndexPage() {
               {post.tags.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {post.tags.map(tag => (
-                    <span key={tag} className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                    <Pill key={tag}>
                       {tag}
-                    </span>
+                    </Pill>
                   ))}
                 </div>
               )}
-            </article>
+            </Card>
           ))}
         </div>
       </div>

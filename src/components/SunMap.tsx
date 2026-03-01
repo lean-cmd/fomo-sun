@@ -12,9 +12,10 @@ import {
   ZoomControl,
   useMap,
 } from 'react-leaflet'
-import { ChevronDown, ExternalLink, Loader2, LocateFixed, Route, Sun, Zap } from 'lucide-react'
+import { ExternalLink, Loader2, LocateFixed, Route, Sun, Zap } from 'lucide-react'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
+import { Button, Select } from '@/components/ui'
 
 type MapDay = 'today' | 'tomorrow'
 
@@ -540,88 +541,71 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
             </button>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
+            <Button
               onClick={() => setShowSunHoursOverlay(prev => !prev)}
-              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
-                showSunHoursOverlay
-                  ? 'border-amber-300 bg-amber-50 text-amber-800'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
+              size="sm"
+              variant={showSunHoursOverlay ? 'primary' : 'neutral'}
               title="Interpolated sun hours overlay"
             >
               <Sun className="h-3 w-3" />
               Overlay
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => setShowSunshine(prev => !prev)}
-              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
-                showSunshine
-                  ? 'border-amber-300 bg-amber-50 text-amber-800'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
+              size="sm"
+              variant={showSunshine ? 'primary' : 'neutral'}
             >
               <Sun className="h-3 w-3" />
               Sun
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => setShowRadiation(prev => !prev)}
-              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
-                showRadiation
-                  ? 'border-amber-300 bg-amber-50 text-amber-800'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
+              size="sm"
+              variant={showRadiation ? 'primary' : 'neutral'}
             >
               <Zap className="h-3 w-3" />
               Radiation
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
               onClick={() => setShowTravelRings(prev => !prev)}
-              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
-                showTravelRings
-                  ? 'border-amber-300 bg-amber-50 text-amber-800'
-                  : 'border-slate-200 bg-white text-slate-600'
-              }`}
+              size="sm"
+              variant={showTravelRings ? 'primary' : 'neutral'}
               title="Travel bucket rings"
             >
               <Route className="h-3 w-3" />
               Rings
-            </button>
+            </Button>
           </div>
         </div>
 
         <div className="pointer-events-auto absolute right-3 top-3 flex flex-col items-end gap-1.5">
-          <div className="relative inline-flex items-center min-w-0 max-w-[120px] rounded-lg border border-slate-200 bg-white/92 pr-1.5 pl-1 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur text-slate-500">
-            <select
-              value={origin.name}
-              onChange={(event) => {
-                const selected = originChoices.find(city => city.name === event.target.value)
-                if (!selected) return
-                setOrigin(selected)
-              }}
-              className="h-7 pl-1 pr-5 bg-transparent text-[11px] font-medium text-right text-slate-500 appearance-none focus:outline-none focus:text-slate-700 cursor-pointer"
-              aria-label="Select origin city"
-            >
-              {originChoices.map(city => (
-                <option key={city.name} value={city.name} className="text-slate-900">
-                  {city.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-slate-400" />
-          </div>
-          <button
-            type="button"
+          <Select
+            value={origin.name}
+            onChange={(event) => {
+              const selected = originChoices.find(city => city.name === event.target.value)
+              if (!selected) return
+              setOrigin(selected)
+            }}
+            shellClassName="min-w-0 max-w-[120px] rounded-lg border border-slate-200 bg-white/92 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur text-slate-500"
+            className="h-7 pl-1 text-right"
+            aria-label="Select origin city"
+          >
+            {originChoices.map(city => (
+              <option key={city.name} value={city.name} className="text-slate-900">
+                {city.name}
+              </option>
+            ))}
+          </Select>
+          <Button
             onClick={centerOnMyLocation}
             disabled={locatingMe}
-            className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white/92 px-2 text-[10px] font-semibold text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur transition hover:text-slate-800 disabled:opacity-60"
+            size="sm"
+            variant="neutral"
+            className="bg-white/92 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur disabled:opacity-60"
           >
             <LocateFixed className="h-3 w-3" />
             {locatingMe ? 'Locating…' : 'Center me'}
-          </button>
+          </Button>
         </div>
 
         <MapLegend

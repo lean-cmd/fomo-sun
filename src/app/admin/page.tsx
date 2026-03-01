@@ -756,7 +756,7 @@ export default function AdminDiagnosticsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
+            <h1 className="fomo-font-display text-xl sm:text-2xl font-semibold text-slate-900">
               Forecast Diagnostics
             </h1>
             <p className="text-sm text-slate-500 mt-1">Founder view for live ranking quality and API reliability.</p>
@@ -775,7 +775,7 @@ export default function AdminDiagnosticsPage() {
           </div>
         </div>
 
-        <p className="text-xs text-slate-600 mb-3" style={{ fontFamily: 'DM Mono, monospace' }}>
+        <p className="fomo-font-mono text-xs text-slate-600 mb-3">
           API rows: {rows.length} · visible after filters: {filteredSorted.length}
           {meta.resultTier ? ` · tier ${meta.resultTier}` : ''}
           {meta.candidateCount ? ` · candidates ${meta.candidateCount}` : ''}
@@ -785,15 +785,15 @@ export default function AdminDiagnosticsPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Total</p>
-            <p className="text-lg font-semibold text-slate-900" style={{ fontFamily: 'DM Mono, monospace' }}>{stats.total}</p>
+            <p className="fomo-font-mono text-lg font-semibold text-slate-900">{stats.total}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Sunny &gt;70</p>
-            <p className="text-lg font-semibold text-slate-900" style={{ fontFamily: 'DM Mono, monospace' }}>{stats.sunny}</p>
+            <p className="fomo-font-mono text-lg font-semibold text-slate-900">{stats.sunny}</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Avg temp</p>
-            <p className="text-lg font-semibold text-slate-900" style={{ fontFamily: 'DM Mono, monospace' }}>{stats.avgTemp}°C</p>
+            <p className="fomo-font-mono text-lg font-semibold text-slate-900">{stats.avgTemp}°C</p>
           </div>
           <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
             <p className="text-[10px] uppercase tracking-[0.12em] text-slate-500">Data freshness</p>
@@ -809,8 +809,8 @@ export default function AdminDiagnosticsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
               {bucketSummary.map((bucket) => (
                 <div key={bucket.id} className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-                  <p className="text-[11px] font-semibold text-slate-800" style={{ fontFamily: 'DM Mono, monospace' }}>{bucket.label}</p>
-                  <p className="text-base font-semibold text-slate-900 leading-tight" style={{ fontFamily: 'DM Mono, monospace' }}>
+                  <p className="fomo-font-mono text-[11px] font-semibold text-slate-800">{bucket.label}</p>
+                  <p className="fomo-font-mono text-base font-semibold text-slate-900 leading-tight">
                     {bucket.count}
                   </p>
                   <p className="text-[10px] text-slate-500">
@@ -888,10 +888,10 @@ export default function AdminDiagnosticsPage() {
                     <tr key={`${row.destination}-${row.bucket}`} className="border-t border-slate-100">
                       <td className="px-2.5 py-1.5 text-slate-700">{row.destination}</td>
                       <td className="px-2.5 py-1.5 text-slate-600">{row.bucket}</td>
-                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{row.sun_hours.toFixed(1)}h</td>
-                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{row.net_sun_min}</td>
-                      <td className="px-2.5 py-1.5 text-right text-slate-700" style={{ fontFamily: 'DM Mono, monospace' }}>{Math.round(row.score * 100)}%</td>
-                      <td className="px-2.5 py-1.5 text-right text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>{row.data_age_min}m</td>
+                      <td className="fomo-font-mono px-2.5 py-1.5 text-right text-slate-700">{row.sun_hours.toFixed(1)}h</td>
+                      <td className="fomo-font-mono px-2.5 py-1.5 text-right text-slate-700">{row.net_sun_min}</td>
+                      <td className="fomo-font-mono px-2.5 py-1.5 text-right text-slate-700">{Math.round(row.score * 100)}%</td>
+                      <td className="fomo-font-mono px-2.5 py-1.5 text-right text-slate-600">{row.data_age_min}m</td>
                       <td className="px-2.5 py-1.5 text-slate-600">{row.flags.length ? row.flags.join(' · ') : 'ok'}</td>
                     </tr>
                   ))}
@@ -1338,7 +1338,7 @@ export default function AdminDiagnosticsPage() {
                                       ))
                                       : Array.from({ length: 24 }).map((_, idx) => <div key={idx} className="h-4 rounded bg-slate-200" />)}
                                   </div>
-                                  <div className="mt-1.5 flex justify-between text-[10px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                                  <div className="fomo-font-mono mt-1.5 flex justify-between text-[10px] text-slate-500">
                                     {['00', '04', '08', '12', '16', '20', '24'].map(label => <span key={label}>{label}</span>)}
                                   </div>
                                   <div className="mt-2 text-[11px] text-slate-600">
@@ -1380,7 +1380,7 @@ export default function AdminDiagnosticsPage() {
               >
                 Prev
               </button>
-              <span style={{ fontFamily: 'DM Mono, monospace' }}>
+              <span className="fomo-font-mono">
                 {page}/{totalPages}
               </span>
               <button

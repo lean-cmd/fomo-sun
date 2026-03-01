@@ -25,6 +25,7 @@ import {
 } from '@/lib/types'
 import { formatSunHours, formatTravelClock } from '@/lib/format'
 import { DestinationStamp, type StampType } from '@/components/DestinationStamp'
+import { Select } from '@/components/ui'
 
 type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
@@ -257,7 +258,7 @@ function extractTemp(summary?: string) {
 function FomoGlyph({ className = 'w-[42px] h-3.5' }: { className?: string }) {
   return (
     <svg viewBox="0 0 38 16" className={className} aria-label="FOMO logo" role="img">
-      <g fill="#334155" style={{ fontFamily: 'Jost, DM Sans, sans-serif', fontWeight: 700, letterSpacing: 0.7 }}>
+      <g fill="#334155" className="fomo-wordmark-letters">
         <text x="0.2" y="12.3" fontSize="11.6">F</text>
         <text x="13.2" y="12.3" fontSize="11.6">M</text>
       </g>
@@ -292,7 +293,7 @@ function ScoreRing({ score, size = 48 }: { score: number; size?: number }) {
       <span className="absolute inset-0 flex flex-col items-center justify-center leading-none pt-[2px]">
         <span
           className="text-slate-900"
-          style={{ fontFamily: '"Bebas Neue", Sora, sans-serif', fontSize: `${pctSize}px`, letterSpacing: '0.3px' }}
+          style={{ fontSize: `${pctSize}px`, letterSpacing: '0.3px' }}
         >
           {pct}%
         </span>
@@ -1704,7 +1705,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
-      <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
+      <header className="fomo-page-header sticky top-0 z-40 backdrop-blur">
         <div className="max-w-xl mx-auto px-3 h-[62px] grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="min-w-0">
             <div className="relative inline-flex items-center min-w-0 max-w-[120px] text-slate-500">
@@ -1734,7 +1735,7 @@ export default function Home() {
 
           <div className="relative justify-self-center flex items-center h-full">
             <FomoWordmark className="w-[94px] h-[24px]" />
-            <p className="absolute left-1/2 -translate-x-1/2 top-[42px] text-[9px] leading-none text-slate-500 whitespace-nowrap text-center">
+            <p className="absolute left-1/2 -translate-x-1/2 top-[42px] text-[11px] leading-none text-slate-500 whitespace-nowrap text-center">
               {HEADER_TAGLINES[taglineIndex]}
             </p>
           </div>
@@ -1808,11 +1809,11 @@ export default function Home() {
                     : (heroDayFocus === 'today' ? 'Best escape today' : 'Best escape tomorrow')}
                 </p>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                  <h1 className="text-[19px] leading-tight font-semibold text-slate-900 truncate" style={{ fontFamily: 'Sora, sans-serif' }}>
+                  <h1 className="fomo-font-display text-[19px] leading-tight font-semibold text-slate-900 truncate">
                     {isStayHomeHero ? 'STAY HOME' : heroEscape.destination.name}
                   </h1>
                   {!isStayHomeHero && (
-                    <span className="text-[11px] text-slate-500" style={{ fontFamily: 'DM Mono, monospace' }}>
+                    <span className="fomo-font-mono text-[11px] text-slate-500">
                       {heroEscape.destination.altitude_m}m
                     </span>
                   )}
@@ -1932,8 +1933,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => stepJoystickRange('left')}
-              className="hidden sm:inline-flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.08)] text-[11px] font-semibold hover:bg-slate-50"
-              style={{ fontFamily: 'DM Mono, monospace' }}
+              className="fomo-font-mono hidden sm:inline-flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.08)] text-[11px] font-semibold hover:bg-slate-50"
               aria-label="Move joystick range left"
             >
               ←
@@ -1963,14 +1963,13 @@ export default function Home() {
             <button
               type="button"
               onClick={() => stepJoystickRange('right')}
-              className="hidden sm:inline-flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.08)] text-[11px] font-semibold hover:bg-slate-50"
-              style={{ fontFamily: 'DM Mono, monospace' }}
+              className="fomo-font-mono hidden sm:inline-flex h-6 min-w-6 px-1.5 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 shadow-[0_1px_2px_rgba(15,23,42,0.08)] text-[11px] font-semibold hover:bg-slate-50"
               aria-label="Move joystick range right"
             >
               →
             </button>
           </div>
-          <p className="mt-1.5 text-[10px] text-slate-500 text-center" style={{ fontFamily: 'DM Mono, monospace' }}>
+          <p className="fomo-font-mono mt-1.5 text-[11px] text-slate-500 text-center">
             Max travel {activeBand.maxLabel}
           </p>
 
@@ -1981,7 +1980,7 @@ export default function Home() {
 
         <section ref={resultsRef}>
           <div className="flex items-baseline justify-between mb-2">
-            <h2 className="text-[16px] font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
+            <h2 className="fomo-font-display text-[16px] font-semibold text-slate-900">
               Sunny escapes
             </h2>
             <div className="inline-flex items-center gap-1.5">
@@ -2006,23 +2005,21 @@ export default function Home() {
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
                 Filter
               </button>
-              <label className="hidden sm:inline-flex h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 items-center gap-1">
-                {mode === 'car'
+              <Select
+                value={mode}
+                onChange={e => setMode(e.target.value as TravelMode)}
+                shellClassName="hidden sm:inline-flex"
+                icon={mode === 'car'
                   ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
                   : mode === 'train'
                     ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
                     : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
-                <select
-                  value={mode}
-                  onChange={e => setMode(e.target.value as TravelMode)}
-                  className="bg-transparent focus:outline-none"
-                  aria-label="Travel mode"
-                >
-                  <option value="both">Car + Train</option>
-                  <option value="car">Car</option>
-                  <option value="train">Train</option>
-                </select>
-              </label>
+                aria-label="Travel mode"
+              >
+                <option value="both">Car + Train</option>
+                <option value="car">Car</option>
+                <option value="train">Train</option>
+              </Select>
             </div>
           </div>
 
@@ -2037,13 +2034,12 @@ export default function Home() {
                   key={band.id}
                   type="button"
                   onClick={() => setJoystickRange(idx)}
-                  className={`h-9 px-1.5 rounded-t-lg rounded-b-none border inline-flex items-center justify-center text-[11px] whitespace-nowrap transition-colors ${active
+                  className={`fomo-font-mono h-9 px-1.5 rounded-t-lg rounded-b-none border inline-flex items-center justify-center text-[11px] whitespace-nowrap transition-colors ${active
                     ? 'relative z-[1] border-amber-300 border-b-white bg-white text-amber-800 font-semibold shadow-[inset_0_2px_0_0_#f59e0b]'
                     : sparse
                       ? 'border-slate-200 bg-slate-100 text-slate-500'
                       : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-white'
                     }`}
-                  style={{ fontFamily: 'DM Mono, monospace' }}
                   title={sparse ? `No sunny escapes currently in ${band.label}` : undefined}
                 >
                   {band.label}
@@ -2057,24 +2053,21 @@ export default function Home() {
           {showResultFilters && (
             <section id="result-filter-chips" className="mb-2.5 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
-                <label className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 inline-flex items-center gap-1">
-                  {mode === 'car'
+                <Select
+                  value={mode}
+                  onChange={e => setMode(e.target.value as TravelMode)}
+                  shellClassName="inline-flex"
+                  icon={mode === 'car'
                     ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
                     : mode === 'train'
                       ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
                       : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
-                  <span className="text-slate-500">Mode</span>
-                  <select
-                    value={mode}
-                    onChange={e => setMode(e.target.value as TravelMode)}
-                    className="bg-transparent focus:outline-none"
-                    aria-label="Travel mode"
-                  >
-                    <option value="both">Car + Train</option>
-                    <option value="car">Car</option>
-                    <option value="train">Train</option>
-                  </select>
-                </label>
+                  aria-label="Travel mode"
+                >
+                  <option value="both">Car + Train</option>
+                  <option value="car">Car</option>
+                  <option value="train">Train</option>
+                </Select>
                 <button
                   type="button"
                   onClick={() => setShowTypeFilters(v => !v)}

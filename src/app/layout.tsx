@@ -5,6 +5,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 import 'leaflet/dist/leaflet.css'
 import './globals.css'
 import { APP_RELEASE_VERSION } from '@/lib/release'
+import { fontDisplay, fontMono, fontSans } from '@/lib/fonts'
 
 export const metadata: Metadata = {
   title: 'FOMO Sun — Stop chasing clouds. Find sun.',
@@ -31,11 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const umamiEnabled = Boolean(umamiScriptUrl && umamiWebsiteId)
 
   return (
-    <html lang="en" data-theme="light" className="light">
+    <html
+      lang="en"
+      data-theme="light"
+      className={`light ${fontSans.variable} ${fontDisplay.variable} ${fontMono.variable}`}
+    >
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Jost:wght@300;400&display=swap" rel="stylesheet" />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -63,8 +65,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased min-h-screen flex flex-col">
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-slate-200/60 bg-white/50 py-6 px-4 mt-8">
-          <div className="max-w-xl mx-auto space-y-1.5 text-[10px] text-slate-400 font-medium">
+        <footer className="fomo-page-footer py-6 px-4 mt-8">
+          <div className="max-w-xl mx-auto space-y-1.5 text-[11px] text-[var(--muted)] font-medium">
             <div className="flex items-center justify-between gap-2">
               <span>fomosun.com &copy; {new Date().getFullYear()} · {APP_RELEASE_VERSION}</span>
               <div className="inline-flex items-center gap-2.5">

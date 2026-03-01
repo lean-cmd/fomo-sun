@@ -98,15 +98,15 @@ function SingleBlock({ block }: { block: NotionBlock }) {
   }
 
   if (block.type === 'heading_1') {
-    return <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight" style={{ fontFamily: 'Sora' }}>{renderRichText(blockRichText(block))}</h1>
+    return <h1 className="fomo-font-display text-3xl font-extrabold text-slate-900 tracking-tight">{renderRichText(blockRichText(block))}</h1>
   }
 
   if (block.type === 'heading_2') {
-    return <h2 className="text-2xl font-bold text-slate-900 mt-4" style={{ fontFamily: 'Sora' }}>{renderRichText(blockRichText(block))}</h2>
+    return <h2 className="fomo-font-display text-2xl font-bold text-slate-900 mt-4">{renderRichText(blockRichText(block))}</h2>
   }
 
   if (block.type === 'heading_3') {
-    return <h3 className="text-xl font-semibold text-slate-900 mt-3" style={{ fontFamily: 'Sora' }}>{renderRichText(blockRichText(block))}</h3>
+    return <h3 className="fomo-font-display text-xl font-semibold text-slate-900 mt-3">{renderRichText(blockRichText(block))}</h3>
   }
 
   if (block.type === 'quote') {

@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import NotionContent from '@/components/notion-content'
 import { getBlogPostBySlug, isNotionConfigured } from '@/lib/notion-cms'
+import { Card, Pill } from '@/components/ui'
 
 export const revalidate = 300
 
@@ -46,10 +47,10 @@ export async function generateMetadata({ params }: BlogDetailProps): Promise<Met
 export default async function BlogPostPage({ params }: BlogDetailProps) {
   if (!isNotionConfigured()) {
     return (
-      <main className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6">
-        <div className="max-w-3xl mx-auto rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 text-sm">
+      <main className="min-h-screen fomo-warm-bg fomo-grid-bg px-4 py-10 sm:px-6">
+        <Card tone="warning" className="max-w-3xl mx-auto px-4 py-3 text-amber-900 text-sm">
           Notion CMS is not configured. Add `NOTION_TOKEN` in your secure environment to load post content.
-        </div>
+        </Card>
       </main>
     )
   }
@@ -58,33 +59,33 @@ export default async function BlogPostPage({ params }: BlogDetailProps) {
   if (!post) notFound()
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10 sm:px-6">
-      <article className="max-w-3xl mx-auto rounded-2xl border border-slate-200 bg-white px-5 py-7 sm:px-8 sm:py-9">
+    <main className="min-h-screen fomo-warm-bg fomo-grid-bg px-4 py-10 sm:px-6">
+      <Card className="max-w-3xl mx-auto px-5 py-7 sm:px-8 sm:py-9">
         <Link href="/blog" className="text-sm text-slate-500 hover:text-slate-700 underline-offset-2 hover:underline">
           ← Back to blog
         </Link>
 
         <header className="mt-4 mb-7">
-          <p className="text-[12px] text-slate-500 font-medium">
+          <p className="text-[12px] text-slate-500 font-medium fomo-font-mono">
             {formatDate(post.meta.publishDate)}
             {post.meta.wordCount ? ` · ${post.meta.wordCount} words` : ''}
           </p>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 leading-tight" style={{ fontFamily: 'Sora' }}>
+          <h1 className="fomo-font-display text-3xl sm:text-4xl font-extrabold text-slate-900 mt-2 leading-tight">
             {post.meta.title}
           </h1>
           {post.meta.tags.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-1.5">
               {post.meta.tags.map(tag => (
-                <span key={tag} className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
+                <Pill key={tag}>
                   {tag}
-                </span>
+                </Pill>
               ))}
             </div>
           )}
         </header>
 
         <NotionContent blocks={post.blocks} />
-      </article>
+      </Card>
     </main>
   )
 }

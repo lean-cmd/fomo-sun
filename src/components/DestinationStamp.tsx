@@ -953,6 +953,7 @@ export function DestinationStamp({
       {renderFlag(country)}
 
       <text
+        className="stamp-title-text"
         x="50"
         y="95"
         fill={palette.text}
@@ -960,33 +961,33 @@ export function DestinationStamp({
         fontSize={style.size}
         lengthAdjust="spacingAndGlyphs"
         textLength="84"
-        style={{
-          fontFamily: '"Bebas Neue", sans-serif',
-          letterSpacing: `${style.spacing}px`,
-        }}
+        letterSpacing={`${style.spacing}px`}
       >
         {safeName}
       </text>
 
       <text
+        className="stamp-subtitle-text"
         x="50"
         y="107.2"
         fill={palette.subtext}
         textAnchor="middle"
         fontSize="7.8"
-        style={{ fontFamily: '"Jost", sans-serif', fontWeight: 500, letterSpacing: '1.05px' }}
+        letterSpacing="1.05px"
       >
         · {safeRegion || regionCode} ·
       </text>
 
       {country !== 'CH' && (
         <text
+          className="stamp-subtitle-text"
           x="50"
           y="114.2"
           fill={palette.subtext}
           textAnchor="middle"
           fontSize="6.2"
-          style={{ fontFamily: '"Jost", sans-serif', fontWeight: 500, letterSpacing: '0.9px', opacity: 0.78 }}
+          letterSpacing="0.9px"
+          opacity={0.78}
         >
           {country} REGION {regionCode}
         </text>

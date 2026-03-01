@@ -54,7 +54,7 @@ export default function MapPage({ searchParams }: { searchParams?: SearchParamsI
 
   return (
     <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
-      <header className="sticky top-0 z-40 border-b border-slate-200/90 bg-white/95 backdrop-blur">
+      <header className="fomo-page-header sticky top-0 z-40 backdrop-blur">
         <div className="mx-auto grid h-[62px] w-full max-w-xl grid-cols-[1fr_auto_1fr] items-center px-3">
           <div>
             <Link
@@ -68,10 +68,10 @@ export default function MapPage({ searchParams }: { searchParams?: SearchParamsI
 
           <div className="inline-flex items-center gap-2 text-slate-900">
             <MapPinned className="h-4 w-4 text-amber-600" />
-            <h1 className="text-[14px] font-semibold tracking-[0.02em]">Fomosun map TM</h1>
+            <h1 className="fomo-font-display text-[14px] font-semibold tracking-[0.02em]">Fomosun map TM</h1>
           </div>
 
-          <div className="text-right text-[10px] font-semibold text-slate-500">
+          <div className="text-right text-[11px] font-semibold text-slate-500">
             {initialDay === 'tomorrow' ? 'Tomorrow mode' : 'Today mode'}
           </div>
         </div>

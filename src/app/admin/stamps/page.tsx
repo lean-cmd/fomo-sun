@@ -126,7 +126,7 @@ export default async function StampGalleryPage({
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-slate-900" style={{ fontFamily: 'Sora, sans-serif' }}>
+            <h1 className="fomo-font-display text-xl sm:text-2xl font-semibold text-slate-900">
               Stamp Gallery
             </h1>
             <p className="text-sm text-slate-500 mt-1">
@@ -171,7 +171,7 @@ export default async function StampGalleryPage({
         </form>
 
         <div className="mb-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-slate-600" style={{ fontFamily: 'DM Mono, monospace' }}>
+          <p className="fomo-font-mono text-xs text-slate-600">
             Showing {total ? start + 1 : 0}-{Math.min(start + PAGE_SIZE, total)} of {total} stamps
           </p>
           <div className="inline-flex items-center gap-2 text-xs">
