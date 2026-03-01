@@ -9,7 +9,6 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
-  Route,
   SlidersHorizontal,
   Sun,
   Plus,
@@ -613,6 +612,17 @@ function IconForMode({ mode, className = 'w-4 h-4' }: { mode: 'car' | 'train'; c
   return mode === 'car'
     ? <Car className={className} strokeWidth={1.8} />
     : <TrainFront className={className} strokeWidth={1.8} />
+}
+
+function TravelModeSelectIcon({ mode }: { mode: TravelMode }) {
+  if (mode === 'car') return <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
+  if (mode === 'train') return <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+  return (
+    <span className="inline-flex items-center -space-x-1">
+      <Car className="w-3 h-3" strokeWidth={1.9} />
+      <TrainFront className="w-3 h-3" strokeWidth={1.9} />
+    </span>
+  )
 }
 
 function SunPlusIcon({ className = 'w-[13px] h-[13px]' }: { className?: string }) {
@@ -2008,18 +2018,18 @@ export default function Home() {
         </section>
 
         <section ref={resultsRef}>
-          <div className="flex items-baseline justify-between mb-2">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="fomo-font-display text-[16px] font-semibold text-slate-900">
               {showingAlternatives ? 'Sunny alternatives' : 'Sunny escapes'}
             </h2>
-            <div className="inline-flex items-center gap-1.5">
+            <div className="inline-flex items-center gap-1">
               <a
                 href={`/map?origin=${encodeURIComponent(origin.name)}&lat=${origin.lat.toFixed(5)}&lon=${origin.lon.toFixed(5)}&origin_kind=${originMode}&day=${dayFocus}`}
                 className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] font-medium inline-flex items-center gap-1.5 text-slate-600 transition hover:border-amber-300 hover:text-slate-800"
                 title="Open sunshine map"
               >
                 <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />
-                Map
+                <span className="hidden sm:inline">Map</span>
               </a>
               <button
                 type="button"
@@ -2032,20 +2042,17 @@ export default function Home() {
                 aria-controls="result-filter-chips"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
-                Filter
+                <span className="hidden sm:inline">Filter</span>
               </button>
               <Select
                 value={mode}
                 onChange={e => setMode(e.target.value as TravelMode)}
-                shellClassName="hidden sm:inline-flex"
-                icon={mode === 'car'
-                  ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
-                  : mode === 'train'
-                    ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                    : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                shellClassName="inline-flex px-1.5 sm:px-2.5"
+                className="max-w-[58px] sm:max-w-none pr-3 sm:pr-4"
+                icon={<TravelModeSelectIcon mode={mode} />}
                 aria-label="Travel mode"
               >
-                <option value="both">Car + Train</option>
+                <option value="both">Both</option>
                 <option value="car">Car</option>
                 <option value="train">Train</option>
               </Select>
@@ -2055,6 +2062,47 @@ export default function Home() {
             <p className="mb-2 text-[11px] text-slate-500">
               Home is already the strongest play. These are the best nearby options anyway.
             </p>
+          )}
+          {showResultFilters && (
+            <section id="result-filter-chips" className="mb-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 sm:px-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowTypeFilters(v => !v)}
+                  className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showTypeFilters || activeTypeChips.length > 0
+                    ? 'bg-amber-100 border-amber-300 text-amber-800'
+                    : 'bg-white border-slate-200 text-slate-600'
+                    }`}
+                  aria-expanded={showTypeFilters}
+                  aria-controls="result-type-chip-list"
+                >
+                  Types
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTypeFilters ? 'rotate-180' : ''}`} strokeWidth={1.8} />
+                </button>
+              </div>
+              {showTypeFilters && (
+                <div id="result-type-chip-list" className="overflow-x-auto no-scrollbar mt-2">
+                  <div className="flex items-center gap-2 min-w-max">
+                    {TYPE_FILTER_CHIPS.map(chip => {
+                      const active = activeTypeChips.includes(chip.id)
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => toggleTypeChip(chip.id)}
+                          className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
+                            ? 'bg-amber-100 border-amber-300 text-amber-800'
+                            : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                        >
+                          {chip.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
           )}
 
           <div className="grid grid-cols-5 gap-1 items-end -mx-px px-px -mb-px">
@@ -2083,64 +2131,6 @@ export default function Home() {
           </div>
 
           <div className="rounded-b-2xl rounded-t-none border border-slate-200 bg-white px-2.5 py-3 sm:px-3 sm:py-3.5">
-
-          {showResultFilters && (
-            <section id="result-filter-chips" className="mb-2.5 space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Select
-                  value={mode}
-                  onChange={e => setMode(e.target.value as TravelMode)}
-                  shellClassName="inline-flex"
-                  icon={mode === 'car'
-                    ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
-                    : mode === 'train'
-                      ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
-                      : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
-                  aria-label="Travel mode"
-                >
-                  <option value="both">Car + Train</option>
-                  <option value="car">Car</option>
-                  <option value="train">Train</option>
-                </Select>
-                <button
-                  type="button"
-                  onClick={() => setShowTypeFilters(v => !v)}
-                  className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showTypeFilters || activeTypeChips.length > 0
-                    ? 'bg-amber-100 border-amber-300 text-amber-800'
-                    : 'bg-white border-slate-200 text-slate-600'
-                    }`}
-                  aria-expanded={showTypeFilters}
-                  aria-controls="result-type-chip-list"
-                >
-                  Types
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTypeFilters ? 'rotate-180' : ''}`} strokeWidth={1.8} />
-                </button>
-              </div>
-              {showTypeFilters && (
-                <div id="result-type-chip-list" className="overflow-x-auto no-scrollbar">
-                  <div className="flex items-center gap-2 min-w-max">
-                    {TYPE_FILTER_CHIPS.map(chip => {
-                      const active = activeTypeChips.includes(chip.id)
-                      return (
-                        <button
-                          key={chip.id}
-                          type="button"
-                          onClick={() => toggleTypeChip(chip.id)}
-                          className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
-                            ? 'bg-amber-100 border-amber-300 text-amber-800'
-                            : 'bg-white border-slate-200 text-slate-600'
-                            }`}
-                        >
-                          {chip.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-              <div className="border-t border-slate-100" />
-            </section>
-          )}
 
           {tierMessage && displayRows.length > 0 && (
             <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
