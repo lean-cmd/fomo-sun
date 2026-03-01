@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Circle,
   CircleMarker,
@@ -114,10 +114,10 @@ const TRAVEL_RING_BUCKETS = [
   { label: '6.5h', hours: 6.5 },
 ] as const
 const COLOR_LOW: [number, number, number] = [148, 163, 184] // grey
-const COLOR_MID: [number, number, number] = [59, 130, 246] // blue
+const COLOR_MID: [number, number, number] = [96, 165, 250] // light blue
 const COLOR_SUNNY: [number, number, number] = [254, 240, 138] // pale yellow
 const COLOR_VERY_SUNNY: [number, number, number] = [250, 204, 21] // strong yellow
-const COLOR_BEST_80: [number, number, number] = [180, 83, 9] // darker orange
+const COLOR_BEST_80: [number, number, number] = [202, 138, 4] // deep golden yellow
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -129,9 +129,9 @@ function toFinite(value: unknown): number | null {
 }
 
 function scoreColor(score: number) {
-  if (score > 0.8) return '#b45309'
+  if (score > 0.8) return '#ca8a04'
   if (score > 0.6) return '#facc15'
-  if (score >= 0.3) return '#3b82f6'
+  if (score >= 0.3) return '#60a5fa'
   return '#94a3b8'
 }
 
@@ -417,23 +417,38 @@ export default function SunMap({
         />
         {showSunHoursOverlay && overlayRows.map((row) => {
           const normalized = clamp(row.activeSunHours / Math.max(4, overlayMaxHours), 0, 1)
-          const radiusM = 10000 + normalized * 22000
+          const radiusCoreM = 9000 + normalized * 16000
+          const radiusHaloM = radiusCoreM * 1.62
           const color = sunHoursColor(row.activeSunHours, overlayMaxHours)
           return (
-            <Circle
-              key={`overlay-${row.id}`}
-              center={[row.lat, row.lon]}
-              radius={radiusM}
-              interactive={false}
-              pane="sunshade-pane"
-              pathOptions={{
-                color,
-                fillColor: color,
-                fillOpacity: 0.03 + normalized * 0.1,
-                opacity: 0.06 + normalized * 0.12,
-                weight: 0.32,
-              }}
-            />
+            <Fragment key={`overlay-${row.id}`}>
+              <Circle
+                center={[row.lat, row.lon]}
+                radius={radiusHaloM}
+                interactive={false}
+                pane="sunshade-pane"
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: 0.006 + normalized * 0.03,
+                  opacity: 0,
+                  weight: 0,
+                }}
+              />
+              <Circle
+                center={[row.lat, row.lon]}
+                radius={radiusCoreM}
+                interactive={false}
+                pane="sunshade-pane"
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: 0.016 + normalized * 0.06,
+                  opacity: 0,
+                  weight: 0,
+                }}
+              />
+            </Fragment>
           )
         })}
         <RecenterOnOrigin lat={origin.lat} lon={origin.lon} />
