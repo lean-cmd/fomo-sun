@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { listBlogPosts, isNotionConfigured } from '@/lib/notion-cms'
 import { Card, Pill } from '@/components/ui'
+import ContentPageHeader from '@/components/ContentPageHeader'
 
 export const revalidate = 300
 
@@ -18,7 +19,9 @@ export default async function BlogIndexPage() {
   const posts = configured ? await listBlogPosts() : []
 
   return (
-    <main className="min-h-screen fomo-warm-bg fomo-grid-bg px-4 py-10 sm:px-6">
+    <div className="min-h-screen fomo-warm-bg fomo-grid-bg">
+      <ContentPageHeader section="Blog" />
+      <main className="px-4 py-8 sm:px-6">
       <div className="max-w-3xl mx-auto">
         <header className="mb-8">
           <p className="text-[12px] uppercase tracking-[1.4px] text-slate-500 font-semibold">FOMO Sun</p>
@@ -69,6 +72,7 @@ export default async function BlogIndexPage() {
           ))}
         </div>
       </div>
-    </main>
+      </main>
+    </div>
   )
 }

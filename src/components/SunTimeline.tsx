@@ -14,13 +14,23 @@ interface TimelineSegment {
   pct: number
 }
 
+function seededUnit(seed: number) {
+  const x = Math.sin(seed * 12_345.6789) * 43758.5453
+  return x - Math.floor(x)
+}
+
 function generateTimeline(sunScore: number, dayOffset: number): TimelineSegment[] {
   // Night is always ~15% (roughly 17:00-19:00 in winter)
   const nightPct = 15
   const dayPct = 100 - nightPct
 
+  const normalizedScore = Math.max(0, Math.min(1, sunScore))
+  const scoreSeed = Math.round(normalizedScore * 10_000)
+  const jitter = seededUnit(scoreSeed + dayOffset * 97)
+  const cloudFirst = seededUnit(scoreSeed + dayOffset * 131) > 0.5
+
   // Higher sun score = more sun segments
-  const base = sunScore + (dayOffset === 1 ? (Math.random() * 0.15 - 0.05) : 0) // slight variation for tomorrow
+  const base = normalizedScore + (dayOffset === 1 ? (jitter * 0.15 - 0.05) : 0) // deterministic slight variation for tomorrow
   const clamped = Math.max(0, Math.min(1, base))
 
   const sunPct = Math.round(dayPct * clamped * 0.7)
@@ -30,7 +40,7 @@ function generateTimeline(sunScore: number, dayOffset: number): TimelineSegment[
   // Distribute segments somewhat randomly
   const segments: TimelineSegment[] = []
 
-  if (cloudPct > 5 && Math.random() > 0.5) {
+  if (cloudPct > 5 && cloudFirst) {
     segments.push({ type: 'cloud', pct: Math.round(cloudPct * 0.6) })
   }
 

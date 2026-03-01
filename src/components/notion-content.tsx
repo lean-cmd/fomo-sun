@@ -170,8 +170,16 @@ function SingleBlock({ block }: { block: NotionBlock }) {
     const caption = blockCaption(block)
     return (
       <figure className="space-y-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={url} alt={blockText(block) || 'Blog image'} className="w-full rounded-xl border border-slate-200" />
+        <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100 aspect-[16/9]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={blockText(block) || 'Blog image'}
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+        </div>
         {caption && caption.length > 0 && <figcaption className="text-sm text-slate-500">{renderRichText(caption)}</figcaption>}
       </figure>
     )

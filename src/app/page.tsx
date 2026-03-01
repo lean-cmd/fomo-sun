@@ -692,7 +692,8 @@ export default function Home() {
   const [heroFlowTick, setHeroFlowTick] = useState(0)
   const [cardFlowDir, setCardFlowDir] = useState<'left' | 'right'>('right')
   const [cardFlowTick, setCardFlowTick] = useState(0)
-  const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * HEADER_TAGLINES.length))
+  const [taglineIndex, setTaglineIndex] = useState(0)
+  const [initialLoadDone, setInitialLoadDone] = useState(false)
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
   const [originDataSource, setOriginDataSource] = useState<'meteoswiss' | 'open-meteo' | 'mock' | ''>('')
   const [liveDataSource, setLiveDataSource] = useState<'open-meteo' | 'mock' | ''>('')
@@ -1050,7 +1051,10 @@ export default function Home() {
       } catch (err) {
         if ((err as Error)?.name !== 'AbortError') console.error(err)
       } finally {
-        if (requestCtrlRef.current === ctrl) setLoading(false)
+        if (requestCtrlRef.current === ctrl) {
+          setLoading(false)
+          setInitialLoadDone(true)
+        }
       }
     }
 
@@ -1424,6 +1428,8 @@ export default function Home() {
       return next
     })
   }, [heroDismissContextKey])
+  const showHeroCard = Boolean(heroEscape && !heroHiddenForContext)
+  const showHeroSkeleton = !initialLoadDone && !showHeroCard
 
   const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
   const topRawSunMin = heroEscape
@@ -1639,6 +1645,8 @@ export default function Home() {
   const noResultsHint = dayFocus === 'today' && activeBand.id === 'long'
     ? 'Plan for tomorrow or choose a shorter travel bucket.'
     : 'Try a wider travel bucket or switch to tomorrow.'
+  const showInitialResultsSkeleton = !initialLoadDone && displayRows.length === 0
+  const showNoResultsState = initialLoadDone && displayRows.length === 0 && !loading
 
   useEffect(() => {
     const triggerMidnightRefresh = () => {
@@ -1819,10 +1827,11 @@ export default function Home() {
           </div>
         )}
 
+        <section className={`mb-3 ${!initialLoadDone ? 'min-h-[320px]' : ''}`}>
         {heroEscape && !heroHiddenForContext && (
           <section
             key={`hero-${heroEscape.destination.id}-${heroFlowTick}`}
-            className={`fomo-card relative overflow-visible p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
+            className={`fomo-card relative overflow-visible p-3.5 sm:p-4 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
           >
             {canDismissHeroToday && (
               <button
@@ -1976,7 +1985,7 @@ export default function Home() {
         )}
 
         {heroEscape && heroHiddenForContext && (
-          <section className="fomo-card mb-3 px-3 py-2.5">
+          <section className="fomo-card px-3 py-2.5">
             <div className="flex items-center justify-between gap-2">
               <p className="text-[11px] text-slate-600">Hero hidden for today.</p>
               <button
@@ -1989,6 +1998,30 @@ export default function Home() {
             </div>
           </section>
         )}
+        {showHeroSkeleton && (
+          <section
+            aria-hidden="true"
+            className="fomo-card relative overflow-hidden p-3.5 sm:p-4 animate-pulse"
+          >
+            <div className="absolute -top-2 right-3 sm:right-4 h-[102px] w-[90px] rounded-lg border border-amber-100 bg-amber-50/70" />
+            <div className="pr-[88px] sm:pr-[96px]">
+              <div className="h-3 w-28 rounded bg-slate-200" />
+              <div className="mt-2 h-6 w-44 rounded bg-slate-200" />
+              <div className="mt-2 h-3 w-full max-w-[380px] rounded bg-slate-100" />
+              <div className="mt-1.5 h-3 w-3/4 rounded bg-slate-100" />
+            </div>
+            <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2.5">
+              <div className="h-8 rounded-full bg-slate-200" />
+              <div className="mt-2 h-8 rounded-full bg-slate-100" />
+            </div>
+            <div className="mt-3 flex gap-3">
+              <div className="h-3 w-16 rounded bg-slate-200" />
+              <div className="h-3 w-14 rounded bg-slate-200" />
+              <div className="h-3 w-20 rounded bg-slate-200" />
+            </div>
+          </section>
+        )}
+        </section>
 
         <section className="mb-3 px-1.5">
           <div className="text-center mb-1.5">
@@ -2107,6 +2140,26 @@ export default function Home() {
                   })}
                 </div>
               </div>
+              {showingAlternatives && filteredRows.length > 1 && (
+                <div className="mt-2.5 border-t border-slate-100 pt-2.5">
+                  <div className="inline-flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600">Sort</span>
+                    <Select
+                      value={alternativeSort}
+                      onChange={(e) => setAlternativeSort(e.target.value as AlternativeSort)}
+                      shellClassName="inline-flex h-7 rounded-full border-slate-200 bg-white px-2"
+                      className="max-w-[110px] sm:max-w-none pr-4 text-slate-700"
+                      icon={<ArrowUpDown className="w-3.5 h-3.5 text-slate-500" strokeWidth={1.8} />}
+                      aria-label="Sort sunny alternatives"
+                    >
+                      <option value="fomo">FOMOscoreTM</option>
+                      <option value="closest">Closest</option>
+                      <option value="warmest">Warmest</option>
+                      <option value="sun">Most sun hr</option>
+                    </Select>
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -2143,31 +2196,35 @@ export default function Home() {
                 <Sun className="w-3.5 h-3.5 text-amber-700 mt-[1px] shrink-0" strokeWidth={1.9} />
                 <p className="text-[12px] leading-snug font-medium text-amber-900">{resultsNotice}</p>
               </div>
-              {showingAlternatives && filteredRows.length > 1 && (
-                <div className="mt-2 inline-flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700">Sort</span>
-                  <Select
-                    value={alternativeSort}
-                    onChange={(e) => setAlternativeSort(e.target.value as AlternativeSort)}
-                    shellClassName="inline-flex h-7 rounded-full border-amber-200 bg-white px-2 text-amber-800"
-                    className="max-w-[98px] sm:max-w-none pr-4"
-                    icon={<ArrowUpDown className="w-3.5 h-3.5" strokeWidth={1.8} />}
-                    aria-label="Sort sunny alternatives"
-                  >
-                    <option value="fomo">FOMOscoreTM</option>
-                    <option value="closest">Closest</option>
-                    <option value="warmest">Warmest</option>
-                    <option value="sun">Most sun hr</option>
-                  </Select>
-                </div>
-              )}
             </div>
           )}
 
-          {displayRows.length === 0 && !loading && (
+          {showNoResultsState && (
             <div className="rounded-2xl border border-slate-200 bg-white px-4 py-8 text-center">
               <p className="text-[14px] text-slate-700">{noResultsLead}</p>
               <p className="text-[12px] text-slate-500 mt-1">{noResultsHint}</p>
+            </div>
+          )}
+
+          {showInitialResultsSkeleton && (
+            <div aria-hidden="true" className="space-y-2.5">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <article key={i} className="fomo-card overflow-hidden animate-pulse">
+                  <div className="px-4 pt-4 pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0 pt-1.5">
+                        <div className="h-4 w-36 rounded bg-slate-200" />
+                        <div className="mt-2 h-3 w-40 rounded bg-slate-100" />
+                        <div className="mt-2 h-3 w-24 rounded bg-slate-100" />
+                      </div>
+                      <div className="w-[72px] pt-1">
+                        <div className="h-6 w-14 rounded bg-amber-100 ml-auto" />
+                        <div className="mt-2 h-3 w-12 rounded bg-slate-100 ml-auto" />
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              ))}
             </div>
           )}
 
