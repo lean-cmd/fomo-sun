@@ -38,9 +38,9 @@ export default function MapLegend({
         Sun Score
       </p>
       <div className="space-y-1.5">
-        <Row color="#22c55e" label="High (> 0.60)" />
-        <Row color="#facc15" label="Medium (0.30 – 0.60)" />
-        <Row color="#94a3b8" label="Low (< 0.30)" />
+        <Row color="#facc15" label="Best (> 0.60)" />
+        <Row color="#3b82f6" label="Medium (0.30 – 0.60)" />
+        <Row color="#94a3b8" label="Worst (< 0.30)" />
         <Row color="#3b82f6" label="Your origin" />
       </div>
       <div className="mt-2.5 border-t border-slate-200 pt-2">
@@ -52,7 +52,7 @@ export default function MapLegend({
             <div
               className="mt-1.5 h-2.5 w-full rounded-full ring-1 ring-slate-200"
               style={{
-                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(250 204 21), rgb(21 128 61), rgb(20 83 45))',
+                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(37 99 235), rgb(253 224 71))',
               }}
             />
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-600">

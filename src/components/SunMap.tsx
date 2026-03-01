@@ -7,13 +7,11 @@ import {
   MapContainer,
   Marker,
   Popup,
-  Rectangle,
   TileLayer,
-  WMSTileLayer,
   ZoomControl,
   useMap,
 } from 'react-leaflet'
-import { ExternalLink, Loader2, LocateFixed, Sun, Zap } from 'lucide-react'
+import { ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
 import { divIcon } from 'leaflet'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
@@ -79,12 +77,6 @@ type MapRow = {
   sbbHref?: string
 }
 
-type HeatCell = {
-  id: string
-  bounds: [[number, number], [number, number]]
-  hours: number
-}
-
 export const MAP_ORIGIN_CITIES: OriginSeed[] = [
   { name: 'Aarau', lat: 47.3925, lon: 8.0442, kind: 'manual' },
   { name: 'Baden', lat: 47.4738, lon: 8.3077, kind: 'manual' },
@@ -111,8 +103,6 @@ const SWISS_HEAT_BOUNDS = {
   lonMax: 10.72,
 }
 
-const HEAT_GRID_LAT_STEP = 0.2
-const HEAT_GRID_LON_STEP = 0.22
 const DEFAULT_OVERLAY_MAX_HOURS = 10
 const TRAVEL_RING_KM_PER_HOUR = 52
 const TRAVEL_RING_BUCKETS = [
@@ -122,10 +112,9 @@ const TRAVEL_RING_BUCKETS = [
   { label: '3h', hours: 3 },
   { label: '6.5h', hours: 6.5 },
 ] as const
-const COLOR_LOW: [number, number, number] = [148, 163, 184]
-const COLOR_MED: [number, number, number] = [250, 204, 21]
-const COLOR_HIGH: [number, number, number] = [21, 128, 61]
-const COLOR_VHIGH: [number, number, number] = [20, 83, 45]
+const COLOR_LOW: [number, number, number] = [148, 163, 184] // grey
+const COLOR_MED: [number, number, number] = [37, 99, 235] // blue
+const COLOR_HIGH: [number, number, number] = [253, 224, 71] // bright yellow
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -137,8 +126,8 @@ function toFinite(value: unknown): number | null {
 }
 
 function scoreColor(score: number) {
-  if (score > 0.6) return '#22c55e'
-  if (score >= 0.3) return '#facc15'
+  if (score > 0.6) return '#facc15'
+  if (score >= 0.3) return '#3b82f6'
   return '#94a3b8'
 }
 
@@ -150,9 +139,8 @@ function mixColor(a: [number, number, number], b: [number, number, number], t: n
 
 function sunHoursColor(hours: number, maxHours: number) {
   const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
-  if (normalized <= 0.45) return mixColor(COLOR_LOW, COLOR_MED, normalized / 0.45)
-  if (normalized <= 0.78) return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.45) / 0.33)
-  return mixColor(COLOR_HIGH, COLOR_VHIGH, (normalized - 0.78) / 0.22)
+  if (normalized <= 0.5) return mixColor(COLOR_LOW, COLOR_MED, normalized * 2)
+  return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.5) * 2)
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -180,18 +168,13 @@ function fallbackSbbUrl(originName: string, destinationSbbName?: string | null) 
   return `https://www.sbb.ch/en?${params.toString()}`
 }
 
-function quickDistanceKm(aLat: number, aLon: number, bLat: number, bLon: number) {
-  const avgLatRad = ((aLat + bLat) / 2) * (Math.PI / 180)
-  const kmPerDegLat = 110.574
-  const kmPerDegLon = 111.32 * Math.cos(avgLatRad)
-  const dLat = (bLat - aLat) * kmPerDegLat
-  const dLon = (bLon - aLon) * kmPerDegLon
-  return Math.sqrt(dLat * dLat + dLon * dLon)
-}
-
-function ringLabelLatitude(originLat: number, ringKm: number) {
-  const kmPerDegLat = 110.574
-  return clamp(originLat + ringKm / kmPerDegLat, SWISS_HEAT_BOUNDS.latMin, SWISS_HEAT_BOUNDS.latMax)
+function ringLabelPosition(originLat: number, originLon: number, ringKm: number, idx: number) {
+  const kmPerDegLon = 111.32 * Math.cos((originLat * Math.PI) / 180)
+  const lonOffset = ringKm / Math.max(25, kmPerDegLon)
+  const latNudge = (idx - 2) * 0.028
+  const lat = clamp(originLat + latNudge, SWISS_HEAT_BOUNDS.latMin, SWISS_HEAT_BOUNDS.latMax)
+  const lon = clamp(originLon + lonOffset + 0.02, SWISS_HEAT_BOUNDS.lonMin, SWISS_HEAT_BOUNDS.lonMax)
+  return [lat, lon] as [number, number]
 }
 
 function travelRingLabelIcon(label: string, km: number) {
@@ -201,46 +184,6 @@ function travelRingLabelIcon(label: string, km: number) {
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
-}
-
-function buildHeatCells(rows: MapRow[], maxHours: number): HeatCell[] {
-  const points = rows
-    .filter(row => Number.isFinite(row.activeSunHours))
-    .map(row => ({ lat: row.lat, lon: row.lon, value: row.activeSunHours }))
-
-  if (points.length < 5) return []
-
-  const cells: HeatCell[] = []
-  const { latMin, latMax, lonMin, lonMax } = SWISS_HEAT_BOUNDS
-
-  for (let lat = latMin; lat < latMax; lat += HEAT_GRID_LAT_STEP) {
-    for (let lon = lonMin; lon < lonMax; lon += HEAT_GRID_LON_STEP) {
-      const centerLat = lat + HEAT_GRID_LAT_STEP / 2
-      const centerLon = lon + HEAT_GRID_LON_STEP / 2
-
-      let weightedValueSum = 0
-      let weightSum = 0
-
-      for (const point of points) {
-        const distKm = Math.max(4, quickDistanceKm(centerLat, centerLon, point.lat, point.lon))
-        if (distKm > 240) continue
-        const weight = 1 / (distKm * distKm)
-        weightedValueSum += point.value * weight
-        weightSum += weight
-      }
-
-      if (weightSum <= 0) continue
-
-      const hours = clamp(weightedValueSum / weightSum, 0, maxHours)
-      cells.push({
-        id: `${lat.toFixed(2)}:${lon.toFixed(2)}`,
-        bounds: [[lat, lon], [lat + HEAT_GRID_LAT_STEP, lon + HEAT_GRID_LON_STEP]],
-        hours,
-      })
-    }
-  }
-
-  return cells
 }
 
 function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
@@ -265,8 +208,6 @@ export default function SunMap({
   const origin = controlledOrigin ?? originState
   const mapDay = controlledMapDay ?? mapDayState
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
-  const [showSunshine, setShowSunshine] = useState(false)
-  const [showRadiation, setShowRadiation] = useState(false)
   const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [loading, setLoading] = useState(false)
@@ -409,9 +350,11 @@ export default function SunMap({
     return clamp(Math.ceil(maxValue * 2) / 2, 6, 12)
   }, [activeSunValues])
 
-  const heatCells = useMemo(
-    () => buildHeatCells(markerRows, overlayMaxHours),
-    [markerRows, overlayMaxHours]
+  const overlayRows = useMemo(
+    () => markerRows
+      .filter(row => Number.isFinite(row.activeSunHours) && row.activeSunHours > 0)
+      .sort((a, b) => a.activeSunHours - b.activeSunHours),
+    [markerRows]
   )
 
   const selectedRow = useMemo(
@@ -437,37 +380,26 @@ export default function SunMap({
           url="https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg"
           attribution="&copy; swisstopo"
         />
-        {showSunHoursOverlay && heatCells.map(cell => (
-          <Rectangle
-            key={cell.id}
-            bounds={cell.bounds}
-            interactive={false}
-            pathOptions={{
-              color: sunHoursColor(cell.hours, overlayMaxHours),
-              fillColor: sunHoursColor(cell.hours, overlayMaxHours),
-              fillOpacity: 0.28,
-              weight: 0,
-            }}
-          />
-        ))}
-        {showSunshine && (
-          <WMSTileLayer
-            url="https://wms.geo.admin.ch/"
-            layers="ch.meteoschweiz.messwerte-sonnenscheindauer-10min"
-            format="image/png"
-            transparent
-            opacity={0.58}
-          />
-        )}
-        {showRadiation && (
-          <WMSTileLayer
-            url="https://wms.geo.admin.ch/"
-            layers="ch.meteoschweiz.messwerte-globalstrahlung-10min"
-            format="image/png"
-            transparent
-            opacity={0.46}
-          />
-        )}
+        {showSunHoursOverlay && overlayRows.map((row) => {
+          const normalized = clamp(row.activeSunHours / Math.max(4, overlayMaxHours), 0, 1)
+          const radiusM = 9000 + normalized * 22000
+          const color = sunHoursColor(row.activeSunHours, overlayMaxHours)
+          return (
+            <Circle
+              key={`overlay-${row.id}`}
+              center={[row.lat, row.lon]}
+              radius={radiusM}
+              interactive={false}
+              pathOptions={{
+                color,
+                fillColor: color,
+                fillOpacity: 0.12 + normalized * 0.26,
+                opacity: 0.22 + normalized * 0.24,
+                weight: 0.6,
+              }}
+            />
+          )
+        })}
         <RecenterOnOrigin lat={origin.lat} lon={origin.lon} />
 
         <CircleMarker
@@ -506,12 +438,12 @@ export default function SunMap({
             />
           )
         })}
-        {TRAVEL_RING_BUCKETS.map((ring) => {
+        {TRAVEL_RING_BUCKETS.map((ring, idx) => {
           const ringKm = ring.hours * TRAVEL_RING_KM_PER_HOUR
           return (
             <Marker
               key={`ring-label-${ring.label}`}
-              position={[ringLabelLatitude(origin.lat, ringKm), origin.lon]}
+              position={ringLabelPosition(origin.lat, origin.lon, ringKm, idx)}
               icon={travelRingLabelIcon(ring.label, ringKm)}
               interactive={false}
               keyboard={false}
@@ -573,22 +505,6 @@ export default function SunMap({
             >
               <Sun className="h-3 w-3" />
               Overlay
-            </Button>
-            <Button
-              onClick={() => setShowSunshine(prev => !prev)}
-              size="sm"
-              variant={showSunshine ? 'primary' : 'neutral'}
-            >
-              <Sun className="h-3 w-3" />
-              Sun
-            </Button>
-            <Button
-              onClick={() => setShowRadiation(prev => !prev)}
-              size="sm"
-              variant={showRadiation ? 'primary' : 'neutral'}
-            >
-              <Zap className="h-3 w-3" />
-              Radiation
             </Button>
             <Button
               onClick={centerOnMyLocation}
