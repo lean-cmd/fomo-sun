@@ -9,6 +9,7 @@ import {
   Popup,
   TileLayer,
   ZoomControl,
+  useMapEvents,
   useMap,
 } from 'react-leaflet'
 import { ChevronDown, ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
@@ -175,18 +176,21 @@ function fallbackSbbUrl(originName: string, destinationSbbName?: string | null) 
 }
 
 function ringLabelPosition(originLat: number, originLon: number, ringKm: number, idx: number) {
+  const kmPerDegLat = 111.32
   const kmPerDegLon = 111.32 * Math.cos((originLat * Math.PI) / 180)
-  const lonOffset = ringKm / Math.max(25, kmPerDegLon)
-  const latNudge = (idx - 2) * 0.028
-  const lat = clamp(originLat + latNudge, SWISS_HEAT_BOUNDS.latMin, SWISS_HEAT_BOUNDS.latMax)
-  const lon = clamp(originLon + lonOffset + 0.02, SWISS_HEAT_BOUNDS.lonMin, SWISS_HEAT_BOUNDS.lonMax)
+  const insideBottomKm = ringKm * 0.93
+  const latOffset = insideBottomKm / kmPerDegLat
+  const lonNudgeKm = (idx - 2) * 1.15
+  const lonOffset = lonNudgeKm / Math.max(25, kmPerDegLon)
+  const lat = clamp(originLat - latOffset, SWISS_HEAT_BOUNDS.latMin, SWISS_HEAT_BOUNDS.latMax)
+  const lon = clamp(originLon + lonOffset, SWISS_HEAT_BOUNDS.lonMin, SWISS_HEAT_BOUNDS.lonMax)
   return [lat, lon] as [number, number]
 }
 
 function travelRingLabelIcon(label: string, km: number) {
   return divIcon({
     className: 'fomo-map-ring-label',
-    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.34);background:rgba(255,255,255,.76);padding:1px 6px;border-radius:999px;font-size:9px;font-weight:600;color:rgba(51,65,85,.86);line-height:1;white-space:nowrap;box-shadow:0 1px 4px rgba(15,23,42,.12)">${label} · ${Math.round(km)}km</span>`,
+    html: `<span style="position:relative;left:50%;transform:translateX(-50%);display:inline-block;font-size:9px;font-weight:600;color:rgba(51,65,85,.82);line-height:1;letter-spacing:.01em;white-space:nowrap;text-shadow:0 1px 2px rgba(255,255,255,.95),0 0 2px rgba(255,255,255,.9)">${label} · ${Math.round(km)}km</span>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
@@ -220,6 +224,18 @@ function EnsureMapPanes() {
   return null
 }
 
+function MapZoomSync({ onZoomChange }: { onZoomChange: (zoom: number) => void }) {
+  const map = useMapEvents({
+    zoomend: () => onZoomChange(map.getZoom()),
+  })
+
+  useEffect(() => {
+    onZoomChange(map.getZoom())
+  }, [map, onZoomChange])
+
+  return null
+}
+
 export default function SunMap({
   initialOrigin,
   initialDay = 'today',
@@ -238,6 +254,7 @@ export default function SunMap({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [mapZoom, setMapZoom] = useState(8)
 
   const cityOptions = useMemo(() => {
     const source = originOptions && originOptions.length > 0 ? originOptions : MAP_ORIGIN_CITIES
@@ -395,6 +412,7 @@ export default function SunMap({
   )
 
   const citySelectorOffsetClass = selectedRow ? 'bottom-[178px] md:bottom-3' : 'bottom-3'
+  const overlayZoomFactor = clamp((mapZoom - 6) / 4, 0, 1)
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#f3efe4]">
@@ -410,6 +428,7 @@ export default function SunMap({
         className="h-full w-full"
       >
         <EnsureMapPanes />
+        <MapZoomSync onZoomChange={setMapZoom} />
         <ZoomControl position="bottomright" />
         <TileLayer
           url="https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg"
@@ -417,9 +436,11 @@ export default function SunMap({
         />
         {showSunHoursOverlay && overlayRows.map((row) => {
           const normalized = clamp(row.activeSunHours / Math.max(4, overlayMaxHours), 0, 1)
-          const radiusCoreM = 9000 + normalized * 16000
+          const radiusScale = 1.18 - overlayZoomFactor * 0.26
+          const radiusCoreM = (9000 + normalized * 16000) * radiusScale
           const radiusHaloM = radiusCoreM * 1.62
           const color = sunHoursColor(row.activeSunHours, overlayMaxHours)
+          const opacityScale = 0.52 + overlayZoomFactor * 0.9
           return (
             <Fragment key={`overlay-${row.id}`}>
               <Circle
@@ -430,7 +451,7 @@ export default function SunMap({
                 pathOptions={{
                   color,
                   fillColor: color,
-                  fillOpacity: 0.006 + normalized * 0.03,
+                  fillOpacity: (0.004 + normalized * 0.024) * opacityScale,
                   opacity: 0,
                   weight: 0,
                 }}
@@ -443,7 +464,7 @@ export default function SunMap({
                 pathOptions={{
                   color,
                   fillColor: color,
-                  fillOpacity: 0.016 + normalized * 0.06,
+                  fillOpacity: (0.009 + normalized * 0.045) * opacityScale,
                   opacity: 0,
                   weight: 0,
                 }}
