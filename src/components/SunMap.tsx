@@ -11,7 +11,7 @@ import {
   ZoomControl,
   useMap,
 } from 'react-leaflet'
-import { ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
+import { ChevronDown, ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
 import { divIcon } from 'leaflet'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
@@ -32,6 +32,7 @@ type SunMapProps = {
   origin?: OriginSeed
   mapDay?: MapDay
   onOriginChange?: (origin: OriginSeed) => void
+  originOptions?: OriginSeed[]
 }
 
 type ApiEscapeRow = {
@@ -116,7 +117,7 @@ const COLOR_LOW: [number, number, number] = [148, 163, 184] // grey
 const COLOR_MID: [number, number, number] = [59, 130, 246] // blue
 const COLOR_SUNNY: [number, number, number] = [254, 240, 138] // pale yellow
 const COLOR_VERY_SUNNY: [number, number, number] = [250, 204, 21] // strong yellow
-const COLOR_PEAK_SUN: [number, number, number] = [234, 179, 8] // deep yellow
+const COLOR_BEST_80: [number, number, number] = [180, 83, 9] // darker orange
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -128,6 +129,7 @@ function toFinite(value: unknown): number | null {
 }
 
 function scoreColor(score: number) {
+  if (score > 0.8) return '#b45309'
   if (score > 0.6) return '#facc15'
   if (score >= 0.3) return '#3b82f6'
   return '#94a3b8'
@@ -143,8 +145,8 @@ function sunHoursColor(hours: number, maxHours: number) {
   const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
   if (normalized <= 0.35) return mixColor(COLOR_LOW, COLOR_MID, normalized / 0.35)
   if (normalized <= 0.6) return mixColor(COLOR_MID, COLOR_SUNNY, (normalized - 0.35) / 0.25)
-  if (normalized <= 0.82) return mixColor(COLOR_SUNNY, COLOR_VERY_SUNNY, (normalized - 0.6) / 0.22)
-  return mixColor(COLOR_VERY_SUNNY, COLOR_PEAK_SUN, (normalized - 0.82) / 0.18)
+  if (normalized <= 0.8) return mixColor(COLOR_SUNNY, COLOR_VERY_SUNNY, (normalized - 0.6) / 0.2)
+  return mixColor(COLOR_VERY_SUNNY, COLOR_BEST_80, (normalized - 0.8) / 0.2)
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -184,7 +186,7 @@ function ringLabelPosition(originLat: number, originLon: number, ringKm: number,
 function travelRingLabelIcon(label: string, km: number) {
   return divIcon({
     className: 'fomo-map-ring-label',
-    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.16);background:rgba(255,255,255,.62);padding:1px 5px;border-radius:999px;font-size:9px;font-weight:500;color:rgba(71,85,105,.72);line-height:1;white-space:nowrap;box-shadow:0 1px 4px rgba(15,23,42,.08)">${label} · ${Math.round(km)}km</span>`,
+    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.34);background:rgba(255,255,255,.76);padding:1px 6px;border-radius:999px;font-size:9px;font-weight:600;color:rgba(51,65,85,.86);line-height:1;white-space:nowrap;box-shadow:0 1px 4px rgba(15,23,42,.12)">${label} · ${Math.round(km)}km</span>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
@@ -200,12 +202,31 @@ function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
   return null
 }
 
+function EnsureMapPanes() {
+  const map = useMap()
+
+  useEffect(() => {
+    const ensurePane = (name: string, zIndex: number) => {
+      if (map.getPane(name)) return
+      const pane = map.createPane(name)
+      pane.style.zIndex = String(zIndex)
+    }
+    ensurePane('sunshade-pane', 330)
+    ensurePane('travel-ring-pane', 360)
+    ensurePane('destination-pane', 430)
+    ensurePane('origin-pane', 450)
+  }, [map])
+
+  return null
+}
+
 export default function SunMap({
   initialOrigin,
   initialDay = 'today',
   origin: controlledOrigin,
   mapDay: controlledMapDay,
   onOriginChange,
+  originOptions,
 }: SunMapProps) {
   const [originState, setOriginState] = useState<OriginSeed>(initialOrigin)
   const [mapDayState, setMapDayState] = useState<MapDay>(initialDay)
@@ -217,6 +238,13 @@ export default function SunMap({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  const cityOptions = useMemo(() => {
+    const source = originOptions && originOptions.length > 0 ? originOptions : MAP_ORIGIN_CITIES
+    const byName = new Map<string, OriginSeed>(source.map(item => [item.name, item]))
+    if (!byName.has(origin.name)) byName.set(origin.name, origin)
+    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [origin, originOptions])
 
   useEffect(() => {
     if (!controlledOrigin) setOriginState(initialOrigin)
@@ -366,6 +394,8 @@ export default function SunMap({
     [markerRows, selectedId]
   )
 
+  const citySelectorOffsetClass = selectedRow ? 'bottom-[178px] md:bottom-3' : 'bottom-3'
+
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#f3efe4]">
       <MapContainer
@@ -379,6 +409,7 @@ export default function SunMap({
         zoomControl={false}
         className="h-full w-full"
       >
+        <EnsureMapPanes />
         <ZoomControl position="bottomright" />
         <TileLayer
           url="https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/current/3857/{z}/{x}/{y}.jpeg"
@@ -386,7 +417,7 @@ export default function SunMap({
         />
         {showSunHoursOverlay && overlayRows.map((row) => {
           const normalized = clamp(row.activeSunHours / Math.max(4, overlayMaxHours), 0, 1)
-          const radiusM = 7000 + normalized * 14000
+          const radiusM = 10000 + normalized * 22000
           const color = sunHoursColor(row.activeSunHours, overlayMaxHours)
           return (
             <Circle
@@ -394,12 +425,13 @@ export default function SunMap({
               center={[row.lat, row.lon]}
               radius={radiusM}
               interactive={false}
+              pane="sunshade-pane"
               pathOptions={{
                 color,
                 fillColor: color,
-                fillOpacity: 0.04 + normalized * 0.12,
-                opacity: 0.08 + normalized * 0.14,
-                weight: 0.35,
+                fillOpacity: 0.03 + normalized * 0.1,
+                opacity: 0.06 + normalized * 0.12,
+                weight: 0.32,
               }}
             />
           )
@@ -409,10 +441,11 @@ export default function SunMap({
         <CircleMarker
           center={[origin.lat, origin.lon]}
           radius={8.2}
+          pane="origin-pane"
           pathOptions={{
-            color: '#1d4ed8',
-            fillColor: '#3b82f6',
-            fillOpacity: 0.95,
+            color: '#0f172a',
+            fillColor: '#020617',
+            fillOpacity: 0.96,
             weight: 2,
           }}
         >
@@ -432,11 +465,12 @@ export default function SunMap({
               center={[origin.lat, origin.lon]}
               radius={ringKm * 1000}
               interactive={false}
+              pane="travel-ring-pane"
               pathOptions={{
-                color: '#475569',
-                weight: ring.hours >= 3 ? 1.2 : 1.05,
-                opacity: 0.24,
-                dashArray: '5 9',
+                color: '#334155',
+                weight: ring.hours >= 3 ? 1.55 : 1.35,
+                opacity: 0.38,
+                dashArray: '4 6',
                 fillOpacity: 0,
               }}
             />
@@ -460,6 +494,7 @@ export default function SunMap({
             key={row.id}
             center={[row.lat, row.lon]}
             radius={6.4}
+            pane="destination-pane"
             pathOptions={{
               color: '#ffffff',
               fillColor: scoreColor(row.markerScore),
@@ -543,6 +578,26 @@ export default function SunMap({
               {markerRows.length} destinations · {error ? 'fallback/error mode' : 'live'}
             </span>
           )}
+        </div>
+
+        <div className={`pointer-events-auto absolute left-1/2 z-[520] -translate-x-1/2 ${citySelectorOffsetClass}`}>
+          <div className="relative inline-flex items-center min-w-[172px] max-w-[86vw] rounded-full border border-slate-300/90 bg-white/92 pl-3 pr-7 py-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
+            <select
+              value={origin.name}
+              onChange={(event) => {
+                const selected = cityOptions.find(city => city.name === event.target.value)
+                if (!selected) return
+                applyOrigin(selected)
+              }}
+              className="w-full appearance-none bg-transparent text-[11px] font-medium text-slate-700 focus:outline-none"
+              aria-label="Select origin city"
+            >
+              {cityOptions.map(city => (
+                <option key={city.name} value={city.name}>{city.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
+          </div>
         </div>
 
         {selectedRow && (

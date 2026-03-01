@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { ArrowLeft, ChevronDown } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { MAP_ORIGIN_CITIES, type MapDay, type OriginSeed } from '@/components/SunMap'
 
 const SunMap = dynamic(() => import('@/components/SunMap'), {
@@ -55,31 +55,20 @@ export default function MapPageClient({
       <header className="fomo-page-header sticky top-0 z-40 backdrop-blur">
         <div className="max-w-xl mx-auto px-3 h-[62px] grid grid-cols-[1fr_auto_1fr] items-center">
           <div className="min-w-0">
-            <div className="relative inline-flex items-center min-w-0 max-w-[120px] text-slate-500">
-              <select
-                value={origin.name}
-                onChange={(event) => {
-                  const selected = cityOptions.find(city => city.name === event.target.value)
-                  if (!selected) return
-                  setOrigin(selected)
-                }}
-                className="h-7 pl-1 pr-5 bg-transparent text-[11px] font-medium text-right text-slate-500 appearance-none focus:outline-none focus:text-slate-700 cursor-pointer"
-                aria-label="Select origin city"
-              >
-                {cityOptions.map(city => (
-                  <option key={city.name} value={city.name}>{city.name}</option>
-                ))}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pointer-events-none">
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400" strokeWidth={1.8} />
-              </div>
-            </div>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 transition hover:text-slate-900"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back
+            </Link>
           </div>
 
           <div className="relative justify-self-center flex items-center h-full">
             <FomoWordmark className="w-[94px] h-[24px]" />
             <p className="absolute left-1/2 -translate-x-1/2 top-[42px] text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold whitespace-nowrap text-center">
-              Sun map TM
+              Sun map
+              <sup className="ml-0.5 align-super text-[7px] tracking-[0.08em]">TM</sup>
             </p>
           </div>
 
@@ -104,23 +93,15 @@ export default function MapPageClient({
       </header>
 
       <main className="mx-auto w-full max-w-xl px-3 pb-5 pt-3">
-        <div className="mb-2">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 transition hover:text-slate-900"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back
-          </Link>
-        </div>
         <section className="fomo-card overflow-hidden border border-slate-200">
-          <div className="h-[calc(100dvh-148px)] min-h-[500px] w-full">
+          <div className="h-[calc(100dvh-92px)] min-h-[520px] w-full">
             <SunMap
               initialOrigin={initialOrigin}
               initialDay={initialDay}
               origin={origin}
               mapDay={mapDay}
               onOriginChange={setOrigin}
+              originOptions={cityOptions}
             />
           </div>
         </section>
