@@ -34,6 +34,12 @@ type SunMapProps = {
   mapDay?: MapDay
   onOriginChange?: (origin: OriginSeed) => void
   originOptions?: OriginSeed[]
+  onOpenDestinationCard?: (payload: {
+    destinationId: string
+    bucketLabels: string[]
+    originName: string
+    day: MapDay
+  }) => void
 }
 
 type ApiEscapeRow = {
@@ -48,6 +54,7 @@ type ApiEscapeRow = {
   }
   sun_score?: { score?: number; sunshine_forecast_min?: number }
   tomorrow_sun_hours?: number
+  net_sun_min?: number
   travel?: {
     car?: { duration_min?: number }
     train?: { duration_min?: number }
@@ -59,6 +66,12 @@ type ApiEscapeRow = {
 
 type ApiPayload = {
   escapes?: ApiEscapeRow[]
+  _meta?: {
+    result_tier?: string
+  }
+  origin_conditions?: {
+    sunshine_min?: number
+  }
 }
 
 type MapRow = {
@@ -76,6 +89,7 @@ type MapRow = {
   carMin: number | null
   trainMin: number | null
   bestTravelMin: number | null
+  netSunMin: number | null
   sbbHref?: string
 }
 
@@ -108,11 +122,11 @@ const SWISS_HEAT_BOUNDS = {
 const DEFAULT_OVERLAY_MAX_HOURS = 10
 const TRAVEL_RING_KM_PER_HOUR = 52
 const TRAVEL_RING_BUCKETS = [
-  { label: '1h', hours: 1 },
-  { label: '1.5h', hours: 1.5 },
-  { label: '2h', hours: 2 },
-  { label: '3h', hours: 3 },
-  { label: '6.5h', hours: 6.5 },
+  { id: 'quick', label: '1h', minH: 0, maxH: 1, hours: 1 },
+  { id: 'short-a', label: '1.5h', minH: 1, maxH: 1.5, hours: 1.5 },
+  { id: 'short-b', label: '2h', minH: 1.5, maxH: 2, hours: 2 },
+  { id: 'mid', label: '3h', minH: 2, maxH: 3, hours: 3 },
+  { id: 'long', label: '6.5h', minH: 3, maxH: 6.5, hours: 6.5 },
 ] as const
 const COLOR_LOW: [number, number, number] = [148, 163, 184] // grey
 const COLOR_MID: [number, number, number] = [96, 165, 250] // light blue
@@ -196,6 +210,18 @@ function travelRingLabelIcon(label: string, km: number) {
   })
 }
 
+function bucketWinnerSunIcon(score: number, winCount: number) {
+  const size = winCount > 1 ? 26 : 22
+  const glow = score > 0.8 ? 'rgba(202,138,4,.52)' : score > 0.6 ? 'rgba(250,204,21,.48)' : 'rgba(96,165,250,.42)'
+  const core = scoreColor(score)
+  return divIcon({
+    className: 'fomo-map-bucket-sun',
+    html: `<span style="position:relative;display:inline-grid;place-items:center;width:${size}px;height:${size}px;border-radius:999px;background:radial-gradient(circle at 32% 30%, #fffbe6 0 28%, ${core} 58%, #ca8a04 100%);border:1.3px solid rgba(255,255,255,.95);color:rgba(120,53,15,.95);font-size:${winCount > 1 ? 14 : 13}px;font-weight:700;line-height:1;box-shadow:0 0 0 2px ${glow},0 4px 12px rgba(15,23,42,.25)">☀</span>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  })
+}
+
 function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
   const map = useMap()
 
@@ -243,6 +269,7 @@ export default function SunMap({
   mapDay: controlledMapDay,
   onOriginChange,
   originOptions,
+  onOpenDestinationCard,
 }: SunMapProps) {
   const [originState, setOriginState] = useState<OriginSeed>(initialOrigin)
   const [mapDayState, setMapDayState] = useState<MapDay>(initialDay)
@@ -251,6 +278,8 @@ export default function SunMap({
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
   const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
+  const [apiResultTier, setApiResultTier] = useState<string | null>(null)
+  const [originSunMin, setOriginSunMin] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -331,6 +360,8 @@ export default function SunMap({
         nextById[row.destination.id] = row
       }
       setRowsById(nextById)
+      setApiResultTier(typeof payload._meta?.result_tier === 'string' ? payload._meta.result_tier : null)
+      setOriginSunMin(toFinite(payload.origin_conditions?.sunshine_min) ?? 0)
     } catch (err) {
       if (signal.aborted) return
       const message = err instanceof Error ? err.message : 'Failed to load map data'
@@ -351,6 +382,7 @@ export default function SunMap({
       const api = rowsById[dest.id]
       const carMin = toFinite(api?.travel?.car?.duration_min)
       const trainMin = toFinite(api?.travel?.train?.duration_min)
+      const netSunMin = toFinite(api?.net_sun_min)
       const bestTravelMin = Math.min(
         Number.isFinite(carMin ?? NaN) ? Number(carMin) : Infinity,
         Number.isFinite(trainMin ?? NaN) ? Number(trainMin) : Infinity
@@ -378,6 +410,7 @@ export default function SunMap({
         carMin,
         trainMin,
         bestTravelMin: Number.isFinite(bestTravelMin) ? bestTravelMin : null,
+        netSunMin,
         sbbHref: api?.links?.sbb || fallbackSbbUrl(origin.name, dest.sbb_name),
       }
     })
@@ -410,6 +443,55 @@ export default function SunMap({
     () => markerRows.find(row => row.id === selectedId) || null,
     [markerRows, selectedId]
   )
+
+  const hasTenPctBetterOption = useMemo(() => {
+    const rows = Object.values(rowsById)
+    if (rows.length === 0) return false
+    const originReference = Math.max(0, originSunMin)
+    return rows.some((row) => {
+      const netSunMin = toFinite(row.net_sun_min)
+      if (!Number.isFinite(netSunMin ?? NaN)) return false
+      const candidate = Number(netSunMin)
+      if (originReference <= 0) return candidate > 0
+      return candidate >= originReference * 1.1
+    })
+  }, [originSunMin, rowsById])
+
+  const showHomeBestOrb = useMemo(() => {
+    if (loading) return false
+    if (Object.keys(rowsById).length === 0) return false
+    if (apiResultTier === 'best_available') return true
+    return !hasTenPctBetterOption
+  }, [apiResultTier, hasTenPctBetterOption, loading, rowsById])
+
+  const bucketWinnersByDestinationId = useMemo(() => {
+    const byDestination = new Map<string, string[]>()
+    for (const bucket of TRAVEL_RING_BUCKETS) {
+      const minMin = Math.round(bucket.minH * 60)
+      const maxMin = Math.round(bucket.maxH * 60)
+      const rows = markerRows
+        .filter((row) => Number.isFinite(row.bestTravelMin ?? NaN))
+        .filter((row) => {
+          const travelMin = Number(row.bestTravelMin)
+          return travelMin >= minMin && travelMin <= maxMin
+        })
+        .filter((row) => row.activeSunHours > 0)
+      if (rows.length === 0) continue
+      const best = [...rows].sort((a, b) => {
+        const aNet = Number.isFinite(a.netSunMin ?? NaN) ? Number(a.netSunMin) : a.activeSunHours * 60
+        const bNet = Number.isFinite(b.netSunMin ?? NaN) ? Number(b.netSunMin) : b.activeSunHours * 60
+        if (bNet !== aNet) return bNet - aNet
+        if (b.markerScore !== a.markerScore) return b.markerScore - a.markerScore
+        if (b.activeSunHours !== a.activeSunHours) return b.activeSunHours - a.activeSunHours
+        return (a.bestTravelMin ?? Infinity) - (b.bestTravelMin ?? Infinity)
+      })[0]
+      if (!best) continue
+      const labels = byDestination.get(best.id) || []
+      labels.push(bucket.label)
+      byDestination.set(best.id, labels)
+    }
+    return byDestination
+  }, [markerRows])
 
   const citySelectorOffsetClass = selectedRow ? 'bottom-[178px] md:bottom-3' : 'bottom-3'
   const overlayZoomFactor = clamp((mapZoom - 6) / 4, 0, 1)
@@ -474,6 +556,37 @@ export default function SunMap({
         })}
         <RecenterOnOrigin lat={origin.lat} lon={origin.lon} />
 
+        {showHomeBestOrb && (
+          <>
+            <CircleMarker
+              center={[origin.lat, origin.lon]}
+              radius={24}
+              pane="origin-pane"
+              interactive={false}
+              pathOptions={{
+                color: '#ca8a04',
+                fillColor: '#fde68a',
+                fillOpacity: 0.2,
+                opacity: 0,
+                weight: 0,
+              }}
+            />
+            <CircleMarker
+              center={[origin.lat, origin.lon]}
+              radius={16}
+              pane="origin-pane"
+              interactive={false}
+              pathOptions={{
+                color: '#facc15',
+                fillColor: '#fef08a',
+                fillOpacity: 0.34,
+                opacity: 0,
+                weight: 0,
+              }}
+            />
+          </>
+        )}
+
         <CircleMarker
           center={[origin.lat, origin.lon]}
           radius={8.2}
@@ -526,46 +639,92 @@ export default function SunMap({
         })}
 
         {markerRows.map(row => (
-          <CircleMarker
-            key={row.id}
-            center={[row.lat, row.lon]}
-            radius={6.4}
-            pane="destination-pane"
-            pathOptions={{
-              color: '#ffffff',
-              fillColor: scoreColor(row.markerScore),
-              fillOpacity: 0.96,
-              weight: 1.5,
-            }}
-            eventHandlers={{
-              click: () => setSelectedId(row.id),
-            }}
-          >
-            <Popup>
-              <div className="min-w-[190px] space-y-1 text-[12px]">
-                <p className="text-[13px] font-semibold text-slate-900">{row.name}</p>
-                <p className="text-slate-600">{row.region} · {row.country}</p>
-                <p className="text-slate-700">Sun score: {Math.round(row.sunScore * 100)}%</p>
-                <p className="text-slate-700">
-                  {mapDay === 'tomorrow' ? 'Tomorrow sun' : 'Today sun'}: {formatHourValue(row.activeSunHours)}
-                </p>
-                <p className="text-slate-700">From {origin.name}: {formatTravelLabel(row)}</p>
-                {row.sbbHref ? (
-                  <a
-                    href={row.sbbHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900"
-                  >
-                    Open SBB
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : (
-                  <p className="text-[11px] text-slate-500">SBB link unavailable</p>
-                )}
-              </div>
-            </Popup>
-          </CircleMarker>
+          (() => {
+            const bucketWins = bucketWinnersByDestinationId.get(row.id) || []
+            const popup = (
+              <Popup>
+                <div className="min-w-[190px] space-y-1 text-[12px]" data-launch-destination={row.id} data-launch-buckets={bucketWins.join(',')} data-launch-day={mapDay}>
+                  <p className="text-[13px] font-semibold text-slate-900">{row.name}</p>
+                  <p className="text-slate-600">{row.region} · {row.country}</p>
+                  <p className="text-slate-700">Sun score: {Math.round(row.sunScore * 100)}%</p>
+                  <p className="text-slate-700">
+                    {mapDay === 'tomorrow' ? 'Tomorrow sun' : 'Today sun'}: {formatHourValue(row.activeSunHours)}
+                  </p>
+                  <p className="text-slate-700">From {origin.name}: {formatTravelLabel(row)}</p>
+                  {bucketWins.length > 0 && (
+                    <p className="text-[11px] font-semibold text-amber-700">
+                      Best in: {bucketWins.join(' · ')}
+                    </p>
+                  )}
+                  {row.sbbHref ? (
+                    <a
+                      href={row.sbbHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900"
+                    >
+                      Open SBB
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ) : (
+                    <p className="text-[11px] text-slate-500">SBB link unavailable</p>
+                  )}
+                </div>
+              </Popup>
+            )
+
+            if (bucketWins.length > 0) {
+              return (
+                <Marker
+                  key={row.id}
+                  position={[row.lat, row.lon]}
+                  pane="destination-pane"
+                  icon={bucketWinnerSunIcon(row.markerScore, bucketWins.length)}
+                  eventHandlers={{
+                    click: () => {
+                      setSelectedId(row.id)
+                      onOpenDestinationCard?.({
+                        destinationId: row.id,
+                        bucketLabels: bucketWins,
+                        originName: origin.name,
+                        day: mapDay,
+                      })
+                    },
+                  }}
+                >
+                  {popup}
+                </Marker>
+              )
+            }
+
+            return (
+              <CircleMarker
+                key={row.id}
+                center={[row.lat, row.lon]}
+                radius={6.4}
+                pane="destination-pane"
+                pathOptions={{
+                  color: '#ffffff',
+                  fillColor: scoreColor(row.markerScore),
+                  fillOpacity: 0.96,
+                  weight: 1.5,
+                }}
+                eventHandlers={{
+                  click: () => {
+                    setSelectedId(row.id)
+                    onOpenDestinationCard?.({
+                      destinationId: row.id,
+                      bucketLabels: [],
+                      originName: origin.name,
+                      day: mapDay,
+                    })
+                  },
+                }}
+              >
+                {popup}
+              </CircleMarker>
+            )
+          })()
         ))}
       </MapContainer>
 
@@ -601,6 +760,8 @@ export default function SunMap({
           minHours={overlayMinHours}
           maxHours={overlayMaxHours}
           travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
+          showHomeBestOrb={showHomeBestOrb}
+          hasBucketSunMarkers={bucketWinnersByDestinationId.size > 0}
         />
 
         <div className="pointer-events-auto absolute bottom-3 right-3 rounded-lg border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">

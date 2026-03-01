@@ -5,6 +5,8 @@ type MapLegendProps = {
   minHours: number
   maxHours: number
   travelRingLabels: string[]
+  showHomeBestOrb?: boolean
+  hasBucketSunMarkers?: boolean
 }
 
 function Row({ color, label }: { color: string; label: string }) {
@@ -26,6 +28,8 @@ export default function MapLegend({
   minHours,
   maxHours,
   travelRingLabels,
+  showHomeBestOrb = false,
+  hasBucketSunMarkers = false,
 }: MapLegendProps) {
   const safeMin = Number.isFinite(minHours) ? Math.max(0, Math.round(minHours * 10) / 10) : 0
   const safeMax = Number.isFinite(maxHours) ? Math.max(safeMin + 0.5, Math.round(maxHours * 10) / 10) : 10
@@ -43,6 +47,18 @@ export default function MapLegend({
         <Row color="#60a5fa" label="Medium (0.30 – 0.60)" />
         <Row color="#94a3b8" label="Worst (< 0.30)" />
         <Row color="#020617" label="Your origin" />
+        {hasBucketSunMarkers && (
+          <div className="flex items-center gap-2 text-[11px] text-slate-700">
+            <span className="inline-grid h-3.5 w-3.5 place-items-center rounded-full bg-[radial-gradient(circle_at_32%_30%,#fffbe6_0_28%,#facc15_58%,#ca8a04_100%)] text-[9px] leading-none text-amber-900 ring-1 ring-white/70">☀</span>
+            <span>Best in travel bucket</span>
+          </div>
+        )}
+        {showHomeBestOrb && (
+          <div className="flex items-center gap-2 text-[11px] text-slate-700">
+            <span className="h-3.5 w-3.5 rounded-full bg-amber-200/90 ring-2 ring-amber-400/70" />
+            <span>Home currently strongest</span>
+          </div>
+        )}
       </div>
       <div className="mt-2.5 border-t border-slate-200 pt-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
