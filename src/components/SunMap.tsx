@@ -276,6 +276,7 @@ export default function SunMap({
   const origin = controlledOrigin ?? originState
   const mapDay = controlledMapDay ?? mapDayState
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
+  const [showTravelRings, setShowTravelRings] = useState(true)
   const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [apiResultTier, setApiResultTier] = useState<string | null>(null)
@@ -492,8 +493,12 @@ export default function SunMap({
     }
     return byDestination
   }, [markerRows])
+  const selectedBucketWins = useMemo(
+    () => (selectedRow ? (bucketWinnersByDestinationId.get(selectedRow.id) || []) : []),
+    [bucketWinnersByDestinationId, selectedRow]
+  )
 
-  const citySelectorOffsetClass = selectedRow ? 'bottom-[178px] md:bottom-3' : 'bottom-3'
+  const statusOffsetClass = selectedRow ? 'bottom-[210px] md:bottom-3' : 'bottom-3'
   const overlayZoomFactor = clamp((mapZoom - 6) / 4, 0, 1)
 
   return (
@@ -606,7 +611,7 @@ export default function SunMap({
           </Popup>
         </CircleMarker>
 
-        {TRAVEL_RING_BUCKETS.map((ring) => {
+        {showTravelRings && TRAVEL_RING_BUCKETS.map((ring) => {
           const ringKm = ring.hours * TRAVEL_RING_KM_PER_HOUR
           return (
             <Circle
@@ -625,7 +630,7 @@ export default function SunMap({
             />
           )
         })}
-        {TRAVEL_RING_BUCKETS.map((ring, idx) => {
+        {showTravelRings && TRAVEL_RING_BUCKETS.map((ring, idx) => {
           const ringKm = ring.hours * TRAVEL_RING_KM_PER_HOUR
           return (
             <Marker
@@ -741,6 +746,14 @@ export default function SunMap({
               Overlay
             </Button>
             <Button
+              onClick={() => setShowTravelRings(prev => !prev)}
+              size="sm"
+              variant={showTravelRings ? 'primary' : 'neutral'}
+              title="Show travel range rings"
+            >
+              Rings
+            </Button>
+            <Button
               onClick={centerOnMyLocation}
               disabled={locatingMe}
               size="sm"
@@ -762,23 +775,11 @@ export default function SunMap({
           travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
           showHomeBestOrb={showHomeBestOrb}
           hasBucketSunMarkers={bucketWinnersByDestinationId.size > 0}
+          showTravelRings={showTravelRings}
         />
 
-        <div className="pointer-events-auto absolute bottom-3 right-3 rounded-lg border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
-          {loading ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              Loading…
-            </span>
-          ) : (
-            <span>
-              {markerRows.length} destinations · {error ? 'fallback/error mode' : 'live'}
-            </span>
-          )}
-        </div>
-
-        <div className={`pointer-events-auto absolute left-1/2 z-[520] -translate-x-1/2 ${citySelectorOffsetClass}`}>
-          <div className="relative inline-flex items-center min-w-[172px] max-w-[86vw] rounded-full border border-slate-300/90 bg-white/92 pl-3 pr-7 py-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
+        <div className={`pointer-events-auto absolute right-3 ${statusOffsetClass} z-[520] rounded-lg border border-slate-200 bg-white/92 px-2.5 py-2 text-[10px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur`}>
+          <div className="relative inline-flex items-center min-w-[150px] max-w-[60vw] pl-0 pr-4">
             <select
               value={origin.name}
               onChange={(event) => {
@@ -786,19 +787,29 @@ export default function SunMap({
                 if (!selected) return
                 applyOrigin(selected)
               }}
-              className="w-full appearance-none bg-transparent text-[11px] font-medium text-slate-700 focus:outline-none"
+              className="w-full appearance-none bg-transparent text-[10px] font-medium text-slate-700 focus:outline-none"
               aria-label="Select origin city"
             >
               {cityOptions.map(city => (
                 <option key={city.name} value={city.name}>{city.name}</option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
+            <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
+          </div>
+          <div className="mt-1 inline-flex items-center gap-1.5 text-[10px] text-slate-600">
+            {loading ? (
+              <>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Loading…</span>
+              </>
+            ) : (
+              <span>{markerRows.length} destinations · {error ? 'fallback' : 'live'}</span>
+            )}
           </div>
         </div>
 
         {selectedRow && (
-          <div className="pointer-events-auto absolute inset-x-3 bottom-3 rounded-2xl border border-slate-200 bg-white/96 p-3 text-slate-800 shadow-xl backdrop-blur md:hidden">
+          <div className="pointer-events-auto absolute inset-x-3 bottom-[76px] rounded-2xl border border-slate-200 bg-white/96 p-3 text-slate-800 shadow-xl backdrop-blur md:inset-x-auto md:right-3 md:w-[260px] md:bottom-[76px]">
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="text-[15px] font-semibold">{selectedRow.name}</p>
@@ -813,21 +824,38 @@ export default function SunMap({
               </button>
             </div>
             <div className="mt-2 space-y-1 text-[12px]">
-              <p>Today sun: <span className="font-semibold text-slate-800">{formatHourValue(selectedRow.todaySunHours)}</span></p>
-              <p>Tomorrow sun: <span className="font-semibold text-slate-800">{formatHourValue(selectedRow.tomorrowSunHours)}</span></p>
-              <p>Travel from {origin.name}: {formatTravelLabel(selectedRow)}</p>
+              <p>{mapDay === 'tomorrow' ? 'Tomorrow' : 'Today'} sun: <span className="font-semibold text-slate-800">{formatHourValue(selectedRow.activeSunHours)}</span></p>
+              <p>Sun score: <span className="font-semibold text-slate-800">{Math.round(selectedRow.markerScore * 100)}%</span></p>
+              <p>Travel from {origin.name}: <span className="font-semibold text-slate-800">{formatTravelLabel(selectedRow)}</span></p>
+              {selectedBucketWins.length > 0 && (
+                <p className="text-[11px] font-semibold text-amber-700">Best in: {selectedBucketWins.join(' · ')}</p>
+              )}
               {selectedRow.sbbHref ? (
                 <a
                   href={selectedRow.sbbHref}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700"
+                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-amber-700 hover:text-amber-800"
                 >
                   Open SBB
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               ) : (
                 <p className="text-[11px] text-slate-500">No SBB timetable link for this destination.</p>
+              )}
+              {onOpenDestinationCard && (
+                <button
+                  type="button"
+                  onClick={() => onOpenDestinationCard({
+                    destinationId: selectedRow.id,
+                    bucketLabels: selectedBucketWins,
+                    originName: origin.name,
+                    day: mapDay,
+                  })}
+                  className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-700 hover:text-slate-900"
+                >
+                  Open destination card
+                </button>
               )}
             </div>
           </div>

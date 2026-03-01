@@ -7,6 +7,7 @@ type MapLegendProps = {
   travelRingLabels: string[]
   showHomeBestOrb?: boolean
   hasBucketSunMarkers?: boolean
+  showTravelRings?: boolean
 }
 
 function Row({ color, label }: { color: string; label: string }) {
@@ -30,6 +31,7 @@ export default function MapLegend({
   travelRingLabels,
   showHomeBestOrb = false,
   hasBucketSunMarkers = false,
+  showTravelRings = true,
 }: MapLegendProps) {
   const safeMin = Number.isFinite(minHours) ? Math.max(0, Math.round(minHours * 10) / 10) : 0
   const safeMax = Number.isFinite(maxHours) ? Math.max(safeMin + 0.5, Math.round(maxHours * 10) / 10) : 10
@@ -85,9 +87,13 @@ export default function MapLegend({
         <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
           Travel rings
         </p>
-        <p className="mt-1 text-[10px] text-slate-500">
-          Rough ranges from origin: {travelRingLabels.join(' · ')}
-        </p>
+        {showTravelRings ? (
+          <p className="mt-1 text-[10px] text-slate-500">
+            Rough ranges from origin: {travelRingLabels.join(' · ')}
+          </p>
+        ) : (
+          <p className="mt-1 text-[10px] text-slate-500">Rings hidden</p>
+        )}
       </div>
     </div>
   )
