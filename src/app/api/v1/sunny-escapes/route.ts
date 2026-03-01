@@ -1651,7 +1651,11 @@ export async function GET(request: NextRequest) {
     .slice(0, topLimit)
   const visibleSunRows = withTravel.filter(r => sunshineForSurfaceMin(r) > 0)
   const visibleSunRowsWithGain = visibleSunRows.filter(r => isTenPctBetterThanOrigin(r))
-  const eligibleRows = adminView ? withTravel : visibleSunRowsWithGain
+  const hasTenPctBetterRows = visibleSunRowsWithGain.length > 0
+  const usingBestAvailableFallback = !adminView && !hasTenPctBetterRows && visibleSunRows.length > 0
+  const eligibleRows = adminView
+    ? withTravel
+    : (hasTenPctBetterRows ? visibleSunRowsWithGain : visibleSunRows)
   const windowHalfMin = Math.round(travelWindowH * 60)
   const strictWindowMin = travelMinH !== null ? Math.round(travelMinH * 60) : Math.max(0, maxTravelMin - windowHalfMin)
   const strictWindowMax = travelMaxH !== null ? Math.round(travelMaxH * 60) : maxTravelMin + windowHalfMin
@@ -1692,8 +1696,9 @@ export async function GET(request: NextRequest) {
     })
   const rankRowsBySun = (rows: ScoredWithTravel[], windowMin = strictWindowMin, windowMax = strictWindowMax): RankedEscapeRow[] => rows
     .map(r => {
+      const netSunMin = comparisonMetric(r)
       const sunshineMin = sunshineForSurfaceMin(r)
-      const netGainMin = Math.max(0, comparisonMetric(r) - comparisonOriginMin)
+      const netGainMin = Math.max(0, netSunMin - comparisonOriginMin)
       const inWindow = r.bestTravelMin >= windowMin && r.bestTravelMin <= windowMax
       const overflowMin = inWindow
         ? 0
@@ -1703,7 +1708,7 @@ export async function GET(request: NextRequest) {
         sun_score: r.sun_score,
         travel_time_min: r.bestTravelMin,
         net_gain_min: netGainMin,
-        combined_score: sunshineMin,
+        combined_score: netSunMin,
         sunshine_min: sunshineMin,
         temperature_c: r.temp_c,
         in_window: inWindow,
@@ -1711,6 +1716,7 @@ export async function GET(request: NextRequest) {
       }
     })
     .sort((a, b) => {
+      if (b.combined_score !== a.combined_score) return b.combined_score - a.combined_score
       if (b.sunshine_min !== a.sunshine_min) return b.sunshine_min - a.sunshine_min
       if (preferWarm && b.temperature_c !== a.temperature_c) return b.temperature_c - a.temperature_c
       if (b.sun_score.score !== a.sun_score.score) return b.sun_score.score - a.sun_score.score
@@ -1803,6 +1809,11 @@ export async function GET(request: NextRequest) {
         resultTier = 'best_available'
       }
     }
+  }
+
+  if (usingBestAvailableFallback && !adminAll) {
+    resultTier = 'best_available'
+    if (rankingPool.length === 0 && !hasExplicitWindow) rankingPool = eligibleRows
   }
 
   const rankedByNet = resultTier === 'best_available'

@@ -135,7 +135,7 @@ const ZURICH_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 })
-const HERO_DISMISS_STORAGE_KEY = 'fomosun-hero-dismiss-v1'
+const HERO_HIDE_STORAGE_KEY = 'fomosun-hero-hidden-v1'
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -337,6 +337,13 @@ function splitSunLabel(minutes: number): { major: string; fraction: string; unit
     }
   }
   return { major: formatted.replace('h', ''), fraction: '', unit: 'h' }
+}
+
+function formatSignedSunDelta(minutes: number) {
+  const safeMin = Number.isFinite(minutes) ? Math.round(minutes) : 0
+  if (safeMin === 0) return '0min'
+  const sign = safeMin > 0 ? '+' : '−'
+  return `${sign}${formatSunHours(Math.abs(safeMin))}`
 }
 
 function parseHHMMToHour(value?: string) {
@@ -663,7 +670,7 @@ export default function Home() {
   const [showMoreResults, setShowMoreResults] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
-  const [dismissedHeroByDay, setDismissedHeroByDay] = useState<Record<string, string[]>>({})
+  const [hiddenHeroByDay, setHiddenHeroByDay] = useState<Record<string, boolean>>({})
 
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -710,10 +717,10 @@ export default function Home() {
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      const raw = window.localStorage.getItem(HERO_DISMISS_STORAGE_KEY)
+      const raw = window.localStorage.getItem(HERO_HIDE_STORAGE_KEY)
       if (!raw) return
-      const parsed = JSON.parse(raw) as Record<string, string[]>
-      if (parsed && typeof parsed === 'object') setDismissedHeroByDay(parsed)
+      const parsed = JSON.parse(raw) as Record<string, boolean>
+      if (parsed && typeof parsed === 'object') setHiddenHeroByDay(parsed)
     } catch {
       // ignore malformed local storage
     }
@@ -721,8 +728,8 @@ export default function Home() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    window.localStorage.setItem(HERO_DISMISS_STORAGE_KEY, JSON.stringify(dismissedHeroByDay))
-  }, [dismissedHeroByDay])
+    window.localStorage.setItem(HERO_HIDE_STORAGE_KEY, JSON.stringify(hiddenHeroByDay))
+  }, [hiddenHeroByDay])
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -1181,7 +1188,7 @@ export default function Home() {
     () => `${zurichDayKey()}|${(origin.name || '').toLowerCase()}|${dayFocus}`,
     [dayFocus, origin.name]
   )
-  const dismissedHeroIdsForContext = dismissedHeroByDay[heroDismissContextKey] || []
+  const heroHiddenForContext = Boolean(hiddenHeroByDay[heroDismissContextKey])
   const hasTenPctBetterOption = resultRows.some((escape) => {
     const candidateSunMin = escapeNetSunMinutes(escape)
     if (heroOriginSunMin <= 0) return candidateSunMin > 0
@@ -1380,11 +1387,8 @@ export default function Home() {
     return deduped
   }, [defaultHeroEscape, fastestEscape, forceLongDemoStMoritzHero, forcedDemoStMoritzHero, resultRows, shouldStayHomeHero, stayHomeHero, warmestEscape])
   const heroEscape = useMemo(() => {
-    if (heroCandidatePool.length === 0) return null
-    const dismissed = new Set(dismissedHeroIdsForContext)
-    const firstVisible = heroCandidatePool.find((candidate) => !dismissed.has(candidate.destination.id))
-    return firstVisible || heroCandidatePool[0]
-  }, [dismissedHeroIdsForContext, heroCandidatePool])
+    return heroCandidatePool[0] || null
+  }, [heroCandidatePool])
   const stayHomeHeroId = stayHomeHero?.destination.id
   const isStayHomeHero = Boolean(
     !forceLongDemoStMoritzHero
@@ -1392,19 +1396,22 @@ export default function Home() {
     && stayHomeHeroId
     && heroEscape.destination.id === stayHomeHeroId
   )
-  const canDismissHeroToday = dayFocus === 'today' && heroCandidatePool.length > 1
+  const canDismissHeroToday = dayFocus === 'today' && Boolean(heroEscape) && !heroHiddenForContext
   const dismissHeroForToday = useCallback(() => {
     if (!heroEscape || !canDismissHeroToday) return
-    const heroId = heroEscape.destination.id
-    setDismissedHeroByDay((prev) => {
-      const current = prev[heroDismissContextKey] || []
-      if (current.includes(heroId)) return prev
-      return {
-        ...prev,
-        [heroDismissContextKey]: [...current, heroId].slice(-16),
-      }
-    })
+    setHiddenHeroByDay((prev) => ({
+      ...prev,
+      [heroDismissContextKey]: true,
+    }))
   }, [canDismissHeroToday, heroDismissContextKey, heroEscape])
+  const showHeroForToday = useCallback(() => {
+    setHiddenHeroByDay((prev) => {
+      if (!prev[heroDismissContextKey]) return prev
+      const next = { ...prev }
+      delete next[heroDismissContextKey]
+      return next
+    })
+  }, [heroDismissContextKey])
 
   const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
   const topRawSunMin = heroEscape
@@ -1442,6 +1449,13 @@ export default function Home() {
     }
     return ''
   }, [activeBand.id, dayFocus, resultTier])
+  const showingAlternatives = Boolean(
+    data
+    && !loading
+    && shouldStayHomeHero
+    && resultRows.length > 0
+    && !hasTenPctBetterOption
+  )
 
   const heroInfoLine = useMemo(() => {
     if (!heroEscape) return ''
@@ -1502,13 +1516,13 @@ export default function Home() {
 
   const filteredRows = useMemo(() => {
     const strictBetter = resultRows.filter(isSunnyEscapeCandidate)
-    const comparableFallback = (strictBetter.length === 0 && isStayHomeHero)
+    const alternativesFallback = strictBetter.length === 0
       ? resultRows.filter((escape) => (
         escape.destination.id !== heroEscape?.destination.id
-        && escapeRawSunMinutes(escape) >= heroOriginSunMin * 0.98
+        && escapeRawSunMinutes(escape) > 0
       ))
       : []
-    const sourceRows = strictBetter.length > 0 ? strictBetter : comparableFallback
+    const sourceRows = strictBetter.length > 0 ? strictBetter : alternativesFallback
     if (sourceRows.length === 0) return []
     const typed = activeTypeChips.length === 0
       ? sourceRows
@@ -1520,7 +1534,7 @@ export default function Home() {
         })
       })
     return typed
-  }, [activeTypeChips, escapeRawSunMinutes, heroEscape?.destination.id, heroOriginSunMin, isStayHomeHero, isSunnyEscapeCandidate, resultRows])
+  }, [activeTypeChips, escapeRawSunMinutes, heroEscape?.destination.id, isSunnyEscapeCandidate, resultRows])
 
   const displayLimit = showMoreResults ? 15 : 5
   const visibleRows = useMemo(() => filteredRows.slice(0, 15), [filteredRows])
@@ -1768,7 +1782,7 @@ export default function Home() {
           </div>
         )}
 
-        {heroEscape && (
+        {heroEscape && !heroHiddenForContext && (
           <section
             key={`hero-${heroEscape.destination.id}-${heroFlowTick}`}
             className={`fomo-card relative overflow-visible p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
@@ -1777,9 +1791,9 @@ export default function Home() {
               <button
                 type="button"
                 onClick={dismissHeroForToday}
-                className="absolute left-2 top-2 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
-                title="Dismiss this hero for today"
-                aria-label="Dismiss this hero for today"
+                className="absolute right-[98px] sm:right-[108px] top-2 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-600 transition hover:border-slate-400 hover:text-slate-800"
+                title="Hide hero today"
+                aria-label="Hide hero today"
               >
                 <X className="h-3.5 w-3.5" strokeWidth={2.1} />
               </button>
@@ -1924,6 +1938,21 @@ export default function Home() {
           </section>
         )}
 
+        {heroEscape && heroHiddenForContext && (
+          <section className="fomo-card mb-3 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] text-slate-600">Hero hidden for today.</p>
+              <button
+                type="button"
+                onClick={showHeroForToday}
+                className="text-[11px] font-semibold text-slate-700 underline underline-offset-2 hover:text-slate-900"
+              >
+                Show hero
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="mb-3 px-1.5">
           <div className="text-center mb-1.5">
             <p className="text-[10px] uppercase tracking-[0.13em] text-slate-500 font-semibold">Travel joystick™</p>
@@ -1981,7 +2010,7 @@ export default function Home() {
         <section ref={resultsRef}>
           <div className="flex items-baseline justify-between mb-2">
             <h2 className="fomo-font-display text-[16px] font-semibold text-slate-900">
-              Sunny escapes
+              {showingAlternatives ? 'Sunny alternatives' : 'Sunny escapes'}
             </h2>
             <div className="inline-flex items-center gap-1.5">
               <a
@@ -2022,6 +2051,11 @@ export default function Home() {
               </Select>
             </div>
           </div>
+          {showingAlternatives && (
+            <p className="mb-2 text-[11px] text-slate-500">
+              Home is already the strongest play. These are the best nearby options anyway.
+            </p>
+          )}
 
           <div className="grid grid-cols-5 gap-1 items-end -mx-px px-px -mb-px">
             {TRAVEL_BANDS.map((band, idx) => {
@@ -2127,7 +2161,7 @@ export default function Home() {
               const isOpen = openCardId === escape.destination.id
               const scoreBreakdown = escape.sun_score.score_breakdown
               const showBreakdown = Boolean(expandedScoreDetails[escape.destination.id])
-              const gainMin = Math.max(0, escapeNetSunMinutes(escape) - heroOriginSunMin)
+              const deltaVsOriginMin = Math.round(escapeNetSunMinutes(escape) - heroOriginSunMin)
               const originTimelineSunMin = dayFocus === 'tomorrow' ? heroOriginSunMin : originSunMin
               const escapeTimelineSunMin = dayFocus === 'tomorrow'
                 ? (Math.round((escape.tomorrow_sun_hours ?? 0) * 60) || escape.sun_score.sunshine_forecast_min)
@@ -2199,9 +2233,15 @@ export default function Home() {
                                 })()}
                               </div>
 
-                              <SunPlusIcon className="w-[13px] h-[13px]" />
-                              <span className="text-[11px] leading-none text-emerald-600 font-semibold text-right">
-                                +{formatSunHours(gainMin)}
+                              {showingAlternatives ? (
+                                <Sun className="w-[13px] h-[13px] text-slate-500 shrink-0" strokeWidth={1.9} />
+                              ) : (
+                                <SunPlusIcon className="w-[13px] h-[13px]" />
+                              )}
+                              <span className={`text-[11px] leading-none font-semibold text-right ${showingAlternatives ? 'text-slate-600' : 'text-emerald-600'}`}>
+                                {showingAlternatives
+                                  ? `${formatSignedSunDelta(deltaVsOriginMin)} vs origin`
+                                  : `+${formatSunHours(Math.max(0, deltaVsOriginMin))}`}
                               </span>
 
                               {bestTravel && (
