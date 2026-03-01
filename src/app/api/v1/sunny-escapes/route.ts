@@ -183,7 +183,7 @@ function mapsPlaceLabel(name?: string | null) {
   const value = String(name || '').trim()
   if (!value) return value
   const lower = value.toLowerCase()
-  if (lower.includes('switzerland') || lower.includes('germany') || lower.includes('france') || value.includes(',')) {
+  if (lower.includes('switzerland') || lower.includes('germany') || lower.includes('france') || lower.includes('italy') || lower.includes('liechtenstein') || value.includes(',')) {
     return value
   }
   return `${value}, Switzerland`
@@ -192,7 +192,7 @@ function mapsPlaceLabel(name?: string | null) {
 function buildGoogleMapsDirectionsUrl(mapsName: string | null | undefined, originName?: string, fallbackName?: string, country?: string) {
   const destinationLabel = mapsPlaceLabel(mapsName) || mapsPlaceLabel(
     fallbackName
-      ? `${fallbackName}${country === 'DE' ? ', Germany' : country === 'FR' ? ', France' : country === 'IT' ? ', Italy' : ', Switzerland'}`
+      ? `${fallbackName}${country === 'DE' ? ', Germany' : country === 'FR' ? ', France' : country === 'IT' ? ', Italy' : country === 'LI' ? ', Liechtenstein' : ', Switzerland'}`
       : 'Switzerland'
   )
   const p = new URLSearchParams({
@@ -1212,8 +1212,8 @@ export async function GET(request: NextRequest) {
     )
     : (
       originSnapshotSource === 'meteoswiss_ogd'
-        ? 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
-        : 'forecast:CH:meteoswiss_seamless|DE/FR/IT:best_match'
+        ? 'origin:meteoswiss-ogd|forecast:CH:meteoswiss_seamless|DE/FR/IT/LI:best_match'
+        : 'forecast:CH:meteoswiss_seamless|DE/FR/IT/LI:best_match'
     )
 
   // Pre-filter by rough distance and user filters

@@ -14,6 +14,7 @@ const COUNTRY_KEYWORDS = {
   DE: 'germany',
   FR: 'france',
   IT: 'italy',
+  LI: 'liechtenstein',
 }
 const execFileAsync = promisify(execFile)
 

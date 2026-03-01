@@ -7,7 +7,7 @@ import { DestinationStamp, type StampType } from '@/components/DestinationStamp'
 export const dynamic = 'force-dynamic'
 
 const PAGE_SIZE = 24
-const COUNTRY_ORDER: Array<'CH' | 'DE' | 'FR' | 'IT'> = ['CH', 'DE', 'FR', 'IT']
+const COUNTRY_ORDER: Array<'CH' | 'DE' | 'FR' | 'IT' | 'LI'> = ['CH', 'DE', 'FR', 'IT', 'LI']
 
 type SearchInput = {
   country?: string

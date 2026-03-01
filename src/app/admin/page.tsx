@@ -173,7 +173,7 @@ export default function AdminDiagnosticsPage() {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedCompare, setSelectedCompare] = useState<string[]>([])
-  const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true })
+  const [activeCountries, setActiveCountries] = useState<Record<string, boolean>>({ CH: true, DE: true, FR: true, IT: true, LI: true })
   const [activeTypeChips, setActiveTypeChips] = useState<AdminTypeChip[]>([])
   const [activeQualities, setActiveQualities] = useState<Record<DestinationQuality, boolean>>({
     verified: true,
@@ -497,7 +497,7 @@ export default function AdminDiagnosticsPage() {
   }, [forecastDay, adminOrigin, adminMode, inspectorBucketId])
 
   const byCountryCount = useMemo(() => {
-    const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0 }
+    const out: Record<string, number> = { CH: 0, DE: 0, FR: 0, IT: 0, LI: 0 }
     for (const r of rows) out[r.destination.country] = (out[r.destination.country] || 0) + 1
     return out
   }, [rows])
@@ -903,7 +903,7 @@ export default function AdminDiagnosticsPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto_auto_auto_auto_auto] gap-3 rounded-xl border border-slate-200 bg-white p-3 mb-3">
           <div className="flex flex-wrap gap-2 items-center bg-slate-50/50 p-2 rounded-xl">
-            {(['CH', 'DE', 'FR', 'IT'] as const).map(c => (
+            {(['CH', 'DE', 'FR', 'IT', 'LI'] as const).map(c => (
               <button
                 key={c}
                 onClick={() => toggleCountry(c)}

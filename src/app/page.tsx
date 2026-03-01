@@ -92,6 +92,7 @@ const MANUAL_ORIGIN_CITIES: CitySeed[] = [
   { name: 'Solothurn', lat: 47.2088, lon: 7.537 },
   { name: 'St. Gallen', lat: 47.4245, lon: 9.3767 },
   { name: 'Thun', lat: 46.7579, lon: 7.627 },
+  { name: 'Vaduz', lat: 47.1415, lon: 9.5215 },
   { name: 'Winterthur', lat: 47.4988, lon: 8.7237 },
   { name: 'Zug', lat: 47.1662, lon: 8.5155 },
   { name: 'Zurich', lat: 47.3769, lon: 8.5417 },
@@ -124,7 +125,7 @@ const HEADER_TAGLINES = [
   'Less fog. More day.',
 ] as const
 
-const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR', IT: 'IT' }
+const FLAG: Record<string, string> = { CH: 'CH', DE: 'DE', FR: 'FR', IT: 'IT', LI: 'LI' }
 const TIMELINE_TICKS = [8, 10, 12, 14, 16, 18] as const
 const ZURICH_TZ = 'Europe/Zurich'
 const ZURICH_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {

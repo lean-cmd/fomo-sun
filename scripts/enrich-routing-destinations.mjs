@@ -8,6 +8,8 @@ const COUNTRY_NAME = {
   CH: 'Switzerland',
   DE: 'Germany',
   FR: 'France',
+  IT: 'Italy',
+  LI: 'Liechtenstein',
 }
 
 const ROUTING_OVERRIDES = {

@@ -25,7 +25,7 @@ export async function GET() {
         },
       },
       coverage: {
-        countries: ['CH', 'DE', 'FR', 'IT'],
+        countries: ['CH', 'DE', 'FR', 'IT', 'LI'],
         destinations: destinations.length,
         forecast_models: ['meteoswiss-icon-ch1', 'meteoswiss-icon-ch2', 'open-meteo-best-match'],
         forecast_horizon_hours: 120,

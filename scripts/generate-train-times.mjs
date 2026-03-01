@@ -23,6 +23,7 @@ const COUNTRY_LABEL_BY_CODE = {
   DE: 'Germany',
   FR: 'France',
   IT: 'Italy',
+  LI: 'Liechtenstein',
 }
 
 function parseArgs(argv) {

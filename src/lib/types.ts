@@ -1,7 +1,7 @@
 // FOMO Sun - Core Types
 
 export interface Destination {
-  id: string; name: string; region: string; country: 'CH' | 'DE' | 'FR' | 'IT'
+  id: string; name: string; region: string; country: 'CH' | 'DE' | 'FR' | 'IT' | 'LI'
   lat: number; lon: number; altitude_m: number; types: DestinationType[]
   plan_template: string; maps_name: string; sbb_name?: string | null
   travel_car_min?: number

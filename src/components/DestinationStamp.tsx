@@ -1,5 +1,5 @@
 type StampType = 'mountain' | 'lake' | 'town' | 'thermal' | 'ski' | 'viewpoint' | 'default'
-type CountryCode = 'CH' | 'DE' | 'FR' | 'IT'
+type CountryCode = 'CH' | 'DE' | 'FR' | 'IT' | 'LI'
 type CityVariant = 'none' | 'generic' | 'basel' | 'bern' | 'zurich' | 'geneva'
 type StampFeatures = {
   lake: boolean
@@ -208,6 +208,42 @@ const COUNTRY_PALETTES: Record<CountryCode, PosterPalette[]> = {
       text: '#2A3442',
       subtext: '#52525B',
       snow: '#F7F9FA',
+    },
+  ],
+  LI: [
+    {
+      paper: '#F3EBDD',
+      frame: '#6C4F3B',
+      skyTop: '#5B7CA2',
+      skyBottom: '#A7C4DB',
+      sun: '#E0AE58',
+      ridgeFar: '#7E8B8F',
+      ridgeMid: '#5C6D77',
+      ridgeNear: '#35505F',
+      meadow: '#789467',
+      water: '#4A7292',
+      rail: '#584438',
+      roof: '#9A4738',
+      text: '#1F2A37',
+      subtext: '#475569',
+      snow: '#F7F8FB',
+    },
+    {
+      paper: '#F2E9DA',
+      frame: '#6A503E',
+      skyTop: '#56789E',
+      skyBottom: '#A0C1DB',
+      sun: '#DCA656',
+      ridgeFar: '#7A888F',
+      ridgeMid: '#576A75',
+      ridgeNear: '#31495A',
+      meadow: '#729160',
+      water: '#3F6E8E',
+      rail: '#554236',
+      roof: '#A04136',
+      text: '#1F2937',
+      subtext: '#4B5563',
+      snow: '#F6F8FA',
     },
   ],
 }
@@ -836,6 +872,16 @@ function renderFlag(country: CountryCode) {
         <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#F8FAFC" />
         <rect x="72" y="10" width="6" height="12" fill="#355D96" />
         <rect x="84" y="10" width="6" height="12" fill="#B14545" />
+      </g>
+    )
+  }
+  if (country === 'LI') {
+    return (
+      <g>
+        <rect x="72" y="10" width="18" height="12" rx="2.2" fill="#D62828" />
+        <rect x="72" y="10" width="18" height="6" rx="2.2" fill="#1D4ED8" />
+        <circle cx="75.4" cy="12.9" r="1.2" fill="#F3CA5D" />
+        <rect x="74.6" y="12" width="1.6" height="0.8" rx="0.2" fill="#F3CA5D" />
       </g>
     )
   }

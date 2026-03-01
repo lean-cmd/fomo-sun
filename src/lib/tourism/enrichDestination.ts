@@ -6,7 +6,7 @@ export interface DestinationEnrichmentInput {
   lat: number
   lon: number
   region: string
-  country?: 'CH' | 'DE' | 'FR' | 'IT'
+  country?: 'CH' | 'DE' | 'FR' | 'IT' | 'LI'
   types?: DestinationType[]
   description?: string
   plan_template?: string
@@ -88,13 +88,14 @@ function mapTypeToTag(type: DestinationType) {
 function mapsPlace(name: string, country?: string) {
   const raw = normalizeText(name)
   if (!raw) return ''
-  const hasCountry = /\b(switzerland|germany|france|italy)\b/i.test(raw)
+  const hasCountry = /\b(switzerland|germany|france|italy|liechtenstein)\b/i.test(raw)
   if (hasCountry || raw.includes(',')) return raw
   if (!country) return raw
   if (country === 'CH') return `${raw}, Switzerland`
   if (country === 'DE') return `${raw}, Germany`
   if (country === 'FR') return `${raw}, France`
   if (country === 'IT') return `${raw}, Italy`
+  if (country === 'LI') return `${raw}, Liechtenstein`
   return raw
 }
 

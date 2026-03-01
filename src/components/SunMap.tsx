@@ -48,7 +48,7 @@ type ApiEscapeRow = {
     lat: number
     lon: number
     region: string
-    country: 'CH' | 'DE' | 'FR' | 'IT'
+    country: 'CH' | 'DE' | 'FR' | 'IT' | 'LI'
     sbb_name?: string | null
   }
   sun_score?: { score?: number; sunshine_forecast_min?: number }
@@ -77,7 +77,7 @@ type MapRow = {
   id: string
   name: string
   region: string
-  country: 'CH' | 'DE' | 'FR' | 'IT'
+  country: 'CH' | 'DE' | 'FR' | 'IT' | 'LI'
   lat: number
   lon: number
   sunScore: number
@@ -106,6 +106,7 @@ export const MAP_ORIGIN_CITIES: OriginSeed[] = [
   { name: 'Solothurn', lat: 47.2088, lon: 7.537, kind: 'manual' },
   { name: 'St. Gallen', lat: 47.4245, lon: 9.3767, kind: 'manual' },
   { name: 'Thun', lat: 46.7579, lon: 7.627, kind: 'manual' },
+  { name: 'Vaduz', lat: 47.1415, lon: 9.5215, kind: 'manual' },
   { name: 'Winterthur', lat: 47.4988, lon: 8.7237, kind: 'manual' },
   { name: 'Zug', lat: 47.1662, lon: 8.5155, kind: 'manual' },
   { name: 'Zurich', lat: 47.3769, lon: 8.5417, kind: 'manual' },
