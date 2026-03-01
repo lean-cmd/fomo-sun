@@ -52,7 +52,7 @@ export default function MapLegend({
             <div
               className="mt-1.5 h-2.5 w-full rounded-full ring-1 ring-slate-200"
               style={{
-                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(37 99 235), rgb(253 224 71))',
+                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(59 130 246), rgb(254 240 138), rgb(250 204 21), rgb(234 179 8))',
               }}
             />
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-600">

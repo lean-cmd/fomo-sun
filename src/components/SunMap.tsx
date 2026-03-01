@@ -113,8 +113,10 @@ const TRAVEL_RING_BUCKETS = [
   { label: '6.5h', hours: 6.5 },
 ] as const
 const COLOR_LOW: [number, number, number] = [148, 163, 184] // grey
-const COLOR_MED: [number, number, number] = [37, 99, 235] // blue
-const COLOR_HIGH: [number, number, number] = [253, 224, 71] // bright yellow
+const COLOR_MID: [number, number, number] = [59, 130, 246] // blue
+const COLOR_SUNNY: [number, number, number] = [254, 240, 138] // pale yellow
+const COLOR_VERY_SUNNY: [number, number, number] = [250, 204, 21] // strong yellow
+const COLOR_PEAK_SUN: [number, number, number] = [234, 179, 8] // deep yellow
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -139,8 +141,10 @@ function mixColor(a: [number, number, number], b: [number, number, number], t: n
 
 function sunHoursColor(hours: number, maxHours: number) {
   const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
-  if (normalized <= 0.5) return mixColor(COLOR_LOW, COLOR_MED, normalized * 2)
-  return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.5) * 2)
+  if (normalized <= 0.35) return mixColor(COLOR_LOW, COLOR_MID, normalized / 0.35)
+  if (normalized <= 0.6) return mixColor(COLOR_MID, COLOR_SUNNY, (normalized - 0.35) / 0.25)
+  if (normalized <= 0.82) return mixColor(COLOR_SUNNY, COLOR_VERY_SUNNY, (normalized - 0.6) / 0.22)
+  return mixColor(COLOR_VERY_SUNNY, COLOR_PEAK_SUN, (normalized - 0.82) / 0.18)
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -180,7 +184,7 @@ function ringLabelPosition(originLat: number, originLon: number, ringKm: number,
 function travelRingLabelIcon(label: string, km: number) {
   return divIcon({
     className: 'fomo-map-ring-label',
-    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.30);background:rgba(255,255,255,.9);padding:2px 6px;border-radius:999px;font-size:10px;font-weight:600;color:#475569;line-height:1;white-space:nowrap;box-shadow:0 2px 8px rgba(15,23,42,.12)">${label} · ${Math.round(km)}km</span>`,
+    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.16);background:rgba(255,255,255,.62);padding:1px 5px;border-radius:999px;font-size:9px;font-weight:500;color:rgba(71,85,105,.72);line-height:1;white-space:nowrap;box-shadow:0 1px 4px rgba(15,23,42,.08)">${label} · ${Math.round(km)}km</span>`,
     iconSize: [0, 0],
     iconAnchor: [0, 0],
   })
@@ -382,7 +386,7 @@ export default function SunMap({
         />
         {showSunHoursOverlay && overlayRows.map((row) => {
           const normalized = clamp(row.activeSunHours / Math.max(4, overlayMaxHours), 0, 1)
-          const radiusM = 9000 + normalized * 22000
+          const radiusM = 7000 + normalized * 14000
           const color = sunHoursColor(row.activeSunHours, overlayMaxHours)
           return (
             <Circle
@@ -393,9 +397,9 @@ export default function SunMap({
               pathOptions={{
                 color,
                 fillColor: color,
-                fillOpacity: 0.12 + normalized * 0.26,
-                opacity: 0.22 + normalized * 0.24,
-                weight: 0.6,
+                fillOpacity: 0.04 + normalized * 0.12,
+                opacity: 0.08 + normalized * 0.14,
+                weight: 0.35,
               }}
             />
           )
@@ -430,9 +434,9 @@ export default function SunMap({
               interactive={false}
               pathOptions={{
                 color: '#475569',
-                weight: ring.hours >= 3 ? 1.8 : 1.5,
-                opacity: 0.42,
-                dashArray: '7 7',
+                weight: ring.hours >= 3 ? 1.2 : 1.05,
+                opacity: 0.24,
+                dashArray: '5 9',
                 fillOpacity: 0,
               }}
             />

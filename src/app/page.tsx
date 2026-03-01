@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import {
+  ArrowUpDown,
   Car,
   Clock3,
   ChevronDown,
@@ -29,6 +30,7 @@ import { Select } from '@/components/ui'
 type TripSpan = 'daytrip' | 'plus1day'
 type DayFocus = 'today' | 'tomorrow'
 type EscapeCard = SunnyEscapesResponse['escapes'][number]
+type AlternativeSort = 'fomo' | 'closest' | 'warmest' | 'sun'
 type TrainConnectionPreview = {
   id: string
   departure_hhmm: string
@@ -677,6 +679,7 @@ export default function Home() {
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [showResultFilters, setShowResultFilters] = useState(false)
   const [showMoreResults, setShowMoreResults] = useState(false)
+  const [alternativeSort, setAlternativeSort] = useState<AlternativeSort>('fomo')
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
   const [hiddenHeroByDay, setHiddenHeroByDay] = useState<Record<string, boolean>>({})
@@ -1546,8 +1549,29 @@ export default function Home() {
           return has(chip)
         })
       })
-    return typed
-  }, [activeTypeChips, escapeRawSunMinutes, heroEscape?.destination.id, isSunnyEscapeCandidate, resultRows])
+    if (strictBetter.length > 0) return typed
+
+    const travelMinutes = (escape: EscapeCard) => getBestTravel(escape)?.min ?? Infinity
+    return [...typed].sort((a, b) => {
+      if (alternativeSort === 'closest') {
+        const d = travelMinutes(a) - travelMinutes(b)
+        if (d !== 0) return d
+      }
+      if (alternativeSort === 'warmest') {
+        const d = (b.weather_now?.temp_c ?? -99) - (a.weather_now?.temp_c ?? -99)
+        if (d !== 0) return d
+      }
+      if (alternativeSort === 'sun') {
+        const d = escapeRawSunMinutes(b) - escapeRawSunMinutes(a)
+        if (d !== 0) return d
+      }
+      const scoreDiff = (b.sun_score?.score ?? 0) - (a.sun_score?.score ?? 0)
+      if (scoreDiff !== 0) return scoreDiff
+      const sunDiff = escapeRawSunMinutes(b) - escapeRawSunMinutes(a)
+      if (sunDiff !== 0) return sunDiff
+      return travelMinutes(a) - travelMinutes(b)
+    })
+  }, [activeTypeChips, alternativeSort, escapeRawSunMinutes, heroEscape?.destination.id, isSunnyEscapeCandidate, resultRows])
 
   const displayLimit = showMoreResults ? 15 : 5
   const visibleRows = useMemo(() => filteredRows.slice(0, 15), [filteredRows])
@@ -1662,22 +1686,22 @@ export default function Home() {
     const destinationSky = timelineEmojiPreview(escape.sun_timeline, shareDay)
     const gainMin = Math.max(0, destinationNetSunMin - originComparisonMin)
     const shareText = [
-      isStayHomeShare ? '🌤️ FOMO Sun: Stay local today' : '🌤️ FOMO Sun: Escape the fog!',
+      isStayHomeShare ? '🌤 FOMO Sun: Stay local today' : '🌤 FOMO Sun: Escape the fog!',
       '',
       `📍 ${escape.destination.name} (${escape.destination.altitude_m}m, ${escape.destination.region})`,
-      `☀️ ${destinationSun} sun (${formatSunHours(destinationNetSunMin)} net) · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
+      `☀ ${destinationSun} sun (${formatSunHours(destinationNetSunMin)} net) · FOMO ${Math.round(escape.sun_score.score * 100)}%`,
       travelText,
       '',
       `${origin.name}:    ${originTimelinePreview}`,
       `${escape.destination.name}: ${destinationSky}`,
       '',
       gainMin > 0
-        ? `🟢 +${formatSunHours(gainMin)} more sun than ${origin.name} ☀️`
+        ? `🟢 +${formatSunHours(gainMin)} more sun than ${origin.name} ☀`
         : (isStayHomeShare
-          ? `✅ Stay local: this is as good as it gets today in your range`
+          ? '✅ Stay local: as sunny as it gets today in your range'
           : `No additional sun vs ${origin.name}`),
       '',
-      `→ fomosun.com`,
+      '🔗 fomosun.com',
     ].filter(Boolean).join('\n')
 
     return `https://wa.me/?text=${encodeURIComponent(shareText)}`
@@ -1907,7 +1931,7 @@ export default function Home() {
                 onClick={jumpToBestDetails}
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
-                {isStayHomeHero ? 'See alternatives ↓' : 'Escape now ↓'}
+                {isStayHomeHero ? 'See list ↓' : 'Escape now ↓'}
               </button>
               <a
                 href={buildWhatsAppHref(heroEscape, heroDayFocus)}
@@ -1916,7 +1940,7 @@ export default function Home() {
                 className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
               >
                 <WhatsAppIcon className="w-3.5 h-3.5" />
-                {isStayHomeHero ? 'Share local plan ↗' : 'Share ↗'}
+                Share ↗
               </a>
               {isStayHomeHero ? (
                 <>
@@ -1926,7 +1950,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
                   >
-                    Explore {compactLabel(stayHomeCityName, 12)} ↗
+                    Explore ↗
                   </a>
                   <a
                     href={stayHomeCalendarUrl}
@@ -1934,7 +1958,7 @@ export default function Home() {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 text-[12px] font-semibold text-slate-600 hover:text-slate-900"
                   >
-                    Local events ↗
+                    Events ↗
                   </a>
                 </>
               ) : (
@@ -2021,7 +2045,7 @@ export default function Home() {
         </section>
 
         <section ref={resultsRef}>
-          <div className={`flex items-center justify-between ${showResultFilters ? 'mb-0' : 'mb-2'}`}>
+          <div className="flex items-center justify-between mb-2">
             <h2 className="fomo-font-display text-[16px] font-semibold text-slate-900">
               {showingAlternatives ? 'Sunny alternatives' : 'Sunny escapes'}
             </h2>
@@ -2037,10 +2061,8 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setShowResultFilters(v => !v)}
-                className={`h-8 px-2.5 border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showResultFilters
-                  ? 'rounded-t-2xl rounded-b-none border-slate-200 border-b-white bg-white text-slate-700'
-                  : activeTypeChips.length > 0
-                    ? 'rounded-full bg-amber-100 border-amber-300 text-amber-800'
+                className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showResultFilters || activeTypeChips.length > 0
+                  ? 'bg-amber-100 border-amber-300 text-amber-800'
                   : 'bg-white border-slate-200 text-slate-600'
                   }`}
                 aria-expanded={showResultFilters}
@@ -2064,7 +2086,7 @@ export default function Home() {
             </div>
           </div>
           {showResultFilters && (
-            <section id="result-filter-chips" className="mb-2.5 -mt-px rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 sm:px-3">
+            <section id="result-filter-chips" className="mb-2.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2.5 sm:px-3">
               <div className="overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 min-w-max">
                   {TYPE_FILTER_CHIPS.map(chip => {
@@ -2121,6 +2143,24 @@ export default function Home() {
                 <Sun className="w-3.5 h-3.5 text-amber-700 mt-[1px] shrink-0" strokeWidth={1.9} />
                 <p className="text-[12px] leading-snug font-medium text-amber-900">{resultsNotice}</p>
               </div>
+              {showingAlternatives && filteredRows.length > 1 && (
+                <div className="mt-2 inline-flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700">Sort</span>
+                  <Select
+                    value={alternativeSort}
+                    onChange={(e) => setAlternativeSort(e.target.value as AlternativeSort)}
+                    shellClassName="inline-flex h-7 rounded-full border-amber-200 bg-white px-2 text-amber-800"
+                    className="max-w-[98px] sm:max-w-none pr-4"
+                    icon={<ArrowUpDown className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                    aria-label="Sort sunny alternatives"
+                  >
+                    <option value="fomo">FOMOscoreTM</option>
+                    <option value="closest">Closest</option>
+                    <option value="warmest">Warmest</option>
+                    <option value="sun">Most sun hr</option>
+                  </Select>
+                </div>
+              )}
             </div>
           )}
 
