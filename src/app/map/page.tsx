@@ -68,7 +68,7 @@ export default function MapPage({ searchParams }: { searchParams?: SearchParamsI
 
           <div className="inline-flex items-center gap-2 text-slate-900">
             <MapPinned className="h-4 w-4 text-amber-600" />
-            <h1 className="text-[14px] font-semibold tracking-[0.02em]">Sunshine Map</h1>
+            <h1 className="text-[14px] font-semibold tracking-[0.02em]">Fomosun map TM</h1>
           </div>
 
           <div className="text-right text-[10px] font-semibold text-slate-500">

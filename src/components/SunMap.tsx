@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  Circle,
   CircleMarker,
   MapContainer,
   Popup,
@@ -11,7 +12,7 @@ import {
   ZoomControl,
   useMap,
 } from 'react-leaflet'
-import { ChevronDown, ExternalLink, Loader2, Sun, Zap } from 'lucide-react'
+import { ChevronDown, ExternalLink, Loader2, LocateFixed, Route, Sun, Zap } from 'lucide-react'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
 
@@ -102,6 +103,17 @@ const SWISS_HEAT_BOUNDS = {
 const HEAT_GRID_LAT_STEP = 0.2
 const HEAT_GRID_LON_STEP = 0.22
 const DEFAULT_OVERLAY_MAX_HOURS = 10
+const TRAVEL_RING_KM_PER_HOUR = 52
+const TRAVEL_RING_BUCKETS = [
+  { label: '1h', hours: 1 },
+  { label: '1.5h', hours: 1.5 },
+  { label: '2h', hours: 2 },
+  { label: '3h', hours: 3 },
+  { label: '6.5h', hours: 6.5 },
+] as const
+const COLOR_LOW: [number, number, number] = [148, 163, 184]
+const COLOR_MED: [number, number, number] = [250, 204, 21]
+const COLOR_HIGH: [number, number, number] = [34, 197, 94]
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -118,11 +130,16 @@ function scoreColor(score: number) {
   return '#94a3b8'
 }
 
+function mixColor(a: [number, number, number], b: [number, number, number], t: number) {
+  const clamped = clamp(t, 0, 1)
+  const mix = (idx: number) => Math.round(a[idx] + (b[idx] - a[idx]) * clamped)
+  return `rgb(${mix(0)} ${mix(1)} ${mix(2)})`
+}
+
 function sunHoursColor(hours: number, maxHours: number) {
   const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
-  const hue = 214 - normalized * 170
-  const lightness = 35 + normalized * 25
-  return `hsl(${hue.toFixed(1)} 86% ${lightness.toFixed(1)}%)`
+  if (normalized <= 0.5) return mixColor(COLOR_LOW, COLOR_MED, normalized * 2)
+  return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.5) * 2)
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -213,8 +230,10 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
   const [origin, setOrigin] = useState<OriginSeed>(initialOrigin)
   const [mapDay, setMapDay] = useState<MapDay>(initialDay)
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
+  const [showTravelRings, setShowTravelRings] = useState(true)
   const [showSunshine, setShowSunshine] = useState(false)
   const [showRadiation, setShowRadiation] = useState(false)
+  const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -233,6 +252,26 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
     if (!byName.has(initialOrigin.name)) byName.set(initialOrigin.name, initialOrigin)
     return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [initialOrigin])
+
+  const centerOnMyLocation = useCallback(() => {
+    if (!navigator.geolocation || locatingMe) return
+    setLocatingMe(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setOrigin({
+          name: 'Current location',
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          kind: 'gps',
+        })
+        setLocatingMe(false)
+      },
+      () => {
+        setLocatingMe(false)
+      },
+      { enableHighAccuracy: false, timeout: 7000 }
+    )
+  }, [locatingMe])
 
   const fetchScoredDestinations = useCallback(async (signal: AbortSignal) => {
     setLoading(true)
@@ -354,6 +393,7 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
         zoom={8}
         minZoom={6}
         maxZoom={16}
+        preferCanvas
         maxBounds={[[45.5, 5.2], [48.2, 11.25]]}
         maxBoundsViscosity={0.68}
         zoomControl={false}
@@ -415,6 +455,22 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
           </Popup>
         </CircleMarker>
 
+        {showTravelRings && TRAVEL_RING_BUCKETS.map((ring) => (
+          <Circle
+            key={`ring-${ring.label}`}
+            center={[origin.lat, origin.lon]}
+            radius={ring.hours * TRAVEL_RING_KM_PER_HOUR * 1000}
+            interactive={false}
+            pathOptions={{
+              color: '#64748b',
+              weight: ring.hours >= 3 ? 1.2 : 1,
+              opacity: 0.25,
+              dashArray: '6 8',
+              fillOpacity: 0,
+            }}
+          />
+        ))}
+
         {markerRows.map(row => (
           <CircleMarker
             key={row.id}
@@ -459,77 +515,86 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
       </MapContainer>
 
       <div className="pointer-events-none absolute inset-0 z-[500]">
-        <div className="pointer-events-auto absolute left-3 top-3 flex max-w-[92vw] flex-wrap items-center gap-1.5 rounded-xl border border-slate-200 bg-white/92 p-1.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
-          <div className="inline-flex h-8 items-center rounded-lg border border-slate-200 bg-slate-50 p-1">
+        <div className="pointer-events-auto absolute left-3 top-3 flex max-w-[90vw] flex-col gap-1.5 rounded-xl border border-slate-200 bg-white/92 px-2.5 py-2 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
+          <div className="inline-flex items-center gap-1 text-[10.5px]">
             <button
               type="button"
               onClick={() => {
                 setMapDay('today')
                 setShowSunHoursOverlay(true)
               }}
-              className={`h-6 rounded-md px-2.5 text-[11px] font-semibold transition ${
-                mapDay === 'today' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-              }`}
+              className={`px-1 py-0.5 transition ${mapDay === 'today' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
             >
               Today
             </button>
+            <span className="text-slate-300">/</span>
             <button
               type="button"
               onClick={() => {
                 setMapDay('tomorrow')
                 setShowSunHoursOverlay(true)
               }}
-              className={`h-6 rounded-md px-2.5 text-[11px] font-semibold transition ${
-                mapDay === 'tomorrow' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
-              }`}
+              className={`px-1 py-0.5 transition ${mapDay === 'tomorrow' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
             >
               Tomorrow
             </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowSunHoursOverlay(prev => !prev)}
-            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
-              showSunHoursOverlay
-                ? 'border-amber-300 bg-amber-50 text-amber-800'
-                : 'border-slate-200 bg-white text-slate-600'
-            }`}
-            title="Interpolated sun hours overlay"
-          >
-            <Sun className="h-3.5 w-3.5" />
-            Sun hours
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowSunshine(prev => !prev)}
-            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
-              showSunshine
-                ? 'border-amber-300 bg-amber-50 text-amber-800'
-                : 'border-slate-200 bg-white text-slate-600'
-            }`}
-          >
-            <Sun className="h-3.5 w-3.5" />
-            MeteoSwiss sun
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowRadiation(prev => !prev)}
-            className={`inline-flex h-8 items-center gap-1 rounded-lg border px-2.5 text-[11px] font-semibold transition ${
-              showRadiation
-                ? 'border-amber-300 bg-amber-50 text-amber-800'
-                : 'border-slate-200 bg-white text-slate-600'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            Radiation
-          </button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowSunHoursOverlay(prev => !prev)}
+              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
+                showSunHoursOverlay
+                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+              title="Interpolated sun hours overlay"
+            >
+              <Sun className="h-3 w-3" />
+              Overlay
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSunshine(prev => !prev)}
+              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
+                showSunshine
+                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              <Sun className="h-3 w-3" />
+              Sun
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRadiation(prev => !prev)}
+              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
+                showRadiation
+                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              <Zap className="h-3 w-3" />
+              Radiation
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowTravelRings(prev => !prev)}
+              className={`inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[10px] font-semibold transition ${
+                showTravelRings
+                  ? 'border-amber-300 bg-amber-50 text-amber-800'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+              title="Travel bucket rings"
+            >
+              <Route className="h-3 w-3" />
+              Rings
+            </button>
+          </div>
         </div>
 
-        <div className="pointer-events-auto absolute right-3 top-3">
-          <div className="relative inline-flex items-center rounded-xl border border-slate-200 bg-white/92 pr-2.5 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
+        <div className="pointer-events-auto absolute right-3 top-3 flex flex-col items-end gap-1.5">
+          <div className="relative inline-flex items-center min-w-0 max-w-[120px] rounded-lg border border-slate-200 bg-white/92 pr-1.5 pl-1 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur text-slate-500">
             <select
               value={origin.name}
               onChange={(event) => {
@@ -537,7 +602,8 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
                 if (!selected) return
                 setOrigin(selected)
               }}
-              className="h-8 rounded-xl bg-transparent pl-2.5 pr-6 text-[11px] font-semibold text-slate-800 focus:outline-none"
+              className="h-7 pl-1 pr-5 bg-transparent text-[11px] font-medium text-right text-slate-500 appearance-none focus:outline-none focus:text-slate-700 cursor-pointer"
+              aria-label="Select origin city"
             >
               {originChoices.map(city => (
                 <option key={city.name} value={city.name} className="text-slate-900">
@@ -545,16 +611,27 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
                 </option>
               ))}
             </select>
-            <ChevronDown className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-slate-500" />
+            <ChevronDown className="pointer-events-none absolute right-1.5 h-3.5 w-3.5 text-slate-400" />
           </div>
+          <button
+            type="button"
+            onClick={centerOnMyLocation}
+            disabled={locatingMe}
+            className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white/92 px-2 text-[10px] font-semibold text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur transition hover:text-slate-800 disabled:opacity-60"
+          >
+            <LocateFixed className="h-3 w-3" />
+            {locatingMe ? 'Locating…' : 'Center me'}
+          </button>
         </div>
 
         <MapLegend
-          className="absolute bottom-3 left-3 hidden md:block"
+          className="absolute bottom-3 left-3 max-w-[250px]"
           day={mapDay}
           overlayVisible={showSunHoursOverlay}
           minHours={overlayMinHours}
           maxHours={overlayMaxHours}
+          showTravelRings={showTravelRings}
+          travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
         />
 
         <div className="pointer-events-auto absolute bottom-3 right-3 rounded-lg border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">

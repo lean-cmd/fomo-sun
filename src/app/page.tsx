@@ -9,11 +9,13 @@ import {
   LocateFixed,
   MapPinned,
   Mountain,
+  Route,
   SlidersHorizontal,
   Sun,
   Plus,
   Thermometer,
   TrainFront,
+  X,
 } from 'lucide-react'
 import {
   DaylightWindow,
@@ -132,6 +134,7 @@ const ZURICH_CLOCK_FORMATTER = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',
 })
+const HERO_DISMISS_STORAGE_KEY = 'fomosun-hero-dismiss-v1'
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
@@ -655,9 +658,11 @@ export default function Home() {
   const [mode, setMode] = useState<TravelMode>('both')
   const [activeTypeChips, setActiveTypeChips] = useState<EscapeFilterChip[]>([])
   const [showResultFilters, setShowResultFilters] = useState(false)
+  const [showTypeFilters, setShowTypeFilters] = useState(false)
   const [showMoreResults, setShowMoreResults] = useState(false)
   const [tripSpan, setTripSpan] = useState<TripSpan>('daytrip')
   const [tripSpanTouched, setTripSpanTouched] = useState(false)
+  const [dismissedHeroByDay, setDismissedHeroByDay] = useState<Record<string, string[]>>({})
 
   const [data, setData] = useState<SunnyEscapesResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -700,6 +705,23 @@ export default function Home() {
   const autoGeoAttemptedRef = useRef(false)
   const midnightRefreshDayRef = useRef<string>('')
   const lastForceTokenRef = useRef(0)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const raw = window.localStorage.getItem(HERO_DISMISS_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Record<string, string[]>
+      if (parsed && typeof parsed === 'object') setDismissedHeroByDay(parsed)
+    } catch {
+      // ignore malformed local storage
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    window.localStorage.setItem(HERO_DISMISS_STORAGE_KEY, JSON.stringify(dismissedHeroByDay))
+  }, [dismissedHeroByDay])
 
   const manualOrigin = useMemo(
     () => MANUAL_ORIGIN_CITIES.find(city => city.name === selectedCity) || MANUAL_ORIGIN_CITIES[0],
@@ -1154,6 +1176,11 @@ export default function Home() {
   const heroOriginSunMin = dayFocus === 'tomorrow' ? originTomorrowMin : originSunMin
   const defaultHeroEscape = resultRows[0] ?? fastestEscape ?? warmestEscape ?? null
   const isBaselOrigin = forceQuickDemoBaselHero || /\bbasel\b/i.test(origin.name)
+  const heroDismissContextKey = useMemo(
+    () => `${zurichDayKey()}|${(origin.name || '').toLowerCase()}|${dayFocus}`,
+    [dayFocus, origin.name]
+  )
+  const dismissedHeroIdsForContext = dismissedHeroByDay[heroDismissContextKey] || []
   const hasTenPctBetterOption = resultRows.some((escape) => {
     const candidateSunMin = escapeNetSunMinutes(escape)
     if (heroOriginSunMin <= 0) return candidateSunMin > 0
@@ -1336,10 +1363,47 @@ export default function Home() {
       },
     }
   }, [data, dayFocus, defaultHeroEscape, fastestEscape, forceLongDemoStMoritzHero, heroOriginSunMin, resultRows, stayHomeHero, warmestEscape])
-  const isStayHomeHero = !forceLongDemoStMoritzHero && shouldStayHomeHero && Boolean(stayHomeHero)
-  const heroEscape = forceLongDemoStMoritzHero
-    ? (forcedDemoStMoritzHero ?? defaultHeroEscape)
-    : (isStayHomeHero ? stayHomeHero : defaultHeroEscape)
+  const heroCandidatePool = useMemo(() => {
+    const ordered = forceLongDemoStMoritzHero
+      ? [forcedDemoStMoritzHero, defaultHeroEscape, ...resultRows]
+      : shouldStayHomeHero
+        ? [stayHomeHero, defaultHeroEscape, fastestEscape, warmestEscape, ...resultRows]
+        : [defaultHeroEscape, fastestEscape, warmestEscape, ...resultRows]
+    const deduped: EscapeCard[] = []
+    const seen = new Set<string>()
+    for (const candidate of ordered) {
+      if (!candidate || seen.has(candidate.destination.id)) continue
+      seen.add(candidate.destination.id)
+      deduped.push(candidate)
+    }
+    return deduped
+  }, [defaultHeroEscape, fastestEscape, forceLongDemoStMoritzHero, forcedDemoStMoritzHero, resultRows, shouldStayHomeHero, stayHomeHero, warmestEscape])
+  const heroEscape = useMemo(() => {
+    if (heroCandidatePool.length === 0) return null
+    const dismissed = new Set(dismissedHeroIdsForContext)
+    const firstVisible = heroCandidatePool.find((candidate) => !dismissed.has(candidate.destination.id))
+    return firstVisible || heroCandidatePool[0]
+  }, [dismissedHeroIdsForContext, heroCandidatePool])
+  const stayHomeHeroId = stayHomeHero?.destination.id
+  const isStayHomeHero = Boolean(
+    !forceLongDemoStMoritzHero
+    && heroEscape
+    && stayHomeHeroId
+    && heroEscape.destination.id === stayHomeHeroId
+  )
+  const canDismissHeroToday = dayFocus === 'today' && heroCandidatePool.length > 1
+  const dismissHeroForToday = useCallback(() => {
+    if (!heroEscape || !canDismissHeroToday) return
+    const heroId = heroEscape.destination.id
+    setDismissedHeroByDay((prev) => {
+      const current = prev[heroDismissContextKey] || []
+      if (current.includes(heroId)) return prev
+      return {
+        ...prev,
+        [heroDismissContextKey]: [...current, heroId].slice(-16),
+      }
+    })
+  }, [canDismissHeroToday, heroDismissContextKey, heroEscape])
 
   const topBestTravel = heroEscape && !isStayHomeHero ? getBestTravel(heroEscape) : null
   const topRawSunMin = heroEscape
@@ -1419,6 +1483,10 @@ export default function Home() {
     setActiveTypeChips(prev => prev.includes(chip) ? prev.filter(x => x !== chip) : [...prev, chip])
   }
 
+  useEffect(() => {
+    if (activeTypeChips.length > 0) setShowTypeFilters(true)
+  }, [activeTypeChips.length])
+
   const jumpToBestDetails = () => {
     if (heroEscape && !isStayHomeHero) setOpenCardId(heroEscape.destination.id)
     requestAnimationFrame(() => {
@@ -1433,10 +1501,17 @@ export default function Home() {
 
   const filteredRows = useMemo(() => {
     const strictBetter = resultRows.filter(isSunnyEscapeCandidate)
-    if (strictBetter.length === 0) return []
+    const comparableFallback = (strictBetter.length === 0 && isStayHomeHero)
+      ? resultRows.filter((escape) => (
+        escape.destination.id !== heroEscape?.destination.id
+        && escapeRawSunMinutes(escape) >= heroOriginSunMin * 0.98
+      ))
+      : []
+    const sourceRows = strictBetter.length > 0 ? strictBetter : comparableFallback
+    if (sourceRows.length === 0) return []
     const typed = activeTypeChips.length === 0
-      ? strictBetter
-      : strictBetter.filter((escape) => {
+      ? sourceRows
+      : sourceRows.filter((escape) => {
         const has = (t: 'mountain' | 'town' | 'thermal' | 'lake') => escape.destination.types.includes(t)
         return activeTypeChips.some((chip) => {
           if (chip === 'ski') return has('mountain') && escape.destination.altitude_m >= 1200
@@ -1444,7 +1519,7 @@ export default function Home() {
         })
       })
     return typed
-  }, [activeTypeChips, isSunnyEscapeCandidate, resultRows])
+  }, [activeTypeChips, escapeRawSunMinutes, heroEscape?.destination.id, heroOriginSunMin, isStayHomeHero, isSunnyEscapeCandidate, resultRows])
 
   const displayLimit = showMoreResults ? 15 : 5
   const visibleRows = useMemo(() => filteredRows.slice(0, 15), [filteredRows])
@@ -1453,9 +1528,10 @@ export default function Home() {
     type Row = { escape: EscapeCard; badges: Array<'fastest' | 'warmest'> }
     const rows: Row[] = []
     const seen = new Set<string>()
+    const eligibleIds = new Set(filteredRows.map((row) => row.destination.id))
 
     const pushRow = (escape: EscapeCard | null | undefined) => {
-      if (!escape || seen.has(escape.destination.id) || !isSunnyEscapeCandidate(escape)) return false
+      if (!escape || seen.has(escape.destination.id) || !eligibleIds.has(escape.destination.id)) return false
       rows.push({ escape, badges: [] })
       seen.add(escape.destination.id)
       return true
@@ -1489,7 +1565,7 @@ export default function Home() {
       if (warmestId && row.escape.destination.id === warmestId && !badges.includes('warmest')) badges.push('warmest')
       return { ...row, badges }
     })
-  }, [displayLimit, fastestEscape, isSunnyEscapeCandidate, visibleRows, warmestEscape])
+  }, [displayLimit, fastestEscape, filteredRows, visibleRows, warmestEscape])
 
   useEffect(() => {
     if (filteredRows.length <= 5 && showMoreResults) {
@@ -1696,6 +1772,17 @@ export default function Home() {
             key={`hero-${heroEscape.destination.id}-${heroFlowTick}`}
             className={`fomo-card relative overflow-visible p-3.5 sm:p-4 mb-3 ${heroFlowDir === 'right' ? 'hero-flow-right' : 'hero-flow-left'}`}
           >
+            {canDismissHeroToday && (
+              <button
+                type="button"
+                onClick={dismissHeroForToday}
+                className="absolute left-2 top-2 z-[3] inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white/90 text-slate-500 transition hover:border-slate-400 hover:text-slate-700"
+                title="Dismiss this hero for today"
+                aria-label="Dismiss this hero for today"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2.1} />
+              </button>
+            )}
             <div className="pointer-events-none absolute -top-2 right-3 sm:right-4 z-[2] rotate-[3deg]">
               <DestinationStamp
                 name={isStayHomeHero ? stayHomeCityName : heroEscape.destination.name}
@@ -1919,8 +2006,12 @@ export default function Home() {
                 <SlidersHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
                 Filter
               </button>
-              <label className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 inline-flex items-center gap-1">
-                {mode === 'car' ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} /> : mode === 'train' ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} /> : <MapPinned className="w-3.5 h-3.5" strokeWidth={1.8} />}
+              <label className="hidden sm:inline-flex h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 items-center gap-1">
+                {mode === 'car'
+                  ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
+                  : mode === 'train'
+                    ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
                 <select
                   value={mode}
                   onChange={e => setMode(e.target.value as TravelMode)}
@@ -1964,25 +2055,63 @@ export default function Home() {
           <div className="rounded-b-2xl rounded-t-none border border-slate-200 bg-white px-2.5 py-3 sm:px-3 sm:py-3.5">
 
           {showResultFilters && (
-            <section id="result-filter-chips" className="mb-2.5 overflow-x-auto no-scrollbar">
-              <div className="flex items-center gap-2 min-w-max">
-                {TYPE_FILTER_CHIPS.map(chip => {
-                  const active = activeTypeChips.includes(chip.id)
-                  return (
-                    <button
-                      key={chip.id}
-                      type="button"
-                      onClick={() => toggleTypeChip(chip.id)}
-                      className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
-                        ? 'bg-amber-100 border-amber-300 text-amber-800'
-                        : 'bg-white border-slate-200 text-slate-600'
-                        }`}
-                    >
-                      {chip.label}
-                    </button>
-                  )
-                })}
+            <section id="result-filter-chips" className="mb-2.5 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="h-8 px-2.5 rounded-full border border-slate-200 bg-white text-[11px] text-slate-600 inline-flex items-center gap-1">
+                  {mode === 'car'
+                    ? <Car className="w-3.5 h-3.5" strokeWidth={1.8} />
+                    : mode === 'train'
+                      ? <TrainFront className="w-3.5 h-3.5" strokeWidth={1.8} />
+                      : <Route className="w-3.5 h-3.5" strokeWidth={1.8} />}
+                  <span className="text-slate-500">Mode</span>
+                  <select
+                    value={mode}
+                    onChange={e => setMode(e.target.value as TravelMode)}
+                    className="bg-transparent focus:outline-none"
+                    aria-label="Travel mode"
+                  >
+                    <option value="both">Car + Train</option>
+                    <option value="car">Car</option>
+                    <option value="train">Train</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowTypeFilters(v => !v)}
+                  className={`h-8 px-2.5 rounded-full border text-[11px] font-medium inline-flex items-center gap-1.5 transition ${showTypeFilters || activeTypeChips.length > 0
+                    ? 'bg-amber-100 border-amber-300 text-amber-800'
+                    : 'bg-white border-slate-200 text-slate-600'
+                    }`}
+                  aria-expanded={showTypeFilters}
+                  aria-controls="result-type-chip-list"
+                >
+                  Types
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showTypeFilters ? 'rotate-180' : ''}`} strokeWidth={1.8} />
+                </button>
               </div>
+              {showTypeFilters && (
+                <div id="result-type-chip-list" className="overflow-x-auto no-scrollbar">
+                  <div className="flex items-center gap-2 min-w-max">
+                    {TYPE_FILTER_CHIPS.map(chip => {
+                      const active = activeTypeChips.includes(chip.id)
+                      return (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => toggleTypeChip(chip.id)}
+                          className={`h-8 px-3 rounded-full border text-[11px] font-medium whitespace-nowrap transition ${active
+                            ? 'bg-amber-100 border-amber-300 text-amber-800'
+                            : 'bg-white border-slate-200 text-slate-600'
+                            }`}
+                        >
+                          {chip.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="border-t border-slate-100" />
             </section>
           )}
 
