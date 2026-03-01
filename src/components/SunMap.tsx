@@ -5,6 +5,7 @@ import {
   Circle,
   CircleMarker,
   MapContainer,
+  Marker,
   Popup,
   Rectangle,
   TileLayer,
@@ -12,18 +13,27 @@ import {
   ZoomControl,
   useMap,
 } from 'react-leaflet'
-import { ExternalLink, Loader2, LocateFixed, Route, Sun, Zap } from 'lucide-react'
+import { ExternalLink, Loader2, LocateFixed, Sun, Zap } from 'lucide-react'
+import { divIcon } from 'leaflet'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
-import { Button, Select } from '@/components/ui'
+import { Button } from '@/components/ui'
 
-type MapDay = 'today' | 'tomorrow'
+export type MapDay = 'today' | 'tomorrow'
 
-type OriginSeed = {
+export type OriginSeed = {
   name: string
   lat: number
   lon: number
   kind: 'manual' | 'gps' | 'default'
+}
+
+type SunMapProps = {
+  initialOrigin: OriginSeed
+  initialDay?: MapDay
+  origin?: OriginSeed
+  mapDay?: MapDay
+  onOriginChange?: (origin: OriginSeed) => void
 }
 
 type ApiEscapeRow = {
@@ -75,7 +85,7 @@ type HeatCell = {
   hours: number
 }
 
-const MAP_ORIGIN_CITIES: OriginSeed[] = [
+export const MAP_ORIGIN_CITIES: OriginSeed[] = [
   { name: 'Aarau', lat: 47.3925, lon: 8.0442, kind: 'manual' },
   { name: 'Baden', lat: 47.4738, lon: 8.3077, kind: 'manual' },
   { name: 'Basel', lat: 47.5596, lon: 7.5886, kind: 'manual' },
@@ -114,7 +124,8 @@ const TRAVEL_RING_BUCKETS = [
 ] as const
 const COLOR_LOW: [number, number, number] = [148, 163, 184]
 const COLOR_MED: [number, number, number] = [250, 204, 21]
-const COLOR_HIGH: [number, number, number] = [34, 197, 94]
+const COLOR_HIGH: [number, number, number] = [21, 128, 61]
+const COLOR_VHIGH: [number, number, number] = [20, 83, 45]
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
@@ -139,8 +150,9 @@ function mixColor(a: [number, number, number], b: [number, number, number], t: n
 
 function sunHoursColor(hours: number, maxHours: number) {
   const normalized = clamp(hours / Math.max(4, maxHours), 0, 1)
-  if (normalized <= 0.5) return mixColor(COLOR_LOW, COLOR_MED, normalized * 2)
-  return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.5) * 2)
+  if (normalized <= 0.45) return mixColor(COLOR_LOW, COLOR_MED, normalized / 0.45)
+  if (normalized <= 0.78) return mixColor(COLOR_MED, COLOR_HIGH, (normalized - 0.45) / 0.33)
+  return mixColor(COLOR_HIGH, COLOR_VHIGH, (normalized - 0.78) / 0.22)
 }
 
 function formatTravelLabel(row: MapRow) {
@@ -175,6 +187,20 @@ function quickDistanceKm(aLat: number, aLon: number, bLat: number, bLon: number)
   const dLat = (bLat - aLat) * kmPerDegLat
   const dLon = (bLon - aLon) * kmPerDegLon
   return Math.sqrt(dLat * dLat + dLon * dLon)
+}
+
+function ringLabelLatitude(originLat: number, ringKm: number) {
+  const kmPerDegLat = 110.574
+  return clamp(originLat + ringKm / kmPerDegLat, SWISS_HEAT_BOUNDS.latMin, SWISS_HEAT_BOUNDS.latMax)
+}
+
+function travelRingLabelIcon(label: string, km: number) {
+  return divIcon({
+    className: 'fomo-map-ring-label',
+    html: `<span style="display:inline-flex;align-items:center;border:1px solid rgba(51,65,85,.30);background:rgba(255,255,255,.9);padding:2px 6px;border-radius:999px;font-size:10px;font-weight:600;color:#475569;line-height:1;white-space:nowrap;box-shadow:0 2px 8px rgba(15,23,42,.12)">${label} · ${Math.round(km)}km</span>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  })
 }
 
 function buildHeatCells(rows: MapRow[], maxHours: number): HeatCell[] {
@@ -227,11 +253,18 @@ function RecenterOnOrigin({ lat, lon }: { lat: number; lon: number }) {
   return null
 }
 
-export default function SunMap({ initialOrigin, initialDay = 'today' }: { initialOrigin: OriginSeed; initialDay?: MapDay }) {
-  const [origin, setOrigin] = useState<OriginSeed>(initialOrigin)
-  const [mapDay, setMapDay] = useState<MapDay>(initialDay)
+export default function SunMap({
+  initialOrigin,
+  initialDay = 'today',
+  origin: controlledOrigin,
+  mapDay: controlledMapDay,
+  onOriginChange,
+}: SunMapProps) {
+  const [originState, setOriginState] = useState<OriginSeed>(initialOrigin)
+  const [mapDayState, setMapDayState] = useState<MapDay>(initialDay)
+  const origin = controlledOrigin ?? originState
+  const mapDay = controlledMapDay ?? mapDayState
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
-  const [showTravelRings, setShowTravelRings] = useState(true)
   const [showSunshine, setShowSunshine] = useState(false)
   const [showRadiation, setShowRadiation] = useState(false)
   const [locatingMe, setLocatingMe] = useState(false)
@@ -241,25 +274,24 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
   const [selectedId, setSelectedId] = useState<string | null>(null)
 
   useEffect(() => {
-    setOrigin(initialOrigin)
-  }, [initialOrigin])
+    if (!controlledOrigin) setOriginState(initialOrigin)
+  }, [controlledOrigin, initialOrigin])
 
   useEffect(() => {
-    setMapDay(initialDay)
-  }, [initialDay])
+    if (!controlledMapDay) setMapDayState(initialDay)
+  }, [controlledMapDay, initialDay])
 
-  const originChoices = useMemo(() => {
-    const byName = new Map<string, OriginSeed>(MAP_ORIGIN_CITIES.map(item => [item.name, item]))
-    if (!byName.has(initialOrigin.name)) byName.set(initialOrigin.name, initialOrigin)
-    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [initialOrigin])
+  const applyOrigin = useCallback((nextOrigin: OriginSeed) => {
+    if (!controlledOrigin) setOriginState(nextOrigin)
+    onOriginChange?.(nextOrigin)
+  }, [controlledOrigin, onOriginChange])
 
   const centerOnMyLocation = useCallback(() => {
     if (!navigator.geolocation || locatingMe) return
     setLocatingMe(true)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setOrigin({
+        applyOrigin({
           name: 'Current location',
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
@@ -272,7 +304,7 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
       },
       { enableHighAccuracy: false, timeout: 7000 }
     )
-  }, [locatingMe])
+  }, [applyOrigin, locatingMe])
 
   const fetchScoredDestinations = useCallback(async (signal: AbortSignal) => {
     setLoading(true)
@@ -456,32 +488,47 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
           </Popup>
         </CircleMarker>
 
-        {showTravelRings && TRAVEL_RING_BUCKETS.map((ring) => (
-          <Circle
-            key={`ring-${ring.label}`}
-            center={[origin.lat, origin.lon]}
-            radius={ring.hours * TRAVEL_RING_KM_PER_HOUR * 1000}
-            interactive={false}
-            pathOptions={{
-              color: '#64748b',
-              weight: ring.hours >= 3 ? 1.2 : 1,
-              opacity: 0.25,
-              dashArray: '6 8',
-              fillOpacity: 0,
-            }}
-          />
-        ))}
+        {TRAVEL_RING_BUCKETS.map((ring) => {
+          const ringKm = ring.hours * TRAVEL_RING_KM_PER_HOUR
+          return (
+            <Circle
+              key={`ring-${ring.label}`}
+              center={[origin.lat, origin.lon]}
+              radius={ringKm * 1000}
+              interactive={false}
+              pathOptions={{
+                color: '#475569',
+                weight: ring.hours >= 3 ? 1.8 : 1.5,
+                opacity: 0.42,
+                dashArray: '7 7',
+                fillOpacity: 0,
+              }}
+            />
+          )
+        })}
+        {TRAVEL_RING_BUCKETS.map((ring) => {
+          const ringKm = ring.hours * TRAVEL_RING_KM_PER_HOUR
+          return (
+            <Marker
+              key={`ring-label-${ring.label}`}
+              position={[ringLabelLatitude(origin.lat, ringKm), origin.lon]}
+              icon={travelRingLabelIcon(ring.label, ringKm)}
+              interactive={false}
+              keyboard={false}
+            />
+          )
+        })}
 
         {markerRows.map(row => (
           <CircleMarker
             key={row.id}
             center={[row.lat, row.lon]}
-            radius={5.8}
+            radius={6.4}
             pathOptions={{
-              color: '#f8fafc',
+              color: '#ffffff',
               fillColor: scoreColor(row.markerScore),
-              fillOpacity: 0.95,
-              weight: 1.1,
+              fillOpacity: 0.96,
+              weight: 1.5,
             }}
             eventHandlers={{
               click: () => setSelectedId(row.id),
@@ -517,29 +564,6 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
 
       <div className="pointer-events-none absolute inset-0 z-[500]">
         <div className="pointer-events-auto absolute left-3 top-3 flex max-w-[90vw] flex-col gap-1.5 rounded-xl border border-slate-200 bg-white/92 px-2.5 py-2 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur">
-          <div className="inline-flex items-center gap-1 text-[10.5px]">
-            <button
-              type="button"
-              onClick={() => {
-                setMapDay('today')
-                setShowSunHoursOverlay(true)
-              }}
-              className={`px-1 py-0.5 transition ${mapDay === 'today' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
-            >
-              Today
-            </button>
-            <span className="text-slate-300">/</span>
-            <button
-              type="button"
-              onClick={() => {
-                setMapDay('tomorrow')
-                setShowSunHoursOverlay(true)
-              }}
-              className={`px-1 py-0.5 transition ${mapDay === 'tomorrow' ? 'text-slate-800 font-semibold underline decoration-amber-300 decoration-2 underline-offset-4' : 'text-slate-500 font-medium hover:text-slate-700'}`}
-            >
-              Tomorrow
-            </button>
-          </div>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
               onClick={() => setShowSunHoursOverlay(prev => !prev)}
@@ -567,45 +591,16 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
               Radiation
             </Button>
             <Button
-              onClick={() => setShowTravelRings(prev => !prev)}
+              onClick={centerOnMyLocation}
+              disabled={locatingMe}
               size="sm"
-              variant={showTravelRings ? 'primary' : 'neutral'}
-              title="Travel bucket rings"
+              variant="neutral"
+              className="bg-white/92 disabled:opacity-60"
             >
-              <Route className="h-3 w-3" />
-              Rings
+              <LocateFixed className="h-3 w-3" />
+              {locatingMe ? 'Locating…' : 'Center me'}
             </Button>
           </div>
-        </div>
-
-        <div className="pointer-events-auto absolute right-3 top-3 flex flex-col items-end gap-1.5">
-          <Select
-            value={origin.name}
-            onChange={(event) => {
-              const selected = originChoices.find(city => city.name === event.target.value)
-              if (!selected) return
-              setOrigin(selected)
-            }}
-            shellClassName="min-w-0 max-w-[120px] rounded-lg border border-slate-200 bg-white/92 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur text-slate-500"
-            className="h-7 pl-1 text-right"
-            aria-label="Select origin city"
-          >
-            {originChoices.map(city => (
-              <option key={city.name} value={city.name} className="text-slate-900">
-                {city.name}
-              </option>
-            ))}
-          </Select>
-          <Button
-            onClick={centerOnMyLocation}
-            disabled={locatingMe}
-            size="sm"
-            variant="neutral"
-            className="bg-white/92 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur disabled:opacity-60"
-          >
-            <LocateFixed className="h-3 w-3" />
-            {locatingMe ? 'Locating…' : 'Center me'}
-          </Button>
         </div>
 
         <MapLegend
@@ -614,7 +609,6 @@ export default function SunMap({ initialOrigin, initialDay = 'today' }: { initia
           overlayVisible={showSunHoursOverlay}
           minHours={overlayMinHours}
           maxHours={overlayMaxHours}
-          showTravelRings={showTravelRings}
           travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
         />
 

@@ -4,7 +4,6 @@ type MapLegendProps = {
   overlayVisible: boolean
   minHours: number
   maxHours: number
-  showTravelRings: boolean
   travelRingLabels: string[]
 }
 
@@ -26,7 +25,6 @@ export default function MapLegend({
   overlayVisible,
   minHours,
   maxHours,
-  showTravelRings,
   travelRingLabels,
 }: MapLegendProps) {
   const safeMin = Number.isFinite(minHours) ? Math.max(0, Math.round(minHours * 10) / 10) : 0
@@ -54,7 +52,7 @@ export default function MapLegend({
             <div
               className="mt-1.5 h-2.5 w-full rounded-full ring-1 ring-slate-200"
               style={{
-                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(250 204 21), rgb(34 197 94))',
+                background: 'linear-gradient(90deg, rgb(148 163 184), rgb(250 204 21), rgb(21 128 61), rgb(20 83 45))',
               }}
             />
             <div className="mt-1 flex items-center justify-between text-[10px] text-slate-600">
@@ -70,13 +68,9 @@ export default function MapLegend({
         <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-600">
           Travel rings
         </p>
-        {showTravelRings ? (
-          <p className="mt-1 text-[10px] text-slate-500">
-            Rough ranges from origin: {travelRingLabels.join(' · ')}
-          </p>
-        ) : (
-          <p className="mt-1 text-[10px] text-slate-500">Rings hidden</p>
-        )}
+        <p className="mt-1 text-[10px] text-slate-500">
+          Rough ranges from origin: {travelRingLabels.join(' · ')}
+        </p>
       </div>
     </div>
   )
