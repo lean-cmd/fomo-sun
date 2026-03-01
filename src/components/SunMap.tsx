@@ -12,7 +12,7 @@ import {
   useMapEvents,
   useMap,
 } from 'react-leaflet'
-import { ChevronDown, ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
+import { ExternalLink, Loader2, LocateFixed, Sun } from 'lucide-react'
 import { divIcon } from 'leaflet'
 import { destinations } from '@/data/destinations'
 import MapLegend from '@/components/MapLegend'
@@ -33,7 +33,6 @@ type SunMapProps = {
   origin?: OriginSeed
   mapDay?: MapDay
   onOriginChange?: (origin: OriginSeed) => void
-  originOptions?: OriginSeed[]
   onOpenDestinationCard?: (payload: {
     destinationId: string
     bucketLabels: string[]
@@ -272,7 +271,6 @@ export default function SunMap({
   origin: controlledOrigin,
   mapDay: controlledMapDay,
   onOriginChange,
-  originOptions,
   onOpenDestinationCard,
 }: SunMapProps) {
   const [originState, setOriginState] = useState<OriginSeed>(initialOrigin)
@@ -281,7 +279,7 @@ export default function SunMap({
   const mapDay = controlledMapDay ?? mapDayState
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
   const [showTravelRings, setShowTravelRings] = useState(true)
-  const [legendCollapsed, setLegendCollapsed] = useState(false)
+  const [legendCollapsed, setLegendCollapsed] = useState(true)
   const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [apiResultTier, setApiResultTier] = useState<string | null>(null)
@@ -290,13 +288,6 @@ export default function SunMap({
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [mapZoom, setMapZoom] = useState(8)
-
-  const cityOptions = useMemo(() => {
-    const source = originOptions && originOptions.length > 0 ? originOptions : MAP_ORIGIN_CITIES
-    const byName = new Map<string, OriginSeed>(source.map(item => [item.name, item]))
-    if (!byName.has(origin.name)) byName.set(origin.name, origin)
-    return Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [origin, originOptions])
 
   useEffect(() => {
     if (!controlledOrigin) setOriginState(initialOrigin)
@@ -650,38 +641,6 @@ export default function SunMap({
         {markerRows.map(row => (
           (() => {
             const bucketWins = bucketWinnersByDestinationId.get(row.id) || []
-            const popup = (
-              <Popup>
-                <div className="min-w-[190px] space-y-1 text-[12px]" data-launch-destination={row.id} data-launch-buckets={bucketWins.join(',')} data-launch-day={mapDay}>
-                  <p className="text-[13px] font-semibold text-slate-900">{row.name}</p>
-                  <p className="text-slate-600">{row.region} · {row.country}</p>
-                  <p className="text-slate-700">Sun score: {Math.round(row.sunScore * 100)}%</p>
-                  <p className="text-slate-700">
-                    {mapDay === 'tomorrow' ? 'Tomorrow sun' : 'Today sun'}: {formatHourValue(row.activeSunHours)}
-                  </p>
-                  <p className="text-slate-700">From {origin.name}: {formatTravelLabel(row)}</p>
-                  {bucketWins.length > 0 && (
-                    <p className="text-[11px] font-semibold text-amber-700">
-                      Best in: {bucketWins.join(' · ')}
-                    </p>
-                  )}
-                  {row.sbbHref ? (
-                    <a
-                      href={row.sbbHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900"
-                    >
-                      Open SBB
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  ) : (
-                    <p className="text-[11px] text-slate-500">SBB link unavailable</p>
-                  )}
-                </div>
-              </Popup>
-            )
-
             if (bucketWins.length > 0) {
               return (
                 <Marker
@@ -704,9 +663,7 @@ export default function SunMap({
                       })
                     },
                   }}
-                >
-                  {popup}
-                </Marker>
+                />
               )
             }
 
@@ -737,9 +694,7 @@ export default function SunMap({
                     })
                   },
                 }}
-              >
-                {popup}
-              </CircleMarker>
+              />
             )
           })()
         ))}
@@ -812,24 +767,7 @@ export default function SunMap({
         )}
 
         <div className={`pointer-events-auto absolute right-3 ${statusOffsetClass} z-[520] rounded-lg border border-slate-200 bg-white/92 px-2.5 py-2 text-[10px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur`}>
-          <div className="relative inline-flex items-center min-w-[150px] max-w-[60vw] pl-0 pr-4">
-            <select
-              value={origin.name}
-              onChange={(event) => {
-                const selected = cityOptions.find(city => city.name === event.target.value)
-                if (!selected) return
-                applyOrigin(selected)
-              }}
-              className="w-full appearance-none bg-transparent text-[10px] font-medium text-slate-700 focus:outline-none"
-              aria-label="Select origin city"
-            >
-              {cityOptions.map(city => (
-                <option key={city.name} value={city.name}>{city.name}</option>
-              ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={1.8} />
-          </div>
-          <div className="mt-1 inline-flex items-center gap-1.5 text-[10px] text-slate-600">
+          <div className="inline-flex items-center gap-1.5 text-[10px] text-slate-600">
             {loading ? (
               <>
                 <Loader2 className="h-3 w-3 animate-spin" />
