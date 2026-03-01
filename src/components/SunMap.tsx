@@ -245,6 +245,10 @@ function EnsureMapPanes() {
     ensurePane('travel-ring-pane', 360)
     ensurePane('destination-pane', 430)
     ensurePane('origin-pane', 450)
+    const sunshadePane = map.getPane('sunshade-pane')
+    const travelRingPane = map.getPane('travel-ring-pane')
+    if (sunshadePane) sunshadePane.style.pointerEvents = 'none'
+    if (travelRingPane) travelRingPane.style.pointerEvents = 'none'
   }, [map])
 
   return null
@@ -509,7 +513,6 @@ export default function SunMap({
         zoom={8}
         minZoom={6}
         maxZoom={16}
-        preferCanvas
         maxBounds={[[45.5, 5.2], [48.2, 11.25]]}
         maxBoundsViscosity={0.68}
         zoomControl={false}
