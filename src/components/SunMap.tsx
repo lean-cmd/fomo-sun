@@ -217,8 +217,8 @@ function bucketWinnerSunIcon(score: number, winCount: number) {
   return divIcon({
     className: 'fomo-map-bucket-sun',
     html: `<span style="position:relative;display:inline-grid;place-items:center;width:${size}px;height:${size}px;border-radius:999px;background:radial-gradient(circle at 32% 30%, #fffbe6 0 28%, ${core} 58%, #ca8a04 100%);border:1.3px solid rgba(255,255,255,.95);color:rgba(120,53,15,.95);font-size:${winCount > 1 ? 14 : 13}px;font-weight:700;line-height:1;box-shadow:0 0 0 2px ${glow},0 4px 12px rgba(15,23,42,.25)">☀</span>`,
-    iconSize: [0, 0],
-    iconAnchor: [0, 0],
+    iconSize: [size, size],
+    iconAnchor: [Math.round(size / 2), Math.round(size / 2)],
   })
 }
 
@@ -277,6 +277,7 @@ export default function SunMap({
   const mapDay = controlledMapDay ?? mapDayState
   const [showSunHoursOverlay, setShowSunHoursOverlay] = useState(true)
   const [showTravelRings, setShowTravelRings] = useState(true)
+  const [legendCollapsed, setLegendCollapsed] = useState(false)
   const [locatingMe, setLocatingMe] = useState(false)
   const [rowsById, setRowsById] = useState<Record<string, ApiEscapeRow>>({})
   const [apiResultTier, setApiResultTier] = useState<string | null>(null)
@@ -685,7 +686,11 @@ export default function SunMap({
                   position={[row.lat, row.lon]}
                   pane="destination-pane"
                   icon={bucketWinnerSunIcon(row.markerScore, bucketWins.length)}
+                  bubblingMouseEvents={false}
                   eventHandlers={{
+                    mousedown: (event) => {
+                      event.originalEvent.stopPropagation()
+                    },
                     click: () => {
                       setSelectedId(row.id)
                       onOpenDestinationCard?.({
@@ -706,8 +711,9 @@ export default function SunMap({
               <CircleMarker
                 key={row.id}
                 center={[row.lat, row.lon]}
-                radius={6.4}
+                radius={7.2}
                 pane="destination-pane"
+                bubblingMouseEvents={false}
                 pathOptions={{
                   color: '#ffffff',
                   fillColor: scoreColor(row.markerScore),
@@ -715,6 +721,9 @@ export default function SunMap({
                   weight: 1.5,
                 }}
                 eventHandlers={{
+                  mousedown: (event) => {
+                    event.originalEvent.stopPropagation()
+                  },
                   click: () => {
                     setSelectedId(row.id)
                     onOpenDestinationCard?.({
@@ -766,17 +775,38 @@ export default function SunMap({
           </div>
         </div>
 
-        <MapLegend
-          className="absolute bottom-3 left-3 max-w-[250px]"
-          day={mapDay}
-          overlayVisible={showSunHoursOverlay}
-          minHours={overlayMinHours}
-          maxHours={overlayMaxHours}
-          travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
-          showHomeBestOrb={showHomeBestOrb}
-          hasBucketSunMarkers={bucketWinnersByDestinationId.size > 0}
-          showTravelRings={showTravelRings}
-        />
+        {legendCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setLegendCollapsed(false)}
+            className="pointer-events-auto absolute bottom-3 left-3 rounded-full border border-slate-200 bg-white/92 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur hover:text-slate-800"
+            aria-label="Expand map legend"
+          >
+            Legend
+          </button>
+        ) : (
+          <div className="pointer-events-auto absolute bottom-3 left-3">
+            <MapLegend
+              className="max-w-[250px]"
+              day={mapDay}
+              overlayVisible={showSunHoursOverlay}
+              minHours={overlayMinHours}
+              maxHours={overlayMaxHours}
+              travelRingLabels={TRAVEL_RING_BUCKETS.map((ring) => ring.label)}
+              showHomeBestOrb={showHomeBestOrb}
+              hasBucketSunMarkers={bucketWinnersByDestinationId.size > 0}
+              showTravelRings={showTravelRings}
+            />
+            <button
+              type="button"
+              onClick={() => setLegendCollapsed(true)}
+              className="absolute right-2 top-2 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white/92 text-[11px] font-semibold text-slate-500 hover:text-slate-700"
+              aria-label="Minimize map legend"
+            >
+              −
+            </button>
+          </div>
+        )}
 
         <div className={`pointer-events-auto absolute right-3 ${statusOffsetClass} z-[520] rounded-lg border border-slate-200 bg-white/92 px-2.5 py-2 text-[10px] text-slate-700 shadow-[0_8px_18px_rgba(15,23,42,0.12)] backdrop-blur`}>
           <div className="relative inline-flex items-center min-w-[150px] max-w-[60vw] pl-0 pr-4">

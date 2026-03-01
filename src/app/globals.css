@@ -121,6 +121,11 @@ textarea:focus-visible,
   display: none;
 }
 
+.leaflet-container .leaflet-interactive,
+.leaflet-container .leaflet-marker-icon {
+  cursor: pointer;
+}
+
 /* Timeline */
 .fomo-timeline {
   width: 100%;
